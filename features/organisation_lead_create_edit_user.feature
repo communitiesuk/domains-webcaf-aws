@@ -51,7 +51,7 @@ Feature: Create and edit a new user for the organisation
     And select radio with value "organisation_lead"
     And click button with text "Save and continue"
     Then they should see page title "Manage user - other - Complete a WebCAF self-assessment - GOV.UK"
-    Then they should see a summary card with header "Ministry of Agriculture" keys "Full name, Email address, User role" and values "alice Tester, alice@example.gov.uk, GovAssure lead"
+    Then they should see a summary card with header "Ministry of Agriculture" keys "Full name, Email address, User role" and values "Alice Tester, alice@example.gov.uk, GovAssure lead"
     And a button with text "Change"
     And click button with text "Save and continue"
     Then User model with email "alice@example.gov.uk" should exist with "organisation_lead" user role
