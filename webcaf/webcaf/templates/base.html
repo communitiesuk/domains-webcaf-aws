@@ -124,12 +124,12 @@
                         </li>
                         {% if request.user.is_authenticated %}
                             <li class="govuk-header__navigation-item">
-                                <a class="govuk-header__link" href="{% url 'logout' %}">
-                                    Logout <span class="govuk-visually-hidden">
-                                        {{ request.user.username }}
-                                         </span>
-                                </a>
-
+                                <form method="post" action="{% url 'logout' %}">
+                                    {% csrf_token %}
+                                    <button class="govuk-header__link govuk-button--text" type="submit">
+                                        Logout <span class="govuk-visually-hidden">{{ request.user.username }}</span>
+                                    </button>
+                                </form>
                             </li>
                         {% endif %}
                     </ul>

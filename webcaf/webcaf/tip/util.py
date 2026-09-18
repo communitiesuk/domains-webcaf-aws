@@ -13,7 +13,6 @@ from django.db.models import QuerySet
 from django.db.transaction import atomic
 from django.http import HttpRequest, HttpResponse
 from django.template.loader import render_to_string
-from django.urls import reverse_lazy
 from django.utils import timezone
 
 from webcaf.webcaf.models import Configuration, RecommendationAction, Tip, UserProfile
@@ -272,7 +271,6 @@ class BaseTipMixin(UserRoleCheckMixin):
     :type login_url: str
     """
 
-    login_url = reverse_lazy("oidc_authentication_init")  # OIDC login route
     logger: logging.Logger
     request: HttpRequest
 

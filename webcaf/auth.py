@@ -8,11 +8,20 @@ for enforcing authentication requirements across the application.
 import logging
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core.exceptions import SuspiciousOperation
+from django.http import HttpRequest
 from django.shortcuts import redirect
 from django.urls import reverse
+from govuk_onelogin_django.backends import OneLoginBackend as BaseOneLoginBackend
+from govuk_onelogin_django.types import UserInfo
+from govuk_onelogin_django.utils import get_client, get_userinfo, has_valid_token
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
+from webcaf.webcaf.models import AllowedEmailDomain
 from webcaf.webcaf.utils import mask_email
+
+EMAIL_DOMAIN_REJECTED_SESSION_KEY = "email_domain_rejected"
 
 
 class OIDCBackend(OIDCAuthenticationBackend):
@@ -52,8 +61,13 @@ class OIDCBackend(OIDCAuthenticationBackend):
                 'name': 'John Doe'
             }
         """
-        self.logger.info(mask_email(f"Create user for {claims.get('email')}"))
         user_email = claims.get("email")
+        if not AllowedEmailDomain.allows_email(user_email):
+            self.logger.warning(mask_email(f"Rejected automatic OIDC user creation for {user_email}"))
+            self.request.session[EMAIL_DOMAIN_REJECTED_SESSION_KEY] = True
+            raise SuspiciousOperation("Email domain is not approved")
+
+        self.logger.info(mask_email(f"Create user for {user_email}"))
         first_name = claims.get("given_name", claims.get("name", ""))
         last_name = claims.get("family_name", "")
         user = self.UserModel.objects.create_user(
@@ -96,6 +110,52 @@ class OIDCBackend(OIDCAuthenticationBackend):
         return user
 
 
+class OneLoginBackend(BaseOneLoginBackend):
+    """Create or find non-staff WebCAF users from verified One Login email claims."""
+
+    logger = logging.getLogger("OneLoginBackend")
+
+    def authenticate(self, request: HttpRequest, **credentials):
+        client = get_client(request)
+        if not has_valid_token(client):
+            return None
+
+        profile = get_userinfo(client)
+        user = self.get_or_create_user(profile, request)
+        if user and self.user_can_authenticate(user):
+            self.logger.info(mask_email(f"User {user.pk} {user.email} logged in with GOV.UK One Login"))
+            return user
+
+        self.logger.warning("GOV.UK One Login authentication did not resolve to an active WebCAF user")
+        return None
+
+    def get_or_create_user(self, profile: UserInfo, request: HttpRequest | None = None):
+        subject = profile.get("sub")
+        email = profile.get("email")
+        if not subject or not email or profile.get("email_verified") is not True:
+            self.logger.warning(mask_email(f"GOV.UK One Login returned incomplete or unverified claims for {email}"))
+            return None
+
+        email = email.lower()
+        user_model = get_user_model()
+        matching_users = list(user_model.objects.filter(email__iexact=email, is_staff=False)[:2])
+        if len(matching_users) > 1:
+            self.logger.warning(mask_email(f"Multiple WebCAF users match One Login email {email}"))
+            return None
+        if matching_users:
+            return matching_users[0]
+
+        if not AllowedEmailDomain.allows_email(email):
+            self.logger.warning(mask_email(f"Rejected automatic One Login user creation for {email}"))
+            if request is not None:
+                request.session[EMAIL_DOMAIN_REJECTED_SESSION_KEY] = True
+            return None
+
+        user = user_model.objects.create_user(username=email, email=email, is_staff=False)
+        self.logger.info(mask_email(f"Created user {user.pk} for verified One Login email {email}"))
+        return user
+
+
 class LoginRequiredMiddleware:
     """
     Django middleware that enforces authentication for all requests except exempted URLs.
@@ -120,16 +180,24 @@ class LoginRequiredMiddleware:
             get_response (callable): The next middleware or view in the chain.
         """
         self.get_response = get_response
+        authentication_urls = (
+            [reverse("one_login:login"), reverse("one_login:callback")]
+            if settings.SSO_MODE == "one-login"
+            else [
+                reverse("oidc_authentication_init"),
+                reverse("oidc_authentication_callback"),
+                reverse("oidc_logout"),
+            ]
+        )
         self.exempt_url_prefixes = [
-            reverse("oidc_authentication_init"),
-            reverse("oidc_authentication_callback"),
-            reverse("oidc_logout"),
+            *authentication_urls,
             # public pages and static assets
             "/assets/",
             "/static/",
             "/media",
             "/public/",
             "/session-expired/",
+            "/authentication-error/",
             "/logout/",
         ]
         self.exempt_exact_urls = [
@@ -177,7 +245,7 @@ class LoginRequiredMiddleware:
                     return self.get_response(request)
 
                 self.logger.debug("Force authentication for %s", request.path)
-                return redirect("oidc_authentication_init")
+                return redirect(settings.LOGIN_URL)
 
             # If the user is authenticated, check if they're verified'
             if not settings.ENABLED_2FA:

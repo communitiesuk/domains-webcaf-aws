@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.validators import validate_domain_name
 from django.db import models, transaction
 from django.db.models import (
     BooleanField,
@@ -401,6 +402,46 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.organisation.name} - ({self.get_role_display()})"
+
+
+class AllowedEmailDomain(models.Model):
+    """A domain from which external authentication may create a new user."""
+
+    domain = models.CharField(max_length=253, unique=True, validators=[validate_domain_name])
+    history = HistoricalRecords()
+
+    class Meta:
+        ordering = ["domain"]
+        verbose_name = "Allowed email domain"
+        verbose_name_plural = "Allowed email domains"
+
+    @staticmethod
+    def normalise_domain(domain: str) -> str:
+        """Store internationalised domain names in their canonical ASCII form."""
+        try:
+            return domain.strip().rstrip(".").encode("idna").decode("ascii").lower()
+        except UnicodeError as exc:
+            raise ValidationError({"domain": "Enter a valid domain name."}) from exc
+
+    def clean(self):
+        self.domain = self.normalise_domain(self.domain)
+        super().clean()
+
+    def save(self, *args, **kwargs):
+        self.domain = self.normalise_domain(self.domain)
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def allows_email(cls, email: str) -> bool:
+        """Return whether the email belongs to an explicitly allowed domain."""
+        if not isinstance(email, str) or "@" not in email:
+            return False
+        domain = cls.normalise_domain(email.rsplit("@", 1)[1])
+        return cls.objects.filter(domain=domain).exists()
+
+    def __str__(self):
+        return self.domain
 
 
 class ConfigurationManager(models.Manager):

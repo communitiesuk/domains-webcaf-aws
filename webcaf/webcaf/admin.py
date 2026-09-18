@@ -23,6 +23,7 @@ from django.utils import timezone
 from simple_history.admin import SimpleHistoryAdmin
 
 from webcaf.webcaf.models import (
+    AllowedEmailDomain,
     Assessment,
     Configuration,
     Organisation,
@@ -190,6 +191,12 @@ class SettingsAdmin(SimpleHistoryAdmin):
         return {
             "admin_verification_enabled": settings_instance.admin_verification_enabled,
         }
+
+
+@admin.register(AllowedEmailDomain)
+class AllowedEmailDomainAdmin(SimpleHistoryAdmin):
+    search_fields = ["domain"]
+    ordering = ["domain"]
 
 
 @admin.register(UserProfile)

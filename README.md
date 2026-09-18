@@ -106,10 +106,11 @@ make clear-db       # tear everything down and drop the Postgres volume
 
 Make sure the python version you use is the same as in the [Dockerfile](Dockerfile) (Python 3.12).
 
-The database credentials are defined in `docker-compose.yml`: the Postgres container uses the user/password/database `webcaf`/`webcaf`/`webcaf` and is exposed on the host at port `54321`. To develop against it, first start Postgres (for example `docker compose up postgres`), then create a file called `.env` containing:
+The database credentials are defined in `docker-compose.yml`: the Postgres container uses the user/password/database `webcaf`/`webcaf`/`webcaf` and is exposed on the host at port `54321`. To develop against it, create `webcaf/.env` from `webcaf/.env.example`, then start Postgres:
 
 ```
-DATABASE_URL=postgresql://webcaf:webcaf@localhost:54321/webcaf #pragma: allowlist secret
+cp webcaf/.env.example webcaf/.env
+docker compose up -d postgres
 ```
 
 Then run in a terminal
@@ -118,13 +119,13 @@ Then run in a terminal
 pip install poetry pre-commit
 poetry install
 pre-commit install
-poetry run dotenv run ./manage.py migrate
+poetry run python manage.py migrate
 ```
 
 and to run the local server:
 
 ``` shell
-poetry run dotenv run ./manage.py runserver
+poetry run python manage.py runserver
 ```
 
 ### Running tests
@@ -155,13 +156,15 @@ The `mask_email` function replaces email addresses with a masked version (e.g., 
 
 ### SSO settings
 
-We use the `SSO_MODE` environment variable to decide which SSO implementation should be used.
+We use the `SSO_MODE` environment variable to select authentication:
 
-- if set to `dex`, then the application will connect to the [DEX](https://dexidp.io/) instance deployed locally in the
-  docker compose setup.
-- set it to `local`if you want to the application to connect to a DEX instance running on the host machine (at
-  `localhost:5556`)
-- otherwise it'll take from `OIDC_*` environment variables (see `settings.py`)
+- `dex` connects to the DEX container in the local Docker Compose stack.
+- `local` or `localhost` connects to DEX on the host at `localhost:5556`.
+- `external` uses the generic `OIDC_*` environment variables.
+- `one-login` uses GOV.UK One Login with `private_key_jwt` authentication.
+- `none` is reserved for build tasks that do not authenticate users.
+
+Set `SSO_MODE` in `.env` for direct local runs. Docker Compose deliberately remains configured for DEX. See [GOV.UK One Login](docs/GOV_UK_ONE_LOGIN.md) for local integration testing, user mapping, logout, deployment configuration and secret handling.
 
 This will have two users configured:
 
