@@ -58,7 +58,6 @@ class EditAssessmentView(LoginRequiredMixin, FormView):
     :type template_name: str
     """
 
-    login_url = "/oidc/authenticate/"
     template_name = "assessment/draft-assessment.html"
     logger = logging.getLogger("EditAssessmentView")
 
@@ -342,7 +341,6 @@ class CreateAssessmentView(LoginRequiredMixin, FormView):
     :type template_name: str
     """
 
-    login_url = "/oidc/authenticate/"  # OIDC login route
     template_name = "assessment/draft-assessment.html"
     logger = logging.getLogger("CreateAssessmentView")
     form_class = BaseAssessmentForm
@@ -605,7 +603,6 @@ class ImportAssessmentExcelView(UserRoleCheckMixin, FormView):
     Allows users to import a CAF Excel file.
     """
 
-    login_url = "/oidc/authenticate/"
     template_name = "assessment/import-excel.html"
     form_class = ImportAssessmentExcelForm
     logger = logging.getLogger("ImportAssessmentExcelView")
@@ -642,8 +639,6 @@ class ExportAssessmentTemplateView(UserRoleCheckMixin, View):
     """
     Returns the blank CAF Excel template.
     """
-
-    login_url = "/oidc/authenticate/"
 
     def get_allowed_roles(self) -> list[str]:
         return ["organisation_lead"]

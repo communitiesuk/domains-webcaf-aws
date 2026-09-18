@@ -1,14 +1,19 @@
 import logging
 from functools import wraps
 from typing import Any
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.auth import logout as django_logout
+from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_POST
 from django.views.generic import FormView, TemplateView
+from govuk_onelogin_django.utils import get_one_login_logout_url
+from requests import RequestException
 
 from webcaf.webcaf.utils.session import SessionUtil
 
@@ -103,19 +108,30 @@ class FormViewWithBreadcrumbs(FormView):
 logout_view_logger = logging.getLogger("logout_view")
 
 
+@login_required
+@require_POST
 def logout_view(request):
-    """
-    Handle any cleanup and redirect to the oidc cleanup.
-    We cannot reset the session here as the OIDC logout depends on the session data
-    :param request:
-    :return:
-    """
-    logout_view_logger.info(f"Logging out user {request.user.pk}")
-    id_token = request.session.get("oidc_id_token")  # make sure you store it at login
-    # 1. Log out Django session
+    """End the local session and, where possible, the active provider session."""
+    logout_view_logger.info("Logging out user %s", request.user.pk)
+    logout_url = None
+
+    if settings.SSO_MODE == "one-login":
+        try:
+            post_logout_redirect_uri = request.build_absolute_uri(reverse("index"))
+            logout_url = get_one_login_logout_url(request, post_logout_redirect_uri)
+        except (KeyError, RequestException, ValueError):
+            logout_view_logger.exception("Unable to create the GOV.UK One Login logout URL")
+    else:
+        id_token = request.session.get("oidc_id_token")
+        if id_token:
+            query = urlencode(
+                {
+                    "id_token_hint": id_token,
+                    "client_id": settings.OIDC_RP_CLIENT_ID,
+                    "redirect_uri": settings.LOGOUT_REDIRECT_URL,
+                }
+            )
+            logout_url = f"{settings.OIDC_OP_LOGOUT_ENDPOINT}?{query}"
+
     django_logout(request)
-    oidc_logout_url = settings.OIDC_OP_LOGOUT_ENDPOINT
-    client_id = settings.OIDC_RP_CLIENT_ID
-    redirect_url = settings.LOGOUT_REDIRECT_URL
-    logout_url = f"{oidc_logout_url}?id_token_hint={id_token}&client_id={client_id}&redirect_uri={redirect_url}"
-    return redirect(logout_url)
+    return redirect(logout_url or "index")

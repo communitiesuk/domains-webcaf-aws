@@ -10,11 +10,15 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import base64
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from csp.constants import NONCE, SELF
+from django.core.exceptions import ImproperlyConfigured
 from environ import Env
+from govuk_onelogin_django.types import AuthenticationLevel, IdentityConfidenceLevel
 
 env = Env(
     # set casting, default value
@@ -62,6 +66,7 @@ INSTALLED_APPS = [
     "csp",
     "django_otp",
     "django_otp.plugins.otp_email",
+    "govuk_onelogin_django",
     "mozilla_django_oidc",
     "simple_history",
     "axes",
@@ -157,38 +162,6 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 MEDIA_URL = "/media/"
 AWS_STORAGE_BUCKET_NAME = env.str("S3_DATA_BUCKET", "")
 
-# Content Security Policy: only allow images, stylesheets and scripts from the
-# same origin as the HTML
-CONTENT_SECURITY_POLICY = {
-    "DIRECTIVES": {
-        "connect-src": (
-            SELF,
-            "https://*.google-analytics.com",
-            "https://*.analytics.google.com",
-            "https://*.googletagmanager.com",
-        ),
-        "form-action": (SELF,),
-        "frame-ancestors": (SELF,),
-        "frame-src": (SELF, NONCE, "https://www.googletagmanager.com"),
-        "img-src": (SELF, NONCE, "data:"),
-        "script-src": (
-            SELF,
-            NONCE,
-            "sha256-nBhTljJHpMrd9MOPzdAm2s1BkTJWObIEdVxg/bet7PE=",  # pragma: allowlist secret
-            "https://*.googletagmanager.com",
-        ),
-        "style-src": (
-            SELF,
-            NONCE,
-        ),
-    }
-}
-
-# If we want to test CSP breaches we need to set a fake reporting URL, so the tests
-# check if it's been called.
-if "TEST_CSP" in os.environ:
-    CSP_REPORT_URI = "/csp-report"  # The URI doesn't exist but is intercepted by the test suite
-
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
 
@@ -265,9 +238,11 @@ LOGGING = {
     },
 }
 
-SSO_MODE = env.str("SSO_MODE", "external")  # or dex or local or none
+SSO_MODE = env.str("SSO_MODE", "external").lower()
+if SSO_MODE not in {"external", "one-login", "dex", "local", "localhost", "none"}:
+    raise ImproperlyConfigured(f"Unsupported SSO_MODE: {SSO_MODE}")
 
-if SSO_MODE.lower() == "external":
+if SSO_MODE == "external":
     OIDC_RP_CLIENT_ID = env.str("OIDC_RP_CLIENT_ID")
     OIDC_RP_CLIENT_SECRET = env.str("OIDC_RP_CLIENT_SECRET")  # pragma: allowlist secret
     OIDC_OP_AUTHORIZATION_ENDPOINT = env.str("OIDC_OP_AUTHORIZATION_ENDPOINT")
@@ -284,6 +259,41 @@ if SSO_MODE.lower() == "external":
     # 5 users as the Notify service does not allow us to use more than 5 users
     # for the non-live notify service
     ENABLED_2FA = ENVIRONMENT not in ["dev", "test"]
+elif SSO_MODE == "one-login":
+    AUTHENTICATION_BACKENDS = (
+        "webcaf.auth.OneLoginBackend",
+        "axes.backends.AxesStandaloneBackend",
+        "django.contrib.auth.backends.ModelBackend",
+    )
+    LOGIN_URL = "one_login:login"
+    GOV_UK_ONE_LOGIN_CLIENT_ID = env.str("GOV_UK_ONE_LOGIN_CLIENT_ID")
+    GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL = env.str("GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL")
+    GOV_UK_ONE_LOGIN_SCOPE = env.str("GOV_UK_ONE_LOGIN_SCOPE", "openid email")
+    GOV_UK_ONE_LOGIN_ENVIRONMENT = env.str("GOV_UK_ONE_LOGIN_ENVIRONMENT", "integration")
+    GOV_UK_ONE_LOGIN_AUTHENTICATION_LEVEL = AuthenticationLevel.MEDIUM_LEVEL
+    GOV_UK_ONE_LOGIN_CONFIDENCE_LEVEL = IdentityConfidenceLevel.NONE
+    GOV_UK_ONE_LOGIN_BACK_CHANNEL_ENABLED = False
+
+    configured_client_secret = env.str("GOV_UK_ONE_LOGIN_CLIENT_SECRET", "")
+    private_key_path = env.str("GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH", "")
+    if configured_client_secret and private_key_path:
+        raise ImproperlyConfigured(
+            "Set either GOV_UK_ONE_LOGIN_CLIENT_SECRET or GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH, not both"
+        )
+    if private_key_path:
+        resolved_private_key_path = Path(private_key_path).expanduser()
+        if not resolved_private_key_path.is_file():
+            raise ImproperlyConfigured("GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH does not point to a readable key")
+        configured_client_secret = base64.b64encode(resolved_private_key_path.read_bytes()).decode("ascii")
+    if not configured_client_secret:
+        raise ImproperlyConfigured(
+            "GOV_UK_ONE_LOGIN_CLIENT_SECRET or GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH must be configured"
+        )
+    GOV_UK_ONE_LOGIN_CLIENT_SECRET = configured_client_secret
+
+    NOTIFY_API_KEY = env.str("NOTIFY_API_KEY", "")
+    NOTIFY_OTP_TEMPLATE_ID = env.str("NOTIFY_OTP_TEMPLATE_ID", "")
+    ENABLED_2FA = False
 else:
     sso_host = "dex" if SSO_MODE == "dex" else "localhost"
     OIDC_RP_CLIENT_ID = "my-django-app"
@@ -302,6 +312,47 @@ else:
     # rather than attempting to a send gov notify email
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
     ENABLED_2FA = False
+
+if SSO_MODE != "one-login":
+    LOGIN_URL = "oidc_authentication_init"
+
+# The provider logout redirect follows a submitted local form. Chrome applies
+# form-action to that redirect, so allow only the configured provider origin.
+provider_config_url = GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL if SSO_MODE == "one-login" else OIDC_OP_LOGOUT_ENDPOINT
+provider_config = urlsplit(provider_config_url)
+provider_origin = f"{provider_config.scheme}://{provider_config.netloc}"
+
+# Content Security Policy: only allow images, stylesheets and scripts from the
+# same origin as the HTML.
+CONTENT_SECURITY_POLICY = {
+    "DIRECTIVES": {
+        "connect-src": (
+            SELF,
+            "https://*.google-analytics.com",
+            "https://*.analytics.google.com",
+            "https://*.googletagmanager.com",
+        ),
+        "form-action": (SELF, provider_origin),
+        "frame-ancestors": (SELF,),
+        "frame-src": (SELF, NONCE, "https://www.googletagmanager.com"),
+        "img-src": (SELF, NONCE, "data:"),
+        "script-src": (
+            SELF,
+            NONCE,
+            "sha256-nBhTljJHpMrd9MOPzdAm2s1BkTJWObIEdVxg/bet7PE=",  # pragma: allowlist secret
+            "https://*.googletagmanager.com",
+        ),
+        "style-src": (
+            SELF,
+            NONCE,
+        ),
+    }
+}
+
+# If we want to test CSP breaches we need to set a fake reporting URL, so the tests
+# check if it's been called.
+if "TEST_CSP" in os.environ:
+    CSP_REPORT_URI = "/csp-report"  # The URI doesn't exist but is intercepted by the test suite
 
 # Confirmation email template ID
 # System will not send a confirmation email if this is not set
@@ -322,6 +373,7 @@ ALLOW_LOGOUT_GET_METHOD = True
 LOGIN_REDIRECT_URL = "/my-account/"
 
 if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     CSRF_COOKIE_SECURE = True
     CSRF_COOKIE_HTTPONLY = True
     CSRF_TRUSTED_ORIGINS = [f"https://{os.environ.get('DOMAIN_NAME', 'localhost')}"]

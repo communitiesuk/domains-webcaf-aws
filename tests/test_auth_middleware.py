@@ -101,6 +101,19 @@ class LoginRequiredMiddlewareTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("oidc_authentication_init"))
 
+    @override_settings(SSO_MODE="one-login", LOGIN_URL="one_login:login")
+    def test_unauthenticated_user_redirected_to_one_login(self):
+        middleware = LoginRequiredMiddleware(self.get_response)
+        self.request.path = "/some/protected/path"
+        self.request.user = make_user(authenticated=False)
+
+        response = middleware(self.request)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("one_login:login"))
+        self.assertIn(reverse("one_login:callback"), middleware.exempt_url_prefixes)
+        self.assertNotIn(reverse("oidc_authentication_init"), middleware.exempt_url_prefixes)
+
     @override_settings(ENABLED_2FA=False)
     def test_authenticated_user_allowed_when_2fa_disabled(self):
         """Test that authenticated users are allowed access when 2FA is disabled."""

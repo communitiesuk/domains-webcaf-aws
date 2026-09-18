@@ -81,7 +81,6 @@ class SystemContextDataMixin:
 
 class SystemView(UserRoleCheckMixin, SystemContextDataMixin, FormView):
     template_name = "system/system.html"
-    login_url = "/oidc/authenticate/"
     success_url = "/view-systems/"
     form_class = SystemForm
 
@@ -135,7 +134,6 @@ class EditSystemView(SystemContextDataMixin, UserRoleCheckMixin, UpdateView):
 
 class ViewSystemsView(LoginRequiredMixin, TemplateView):
     template_name = "system/systems.html"
-    login_url = "/oidc/authenticate/"
     success_url = "/systems/"
 
     def get_context_data(self, **kwargs):

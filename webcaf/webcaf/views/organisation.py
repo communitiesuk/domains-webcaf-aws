@@ -55,8 +55,6 @@ class OrganisationView(LoginRequiredMixin, FormView):
     :type login_url: str
     """
 
-    login_url = "/oidc/authenticate/"  # OIDC login route
-
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
         profile_id = self.kwargs.get("id")
@@ -146,7 +144,6 @@ class ChangeActiveProfileView(LoginRequiredMixin, TemplateView):
     """
 
     template_name = "user-pages/change-organisation.html"
-    login_url = "/oidc/authenticate/"  # OIDC login route
     logger = logging.getLogger("ChangeActiveProfileView")
 
     def get_context_data(self, **kwargs):

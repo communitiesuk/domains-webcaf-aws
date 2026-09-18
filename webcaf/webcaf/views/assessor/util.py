@@ -2,7 +2,6 @@ from django.core.exceptions import ValidationError
 from django.db.models import QuerySet
 from django.db.transaction import atomic
 from django.forms import ChoiceField, Form
-from django.urls import reverse_lazy
 
 from webcaf.webcaf.models import Configuration, Review, UserProfile
 from webcaf.webcaf.utils.permission import UserRoleCheckMixin
@@ -25,8 +24,6 @@ class BaseReviewMixin(UserRoleCheckMixin):
         authentication.
     :type login_url: str
     """
-
-    login_url = reverse_lazy("oidc_authentication_init")  # OIDC login route
 
     def get_allowed_roles(self) -> list[str]:
         return [

@@ -40,7 +40,8 @@ artifacts/
 .pre-commit-config.yaml
 
 # Environment and local config
-.env
+**/.env
+.secrets/
 local-init.sh
 keyparams.txt
 
