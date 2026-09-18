@@ -3,8 +3,8 @@ from unittest.mock import Mock, patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from webcaf.auth import OneLoginBackend
-from webcaf.webcaf.models import UserProfile
+from webcaf.auth import EMAIL_DOMAIN_REJECTED_SESSION_KEY, OneLoginBackend
+from webcaf.webcaf.models import AllowedEmailDomain, UserProfile
 
 User = get_user_model()
 
@@ -18,6 +18,7 @@ PROFILE = {
 class OneLoginBackendTest(TestCase):
     def setUp(self):
         self.backend = OneLoginBackend()
+        AllowedEmailDomain.objects.create(domain="example.com")
 
     def authenticate(self, profile=PROFILE):
         with (
@@ -91,3 +92,21 @@ class OneLoginBackendTest(TestCase):
         authenticated_user = self.authenticate()
 
         self.assertIsNone(authenticated_user)
+
+    def test_does_not_create_user_for_unapproved_email_domain(self):
+        AllowedEmailDomain.objects.all().delete()
+        request = Mock(session={})
+
+        with self.assertLogs("OneLoginBackend", "WARNING") as logs:
+            user = self.backend.get_or_create_user(PROFILE, request)
+
+        self.assertIsNone(user)
+        self.assertFalse(User.objects.exists())
+        self.assertTrue(request.session[EMAIL_DOMAIN_REJECTED_SESSION_KEY])
+        self.assertIn("ja***@example.com", logs.output[0])
+
+    def test_existing_user_can_sign_in_after_domain_is_removed(self):
+        existing_user = User.objects.create_user(username=PROFILE["email"], email=PROFILE["email"])
+        AllowedEmailDomain.objects.all().delete()
+
+        self.assertEqual(self.authenticate(), existing_user)

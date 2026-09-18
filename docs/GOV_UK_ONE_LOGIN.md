@@ -28,6 +28,8 @@ Open `http://localhost:8010`. The normal DEX Docker Compose workflow uses the sa
 
 One Login must return `sub`, `email` and `email_verified=true`. WebCAF matches one non-staff Django user by email or creates a new Django user with an unusable password.
 
+New users can be created only when their email domain has an exact matching `Allowed email domain` entry in Django admin. The allowlist applies to GOV.UK One Login, DEX and generic OIDC, and an empty allowlist denies all new automatic users. It does not affect existing users, Django admin, management commands or WebCAF's user-management form. Add each permitted subdomain separately. Rejected users see a domain-specific error page and the attempt is logged with a masked email address.
+
 Authentication does not create a `UserProfile`, assign an organisation or assign a role. A newly created user reaches the existing no-profile page with a 403 response until a WebCAF administrator creates the appropriate profile. Existing profiles remain attached when a pre-provisioned user is matched.
 
 Email is currently the account-linking identifier. If a user's One Login email changes, an administrator may need to reconcile the WebCAF account. Durable provider subject mapping is deferred until multiple external authentication providers are introduced.

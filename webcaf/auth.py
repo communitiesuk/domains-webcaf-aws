@@ -9,6 +9,7 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.exceptions import SuspiciousOperation
 from django.http import HttpRequest
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -17,7 +18,10 @@ from govuk_onelogin_django.types import UserInfo
 from govuk_onelogin_django.utils import get_client, get_userinfo, has_valid_token
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
+from webcaf.webcaf.models import AllowedEmailDomain
 from webcaf.webcaf.utils import mask_email
+
+EMAIL_DOMAIN_REJECTED_SESSION_KEY = "email_domain_rejected"
 
 
 class OIDCBackend(OIDCAuthenticationBackend):
@@ -57,8 +61,13 @@ class OIDCBackend(OIDCAuthenticationBackend):
                 'name': 'John Doe'
             }
         """
-        self.logger.info(mask_email(f"Create user for {claims.get('email')}"))
         user_email = claims.get("email")
+        if not AllowedEmailDomain.allows_email(user_email):
+            self.logger.warning(mask_email(f"Rejected automatic OIDC user creation for {user_email}"))
+            self.request.session[EMAIL_DOMAIN_REJECTED_SESSION_KEY] = True
+            raise SuspiciousOperation("Email domain is not approved")
+
+        self.logger.info(mask_email(f"Create user for {user_email}"))
         first_name = claims.get("given_name", claims.get("name", ""))
         last_name = claims.get("family_name", "")
         user = self.UserModel.objects.create_user(
@@ -112,7 +121,7 @@ class OneLoginBackend(BaseOneLoginBackend):
             return None
 
         profile = get_userinfo(client)
-        user = self.get_or_create_user(profile)
+        user = self.get_or_create_user(profile, request)
         if user and self.user_can_authenticate(user):
             self.logger.info(mask_email(f"User {user.pk} {user.email} logged in with GOV.UK One Login"))
             return user
@@ -120,7 +129,7 @@ class OneLoginBackend(BaseOneLoginBackend):
         self.logger.warning("GOV.UK One Login authentication did not resolve to an active WebCAF user")
         return None
 
-    def get_or_create_user(self, profile: UserInfo):
+    def get_or_create_user(self, profile: UserInfo, request: HttpRequest | None = None):
         subject = profile.get("sub")
         email = profile.get("email")
         if not subject or not email or profile.get("email_verified") is not True:
@@ -135,6 +144,12 @@ class OneLoginBackend(BaseOneLoginBackend):
             return None
         if matching_users:
             return matching_users[0]
+
+        if not AllowedEmailDomain.allows_email(email):
+            self.logger.warning(mask_email(f"Rejected automatic One Login user creation for {email}"))
+            if request is not None:
+                request.session[EMAIL_DOMAIN_REJECTED_SESSION_KEY] = True
+            return None
 
         user = user_model.objects.create_user(username=email, email=email, is_staff=False)
         self.logger.info(mask_email(f"Created user {user.pk} for verified One Login email {email}"))

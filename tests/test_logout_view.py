@@ -42,7 +42,8 @@ class LogoutViewTest(TestCase):
         OIDC_RP_CLIENT_ID="my-django-app",
         LOGOUT_REDIRECT_URL="http://localhost:8010/",
     )
-    def test_oidc_logout_parameters_are_encoded(self):
+    def test_unauthenticated_oidc_logout_parameters_are_encoded(self):
+        self.client.logout()
         session = self.client.session
         session["oidc_id_token"] = "token/value+with spaces"
         session.save()

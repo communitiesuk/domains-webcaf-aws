@@ -7,6 +7,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from govuk_onelogin_django.types import AuthenticationLevel, IdentityConfidenceLevel
 
+from webcaf.auth import EMAIL_DOMAIN_REJECTED_SESSION_KEY
+
 ONE_LOGIN_SETTINGS = {
     "SSO_MODE": "one-login",
     "LOGIN_URL": "one_login:login",
@@ -107,4 +109,17 @@ class OneLoginFlowTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "There is a problem signing you in")
-        self.assertContains(response, reverse("one_login:login"))
+        self.assertContains(response, reverse("logout"))
+
+    def test_rejected_email_domain_shows_explicit_error(self):
+        session = self.client.session
+        session[EMAIL_DOMAIN_REJECTED_SESSION_KEY] = True
+        session["oidc_id_token"] = "failed-login-token"
+        session.save()
+
+        response = self.client.get(reverse("authentication-error"))
+
+        self.assertContains(response, "Your email domain is not approved")
+        self.assertContains(response, reverse("logout"))
+        self.assertNotIn(EMAIL_DOMAIN_REJECTED_SESSION_KEY, self.client.session)
+        self.assertEqual(self.client.session["oidc_id_token"], "failed-login-token")

@@ -371,6 +371,7 @@ if DEBUG:
 
 ALLOW_LOGOUT_GET_METHOD = True
 LOGIN_REDIRECT_URL = "/my-account/"
+LOGIN_REDIRECT_URL_FAILURE = "/authentication-error/"
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

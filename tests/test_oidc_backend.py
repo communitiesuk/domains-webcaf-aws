@@ -5,9 +5,11 @@ Tests user creation and update behaviour against a real database.
 """
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import SuspiciousOperation
 from django.test import TestCase
 
-from webcaf.auth import OIDCBackend
+from webcaf.auth import EMAIL_DOMAIN_REJECTED_SESSION_KEY, OIDCBackend
+from webcaf.webcaf.models import AllowedEmailDomain
 
 User = get_user_model()
 
@@ -21,6 +23,7 @@ CLAIMS = {
 class OIDCBackendIntegrationTest(TestCase):
     def setUp(self):
         self.backend = OIDCBackend()
+        AllowedEmailDomain.objects.create(domain="example.com")
 
     def test_create_user_when_staff_with_same_email_exists(self):
         """A new non-staff user is created even when a staff user shares the email."""
@@ -62,3 +65,15 @@ class OIDCBackendIntegrationTest(TestCase):
         user.refresh_from_db()
         self.assertEqual(user.first_name, "Janet")
         self.assertEqual(user.last_name, "Smith")
+
+    def test_does_not_create_user_for_unapproved_email_domain(self):
+        AllowedEmailDomain.objects.all().delete()
+        self.backend.request = type("Request", (), {"session": {}})()
+
+        with self.assertLogs("OIDCBackend", "WARNING") as logs:
+            with self.assertRaises(SuspiciousOperation):
+                self.backend.create_user(CLAIMS)
+
+        self.assertFalse(User.objects.exists())
+        self.assertTrue(self.backend.request.session[EMAIL_DOMAIN_REJECTED_SESSION_KEY])
+        self.assertIn("ja***@example.com", logs.output[0])

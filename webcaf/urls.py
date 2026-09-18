@@ -32,6 +32,7 @@ from webcaf.webcaf.tip.views import (
 )
 from webcaf.webcaf.views import (
     AccountView,
+    AuthenticationErrorView,
     ChangeActiveProfileView,
     CreateAssessmentProfileView,
     CreateAssessmentReviewTypeView,
@@ -222,7 +223,7 @@ urlpatterns = [
     path("session-expired/", session_expired, name="session-expired"),
     path(
         "authentication-error/",
-        TemplateView.as_view(template_name="authentication-error.html"),
+        AuthenticationErrorView.as_view(),
         name="authentication-error",
     ),
     path("verify-2fa-token/", Verify2FATokenView.as_view(), name="verify-2fa-token"),

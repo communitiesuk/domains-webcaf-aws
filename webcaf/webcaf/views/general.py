@@ -5,7 +5,6 @@ from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.auth import logout as django_logout
-from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
@@ -15,6 +14,7 @@ from django.views.generic import FormView, TemplateView
 from govuk_onelogin_django.utils import get_one_login_logout_url
 from requests import RequestException
 
+from webcaf.auth import EMAIL_DOMAIN_REJECTED_SESSION_KEY
 from webcaf.webcaf.utils.session import SessionUtil
 
 
@@ -25,6 +25,17 @@ class Index(TemplateView):
     """
 
     template_name = "index.html"
+
+
+class AuthenticationErrorView(TemplateView):
+    """Show a safe sign-in error without exposing authentication-provider details."""
+
+    template_name = "authentication-error.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["email_domain_rejected"] = self.request.session.pop(EMAIL_DOMAIN_REJECTED_SESSION_KEY, False)
+        return context
 
 
 class AssessmentNotSelectedException(Exception):
@@ -108,7 +119,6 @@ class FormViewWithBreadcrumbs(FormView):
 logout_view_logger = logging.getLogger("logout_view")
 
 
-@login_required
 @require_POST
 def logout_view(request):
     """End the local session and, where possible, the active provider session."""
