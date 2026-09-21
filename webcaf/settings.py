@@ -105,7 +105,10 @@ ROOT_URLCONF = "webcaf.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [os.path.join(BASE_DIR, "webcaf", "templates"), os.path.join(BASE_DIR, "webcaf", "templates", "caf")],
+        "DIRS": [
+            os.path.join(BASE_DIR, "webcaf", "templates"),
+            os.path.join(BASE_DIR, "webcaf", "templates", "caf"),
+        ],
         "APP_DIRS": True,
         "OPTIONS": {
             "debug": DEBUG,
@@ -238,7 +241,7 @@ LOGGING = {
     },
 }
 
-SSO_MODE = env.str("SSO_MODE", "external").lower()
+SSO_MODE = env.str("SSO_MODE", "one-login").lower()
 if SSO_MODE not in {"external", "one-login", "dex", "local", "localhost", "none"}:
     raise ImproperlyConfigured(f"Unsupported SSO_MODE: {SSO_MODE}")
 
