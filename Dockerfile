@@ -40,7 +40,8 @@ ENV SSO_MODE=external
 RUN SSO_MODE=none /app/manage.py collectstatic --no-input
 
 RUN mkdir /var/run/webcaf && \
-    chown webcaf:webcaf /var/run/webcaf
+    chown webcaf:webcaf /var/run/webcaf && \
+    chown -R webcaf:webcaf /app/webcaf/static
 
 #Copy gunicon configuration
 COPY gunicorn_conf.py /app/gunicorn_conf.py

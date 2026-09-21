@@ -28,6 +28,7 @@ services:
     volumes:
       - .:/app
       - webcaf_home:/home/webcaf
+      - static-data:/app/webcaf/static
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,6 +73,7 @@ services:
     command: [ "sh", "/app/local-init.sh" ]
     volumes:
       - .:/app
+      - static-data:/app/webcaf/static
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,3 +81,4 @@ services:
 volumes:
   postgres-data: { }
   webcaf_home: { }
+  static-data: { }
