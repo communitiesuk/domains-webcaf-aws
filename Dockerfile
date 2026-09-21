@@ -55,4 +55,3 @@ ENTRYPOINT ["/usr/local/bin/gunicorn"]
 
 # Provide the default configuration and application module as arguments
 CMD ["--config", "/app/gunicorn_conf.py", "webcaf.wsgi:application"]
-
