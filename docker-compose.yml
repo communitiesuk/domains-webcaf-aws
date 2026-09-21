@@ -70,7 +70,7 @@ services:
     environment:
       <<: *common-application-variables
       SSO_MODE: dex
-    command: [ "sh", "/app/local-init.sh" ]
+    entrypoint: [ "/bin/sh", "/app/local-init.sh" ]
     volumes:
       - .:/app
       - static-data:/app/webcaf/static

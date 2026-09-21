@@ -21,14 +21,14 @@ COPY pyproject.toml poetry.lock /app/
 WORKDIR /app
 
 RUN poetry config virtualenvs.create false && \
-    poetry install ${POETRY_ARGS}
+  poetry install ${POETRY_ARGS}
 
 COPY manage.py /app/
 COPY webcaf /app/webcaf
 COPY frameworks /app/frameworks
 
 RUN sed -i 's/\r$//' /app/manage.py  && \
-    chmod +x /app/manage.py
+  chmod +x /app/manage.py
 
 ENV SECRET_KEY=unneeded
 ENV DOMAIN_NAME=http://localhost:2010
@@ -40,8 +40,8 @@ ENV SSO_MODE=external
 RUN SSO_MODE=none /app/manage.py collectstatic --no-input
 
 RUN mkdir /var/run/webcaf && \
-    chown webcaf:webcaf /var/run/webcaf && \
-    chown -R webcaf:webcaf /app/webcaf/static
+  chown webcaf:webcaf /var/run/webcaf && \
+  chown -R webcaf:webcaf /app/webcaf/static
 
 #Copy gunicon configuration
 COPY gunicorn_conf.py /app/gunicorn_conf.py
