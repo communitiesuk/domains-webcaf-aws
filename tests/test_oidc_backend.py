@@ -5,7 +5,6 @@ Tests user creation and update behaviour against a real database.
 """
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import SuspiciousOperation
 from django.test import TestCase
 
 from webcaf.auth import EMAIL_DOMAIN_REJECTED_SESSION_KEY, OIDCBackend
@@ -71,9 +70,9 @@ class OIDCBackendIntegrationTest(TestCase):
         self.backend.request = type("Request", (), {"session": {}})()
 
         with self.assertLogs("OIDCBackend", "WARNING") as logs:
-            with self.assertRaises(SuspiciousOperation):
-                self.backend.create_user(CLAIMS)
+            user = self.backend.create_user(CLAIMS)
 
+        self.assertIsNone(user)
         self.assertFalse(User.objects.exists())
         self.assertTrue(self.backend.request.session[EMAIL_DOMAIN_REJECTED_SESSION_KEY])
         self.assertIn("ja***@example.com", logs.output[0])

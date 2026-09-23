@@ -9,7 +9,6 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.exceptions import SuspiciousOperation
 from django.http import HttpRequest
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -51,7 +50,7 @@ class OIDCBackend(OIDCAuthenticationBackend):
                 Expected keys include 'email', 'given_name', 'family_name', and 'name'.
 
         Returns:
-            User: The newly created Django user instance.
+            User | None: The newly created Django user, or None when its email domain is not approved.
 
         Example claims structure:
             {
@@ -65,7 +64,7 @@ class OIDCBackend(OIDCAuthenticationBackend):
         if not AllowedEmailDomain.allows_email(user_email):
             self.logger.warning(mask_email(f"Rejected automatic OIDC user creation for {user_email}"))
             self.request.session[EMAIL_DOMAIN_REJECTED_SESSION_KEY] = True
-            raise SuspiciousOperation("Email domain is not approved")
+            return None
 
         self.logger.info(mask_email(f"Create user for {user_email}"))
         first_name = claims.get("given_name", claims.get("name", ""))
