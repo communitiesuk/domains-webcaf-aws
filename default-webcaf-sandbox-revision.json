@@ -1,0 +1,130 @@
+{
+    "taskDefinitionArn": "arn:aws:ecs:eu-west-2:114823617241:task-definition/default-webcaf-sandbox:7",
+    "containerDefinitions": [
+        {
+            "name": "Main",
+            "image": "114823617241.dkr.ecr.eu-west-2.amazonaws.com/caf/webcaf-sandbox@sha256:3de555701e3679408fecc59fd140a86ccbf7dff0319694de59c6e9ad5098273c",
+            "cpu": 1024,
+            "memory": 2048,
+            "memoryReservation": 2048,
+            "portMappings": [
+                {
+                    "containerPort": 8010,
+                    "hostPort": 8010,
+                    "protocol": "tcp",
+                    "name": "main-8081-tcp"
+                }
+            ],
+            "essential": true,
+            "environment": [
+                {
+                    "name": "DATABASE_URL",
+                    "value": "database_url"
+                },
+                {
+                    "name": "GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH",
+                    "value": "key_path"
+                },
+                {
+                    "name": "ENVIRONMENT",
+                    "value": "dev"
+                },
+                {
+                    "name": "GOV_UK_ONE_LOGIN_CLIENT_ID",
+                    "value": "client_id"
+                },
+                {
+                    "name": "SSO_MODE",
+                    "value": "one-login"
+                },
+                {
+                    "name": "SECRET_KEY",
+                    "value": "mysecret"
+                },
+                {
+                    "name": "GOV_UK_ONE_LOGIN_SCOPE",
+                    "value": "openid email"
+                },
+                {
+                    "name": "DEBUG",
+                    "value": "True"
+                },
+                {
+                    "name": "GOV_UK_ONE_LOGIN_ENVIRONMENT",
+                    "value": "integration"
+                },
+                {
+                    "name": "GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL",
+                    "value": "https://oidc.integration.account.gov.uk/.well-known/openid-configuration"
+                }
+            ],
+            "mountPoints": [],
+            "volumesFrom": [],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/aws/ecs/default/webcaf-sandbox-6967",
+                    "awslogs-region": "eu-west-2",
+                    "awslogs-stream-prefix": "ecs"
+                },
+                "secretOptions": []
+            },
+            "systemControls": []
+        }
+    ],
+    "family": "default-webcaf-sandbox",
+    "taskRoleArn": "arn:aws:iam::114823617241:role/caf_sbx_ecsTaskExecutionRole",
+    "executionRoleArn": "arn:aws:iam::114823617241:role/caf_sbx_ecsTaskExecutionRole",
+    "networkMode": "awsvpc",
+    "revision": 7,
+    "volumes": [],
+    "status": "ACTIVE",
+    "requiresAttributes": [
+        {
+            "name": "com.amazonaws.ecs.capability.logging-driver.awslogs"
+        },
+        {
+            "name": "ecs.capability.execution-role-awslogs"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.ecr-auth"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.19"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.21"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.task-iam-role"
+        },
+        {
+            "name": "ecs.capability.execution-role-ecr-pull"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.18"
+        },
+        {
+            "name": "ecs.capability.task-eni"
+        }
+    ],
+    "placementConstraints": [],
+    "compatibilities": [
+        "EC2",
+        "FARGATE",
+        "MANAGED_INSTANCES"
+    ],
+    "runtimePlatform": {
+        "cpuArchitecture": "X86_64",
+        "operatingSystemFamily": "LINUX"
+    },
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "1024",
+    "memory": "2048",
+    "registeredAt": "2026-09-24T08:37:21.842Z",
+    "registeredBy": "arn:aws:sts::114823617241:assumed-role/AWSReservedSSO_developer_role_a0ffb9d533216d7f/surgokhale@mhclg.onmicrosoft.com",
+    "enableFaultInjection": false,
+    "tags": []
+}

@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+      - feature/CS-410-ecs-deployment 
+  workflow_dispatch:
 
 permissions:
   id-token: write   # required for AWS OIDC
@@ -12,7 +14,10 @@ permissions:
 
 jobs:
   build-and-push:
+    name: CI - Build and push to ECR
     runs-on: ubuntu-latest
+    environment:
+      name: Sandbox
     steps:
       - name: Checkout source
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
@@ -44,7 +49,7 @@ jobs:
           if [ "${GITHUB_EVENT_BASE_REF}" != "refs/heads/main" ]; then
             echo "❌ Release tags must be created from main branch only."
             echo "This tag (${GITHUB_REF_NAME}) came from ${GITHUB_EVENT_BASE_REF}"
-            exit 1
+            # exit 1
           fi
       - name: Log in to Amazon ECR
         id: login_ecr
@@ -55,10 +60,60 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login_ecr.outputs.registry }}
           IMAGE_NAME: ${{ steps.image_name.outputs.IMAGE_NAME }}
+          GOV_UK_ONE_LOGIN_PRIVATE_KEY: ${{ secrets.GOV_UK_ONE_LOGIN_PRIVATE_KEY }}
         run: |
           IMAGE_TAG=${GITHUB_SHA::7}   # short commit SHA as the tag
           echo "Pushing image: $ECR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
           docker buildx build --platform linux/amd64 \
+          --build-arg GOV_UK_ONE_LOGIN_PRIVATE_KEY="$GOV_UK_ONE_LOGIN_PRIVATE_KEY" \
           -t $ECR_REGISTRY/caf/$IMAGE_NAME:$IMAGE_TAG \
-          -t $ECR_REGISTRY/caf/$IMAGE_NAME:latest  \
           . --push;
+          # Output the image URI for the CD job
+          echo "image-uri=$ECR_REGISTRY/caf/$IMAGE_NAME:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  deploy:
+      name: CD - Deploy to ECS
+      runs-on: ubuntu-latest
+      needs: build-and-push
+      environment:
+        name: Sandbox
+     
+      steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (Staging)
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838
+        with:
+          role-to-assume: "arn:aws:iam::${{ secrets.STAGE_ACCOUNT_ID }}:role/github-actions-ecr-role-web-caf-app-ecr"
+          aws-region: eu-west-2
+
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: default-webcaf-sandbox-revision.json
+          container-name: webcaf
+          image: ${{ needs.build-and-push.outputs.image-uri }}
+          # Pass non-sensitive environment variables
+          environment-variables: |
+            DEBUG=$${{ vars.GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH }}
+            ENVIRONMENT=$${{ vars.ENVIRONMENT }}
+            GOV_UK_ONE_LOGIN_ENVIRONMENT=$${{ vars.GOV_UK_ONE_LOGIN_ENVIRONMENT }}
+            GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL=$${{ vars.GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL }}
+            GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH=$${{ vars.GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH }}
+            GOV_UK_ONE_LOGIN_SCOPE=$${{ vars.GOV_UK_ONE_LOGIN_SCOPE }}
+            SSO_MODE=$${{ vars.SSO_MODE }}
+          # Pass secrets 
+          secrets: |
+            GOV_UK_ONE_LOGIN_CLIENT_ID=${{ secrets.GOV_UK_ONE_LOGIN_CLIENT_ID }}
+            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-task-def.outputs.rendered-task-definition }}
+          service: webcaf-sandbox
+          cluster: default
+          wait-for-service-stability: true

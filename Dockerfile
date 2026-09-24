@@ -2,6 +2,8 @@ FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
 ARG POETRY_ARGS="--no-root --no-ansi --only main"
 
+ARG GOV_UK_ONE_LOGIN_PRIVATE_KEY
+
 RUN dnf -y install python3.12 python3.12-devel python3-pip shadow-utils
 
 # Libraries used for PDF generation
@@ -42,6 +44,12 @@ RUN SSO_MODE=none /app/manage.py collectstatic --no-input
 RUN mkdir /var/run/webcaf && \
   chown webcaf:webcaf /var/run/webcaf && \
   chown -R webcaf:webcaf /app/webcaf/static
+
+RUN echo "$GOV_UK_ONE_LOGIN_PRIVATE_KEY" > /var/run/webcaf/private.pem
+
+# Optional: If you want to make sure it has the right permissions (e.g., restricted read access)
+RUN chmod 600 /var/run/webcaf/private.pem
+RUN chown webcaf:webcaf /var/run/webcaf/private.pem
 
 #Copy gunicon configuration
 COPY gunicorn_conf.py /app/gunicorn_conf.py
