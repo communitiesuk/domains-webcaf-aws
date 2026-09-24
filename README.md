@@ -85,9 +85,10 @@ docker compose up
 This brings up the full stack defined in `docker-compose.yml`:
 
 - `postgres` — the PostgreSQL database (also exposed on the host at port `54321`).
+- `redis` — Redis session storage (also exposed on the host at port `6379`).
 - `oauth` — a local [DEX](https://dexidp.io/) identity provider used for SSO (`SSO_MODE=dex`).
 - `init` — a one-shot container that runs `local-init.sh` (`makemigrations`, `collectstatic`, then `migrate`) and then exits.
-- `web` — the application, served by Gunicorn with `--reload`, started once `init` has completed successfully and Postgres is healthy.
+- `web` — the application, served by Gunicorn with `--reload`, started once `init` has completed successfully and Postgres and Redis are healthy.
 
 The app is available at `localhost:8010/` and supports the CAF v3.2 and v4.0 frameworks (v3.2 is the default).
 
@@ -106,12 +107,14 @@ make clear-db       # tear everything down and drop the Postgres volume
 
 Make sure the python version you use is the same as in the [Dockerfile](Dockerfile) (Python 3.12).
 
-The database credentials are defined in `docker-compose.yml`: the Postgres container uses the user/password/database `webcaf`/`webcaf`/`webcaf` and is exposed on the host at port `54321`. To develop against it, create `webcaf/.env` from `webcaf/.env.example`, then start Postgres:
+The database credentials are defined in `docker-compose.yml`: the Postgres container uses the user/password/database `webcaf`/`webcaf`/`webcaf` and is exposed on the host at port `54321`. Redis is exposed on port `6379`. To develop against them, create `webcaf/.env` from `webcaf/.env.example`, then start both services:
 
 ```
 cp webcaf/.env.example webcaf/.env
-docker compose up -d postgres
+docker compose up -d postgres redis
 ```
+
+WebCAF stores Django sessions exclusively in Redis. AWS environments must provide `REDIS_URL` for the managed ElastiCache endpoint, using `rediss://` when in-transit encryption is enabled.
 
 Then run in a terminal
 

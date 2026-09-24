@@ -23,6 +23,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Install pyenv and Python
@@ -48,6 +57,7 @@ jobs:
         env:
           SECRET_KEY: blah
           DATABASE_URL: postgresql://webcaf:webcaf@localhost:5432/webcaf
+          REDIS_URL: redis://localhost:6379/0
           DOMAIN_NAME: http://localhost:8010
           SSO_MODE: localhost
         run: |
@@ -77,6 +87,7 @@ jobs:
       - name: Run Unit Tests
         env:
           DATABASE_URL: postgresql://webcaf:webcaf@localhost:5432/webcaf
+          REDIS_URL: redis://localhost:6379/0
           AWS_ENDPOINT_URL_S3: http://127.0.0.1:9090
           CLAMD_TCP_ADDR: 127.0.0.1
           S3_STORAGE_ENABLED: "True"
