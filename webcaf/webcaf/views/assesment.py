@@ -361,7 +361,9 @@ class CreateAssessmentView(LoginRequiredMixin, FormView):
         data["draft_assessment"] = self.request.session.get("draft_assessment", {})
 
         # Hard code the router class version for now
-        router = routers["caf32"]
+        configuration = Configuration.objects.get_default_config()
+        framework_id = configuration.get_default_framework()
+        router = routers[framework_id]
         data["objectives"] = router.get_sections()
         data["review_form"] = AssessmentReviewTypeForm
 

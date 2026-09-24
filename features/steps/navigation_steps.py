@@ -241,7 +241,7 @@ def create_new_assessment(
     """
     :type context: behave.runner.Context
     """
-    from webcaf.webcaf.models import Assessment, Review, System
+    from webcaf.webcaf.models import Assessment, Configuration, Review, System
 
     # Only support 'current' period for now,
     # If we allow to hardcode the value, then there is a good chance that we will forget to update
@@ -260,7 +260,7 @@ def create_new_assessment(
             assessment_period=get_current_assessment_period()[0],
             status=status,
             review_type="independent",
-            framework="caf32",
+            framework=Configuration.objects.get_default_config().get_default_framework(),
             assessments_data=initial_assessment_data,
         )
         assessment.save()
