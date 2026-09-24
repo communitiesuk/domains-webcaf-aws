@@ -18,6 +18,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import TemplateView
+from govuk_onelogin_django.views import AuthView
 
 from webcaf.webcaf.tip.views import (
     TipDetailView,
@@ -31,6 +32,7 @@ from webcaf.webcaf.tip.views import (
 )
 from webcaf.webcaf.views import (
     AccountView,
+    AuthenticationErrorView,
     ChangeActiveProfileView,
     CreateAssessmentProfileView,
     CreateAssessmentReviewTypeView,
@@ -76,6 +78,7 @@ from webcaf.webcaf.views.assessor.review_assessment import (
     ShowReportConfirmation,
 )
 from webcaf.webcaf.views.general import logout_view
+from webcaf.webcaf.views.one_login import OneLoginCallbackView
 from webcaf.webcaf.views.sections import (
     DownloadSubmittedAssessmentPdf,
     SectionConfirmationView,
@@ -124,6 +127,14 @@ tip_paths = (
     "tip",
 )
 
+one_login_paths = (
+    [
+        path("login/", AuthView.as_view(), name="login"),
+        path("callback/", OneLoginCallbackView.as_view(), name="callback"),
+    ],
+    "one_login",
+)
+
 urlpatterns = [
     path("my-account/", AccountView.as_view(), name="my-account"),
     path("my-account/view-draft-assessments/", ViewDraftAssessmentsView.as_view(), name="view-draft-assessments"),
@@ -134,6 +145,7 @@ urlpatterns = [
     path("change-organisation/", ChangeActiveProfileView.as_view(), name="change-organisation"),
     path("admin/", admin.site.urls),
     path("oidc/", include("mozilla_django_oidc.urls")),
+    path("one-login/", include(one_login_paths)),
     #     Assessment paths
     path("create-draft-assessment/", CreateAssessmentView.as_view(), name="create-draft-assessment"),
     path("export-assessment-template/", ExportAssessmentTemplateView.as_view(), name="export-assessment-template"),
@@ -209,6 +221,11 @@ urlpatterns = [
     path("review/", TemplateView.as_view(template_name="assessor-index.html"), name="assessor-index"),
     path("peer-review/", TemplateView.as_view(template_name="peer-review-index.html"), name="peer-review-index"),
     path("session-expired/", session_expired, name="session-expired"),
+    path(
+        "authentication-error/",
+        AuthenticationErrorView.as_view(),
+        name="authentication-error",
+    ),
     path("verify-2fa-token/", Verify2FATokenView.as_view(), name="verify-2fa-token"),
     # Review paths
     path("review-list/", ReviewIndexView.as_view(), name="review-list"),

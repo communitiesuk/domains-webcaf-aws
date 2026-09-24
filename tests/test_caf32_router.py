@@ -2,9 +2,8 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
-import pytest
 from django.contrib.sessions.middleware import SessionMiddleware
-from django.test import RequestFactory
+from django.test import RequestFactory, TestCase
 from django.urls.resolvers import URLPattern
 
 from webcaf import urls
@@ -30,8 +29,7 @@ class CAF32RouterWithFixture(CAF32Router):
 
 
 # We test for the validity of the CAF YAML elsewhere, so this module assumes the YAML is valid
-@pytest.mark.django_db
-class TestCAF32Router(unittest.TestCase):
+class TestCAF32Router(TestCase):
     def setUp(self):
         self._original_urlpatterns = list(urls.urlpatterns)
         urls.urlpatterns[:] = []

@@ -26,7 +26,6 @@ class AddNewUserForm(forms.Form):
 
 class UserProfilesView(UserRoleCheckMixin, FormView):
     template_name = "users/users.html"
-    login_url = "/oidc/authenticate/"
     form_class = AddNewUserForm
 
     def get_allowed_roles(self) -> list[str]:
@@ -44,7 +43,6 @@ class UserProfilesView(UserRoleCheckMixin, FormView):
 
 class UserProfileView(UserRoleCheckMixin, UpdateView):
     template_name = "users/user.html"
-    login_url = "/oidc/authenticate/"
     success_url = "/view-profiles/"
     form_class = UserProfileForm
     logger = logging.getLogger("UserProfileView")

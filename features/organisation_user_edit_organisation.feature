@@ -15,7 +15,7 @@ Feature: Organisation user can edit an organisation's details
     And check user is logged in against organisation "Ministry of Agriculture"
     And link with text "Guidance"
     And link with text "My account"
-    And link with text "Logout"
+    And a button with text "Logout"
     And link with text "Your organisation details"
     And click link with text "Your organisation details"
     Then they should see a summary card with header "About the organisation" keys "Name, Type, Parent organisation" and values "Ministry of Agriculture, -, -"

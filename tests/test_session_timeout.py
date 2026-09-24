@@ -1,12 +1,12 @@
 import time
 
+from django.conf import settings
 from django.test import Client, override_settings
 from django.urls import reverse
 from django_otp import DEVICE_ID_SESSION_KEY
 
 from tests.test_views.base_view_test import BaseViewTest
 from webcaf.webcaf.models import GovNotifyEmailDevice, UserProfile
-from webcaf.webcaf.views.account import AccountView
 
 
 class SetupSessionTestData(BaseViewTest):
@@ -48,4 +48,4 @@ class SessionTimeoutTest(SetupSessionTestData):
         # the user should now be redirected to the login page
         response = self.client.get(self.my_account_url)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, AccountView.login_url)
+        self.assertEqual(response.url, reverse(settings.LOGIN_URL))

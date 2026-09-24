@@ -21,7 +21,6 @@ class AccountView(LoginRequiredMixin, TemplateView):
     """
 
     template_name = "user-pages/my-account.html"
-    login_url = "/oidc/authenticate/"  # OIDC login route
     logger = logging.getLogger("AccountView")
 
     def get_context_data(self, **kwargs):

@@ -56,6 +56,10 @@ span.govuk-header__logotype-text {
     color: #003078; /* GOV.UK link hover colour */
 }
 
+.govuk-header__link.govuk-button--text {
+    color: inherit;
+}
+
 .govuk-checkboxes__conditional, .govuk-radios__conditional {
     margin-bottom: 15px;
     margin-left: 20px;
@@ -384,4 +388,3 @@ main {
     cursor: not-allowed;
     opacity: 0.8;
 }
-

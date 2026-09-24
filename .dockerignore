@@ -41,6 +41,8 @@ artifacts/
 
 # Environment and local config
 .env
+**/.env
+.secrets/
 local-init.sh
 keyparams.txt
 

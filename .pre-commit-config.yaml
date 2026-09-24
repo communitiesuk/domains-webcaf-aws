@@ -56,11 +56,12 @@ repos:
           - django-csp
           - pyyaml
           - mozilla_django_oidc
+          - govuk-onelogin-django
           - django-multiselectfield
           - openpyxl
           - python-dotenv
           - django-simple-history
           - django-axes
           - 'sentry-sdk[django]'
-          - weasyprint
+          - 'weasyprint>=66,<67'
           - django-otp

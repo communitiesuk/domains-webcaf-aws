@@ -10,7 +10,7 @@ from .assesment import (
     EditAssessmentView,
     ExportAssessmentTemplateView,
 )
-from .general import Index, logout_view  # noqa
+from .general import AuthenticationErrorView, Index, logout_view  # noqa
 from .organisation import (
     ChangeActiveProfileView,
     MyOrganisationView,
@@ -32,6 +32,7 @@ __all__ = [
     "ExportAssessmentTemplateView",
     # General views
     "logout_view",
+    "AuthenticationErrorView",
     # Account views
     "Index",
     "AccountView",

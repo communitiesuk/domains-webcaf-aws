@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}{% if email_domain_rejected %}Your email domain is not approved {{ block.super }}{% else %}There is a problem signing you in {{ block.super }}{% endif %}{% endblock %}
+
+{% block content %}
+    <div class="govuk-grid-row">
+        <div class="govuk-grid-column-two-thirds">
+            {% if email_domain_rejected %}
+                <h1 class="govuk-heading-xl">Your email domain is not approved</h1>
+                <p class="govuk-body">Contact the WebCAF support team if you need access to this service.</p>
+            {% else %}
+                <h1 class="govuk-heading-xl">There is a problem signing you in</h1>
+                <p class="govuk-body">Try signing in again. If the problem continues, contact the WebCAF support team.</p>
+            {% endif %}
+            <form method="post" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button class="govuk-button" data-module="govuk-button" type="submit">Try again</button>
+            </form>
+        </div>
+    </div>
+{% endblock %}

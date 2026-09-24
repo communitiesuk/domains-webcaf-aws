@@ -364,8 +364,9 @@ def fill_outcome(context: Context, outcome_text: str, section_keys: str, section
             print(f"Not selecting any elements for {key} as {value} is set")
     context.outcome_text = outcome_text
     # Now submit the form
-    page.locator("button[type='submit']").wait_for(state="visible")
-    page.locator("button[type='submit']").click()
+    submit_button = page.locator("#mainForm button[type='submit']")
+    submit_button.wait_for(state="visible")
+    submit_button.click()
 
 
 def find_div_with_text(div: Any | None, divs, child_text: str, child_container: str) -> Any:
@@ -411,8 +412,9 @@ def fill_outcome_confirm(context: Context, outcome_status: str, outcome_comment:
 
     assert radio_checked, "No radio button found for confirming outcome"
     enter_text(context, outcome_comment, "id_confirm_outcome_confirm_comment")
-    page.locator("button[type='submit']").wait_for(state="visible")
-    page.locator("button[type='submit']").click()
+    submit_button = page.locator("main button[type='submit']")
+    submit_button.wait_for(state="visible")
+    submit_button.click()
 
 
 @step("get assessment id from url and add to context")
