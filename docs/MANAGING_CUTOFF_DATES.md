@@ -18,8 +18,12 @@ As part of data seeding, the system automatically creates `Configuration` object
 
 | Period | Assessment Period End  | Default Framework |
 |--------|------------------------|-------------------|
-| 25/26  | 31 March 2026 11:59pm | caf32            |
-| 26/27  | 31 March 2027 11:59pm | caf32            |
+| 25/26  | 31 August 2026 11:59pm | caf32            |
+| 26/27  | 31 August 2027 11:59pm | caf40            |
+
+The default framework can be changed per period through the admin interface.
+Changing it affects only assessments created afterwards; existing assessments
+keep the framework stored against them.
 
 ## Administrator Responsibilities
 

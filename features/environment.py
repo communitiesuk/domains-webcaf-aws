@@ -4,6 +4,7 @@ from pathlib import Path
 
 import django
 from behave.model_type import Status
+from django.conf import settings
 from django.db.models import F, Value
 from django.db.models.functions import Lower, Replace
 from playwright.sync_api import Page, sync_playwright
@@ -73,7 +74,7 @@ def before_scenario(context, scenario):
         Configuration.objects.create(
             name="default",
             config_data={
-                "default_framework": "caf32",
+                "default_framework": settings.WEBCAF_VERSION,
                 "current_assessment_period": assessment_period,
                 "assessment_period_end": f"31 March {assessment_year} 11:59pm",
             },

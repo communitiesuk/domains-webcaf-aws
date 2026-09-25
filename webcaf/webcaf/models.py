@@ -202,7 +202,7 @@ class Assessment(ReferenceGeneratorMixin, models.Model):
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
     system = models.ForeignKey(System, on_delete=models.CASCADE, related_name="assessments")
     reference = models.CharField(max_length=20, null=True, unique=True)
-    framework = models.CharField(max_length=255, choices=FRAMEWORK_CHOICES, default="caf32")
+    framework = models.CharField(max_length=255, choices=FRAMEWORK_CHOICES, default=settings.WEBCAF_VERSION)
     caf_profile = models.CharField(
         max_length=255,
         choices=PROFILE_CHOICES,

@@ -339,7 +339,8 @@ class OutcomeConfirmationView(BaseIndicatorsFormView):
         data = super().get_context_data(**kwargs)
         assessment = SessionUtil.get_current_assessment(self.request)
         data["outcome_status"] = IndicatorStatusChecker.get_status_for_indicator(
-            assessment.assessments_data[self.class_id]
+            assessment.assessments_data[self.class_id],
+            framework=assessment.framework,
         )
         data["back_url"] = f"{assessment.framework}_indicators_{self.class_id}"
         # Remove the redundant override option from the choice list for confirmation
@@ -375,7 +376,8 @@ class OutcomeConfirmationView(BaseIndicatorsFormView):
             return super().form_invalid(form)
 
         status_for_indicator = IndicatorStatusChecker.get_status_for_indicator(
-            assessment.assessments_data[self.class_id]
+            assessment.assessments_data[self.class_id],
+            framework=assessment.framework,
         )
         form.cleaned_data.update(**status_for_indicator)
         self.logger.info(f"Saving outcome confirmation {self.class_id} form {self.request.user.pk}")
