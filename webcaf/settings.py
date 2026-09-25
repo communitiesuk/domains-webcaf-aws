@@ -152,6 +152,10 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
         "LOCATION": env.str("REDIS_URL", default="redis://localhost:6379/0"),
         "KEY_PREFIX": "webcaf",
+        "OPTIONS": {
+            "socket_connect_timeout": 5,
+            "socket_timeout": 5,
+        },
     }
 }
 

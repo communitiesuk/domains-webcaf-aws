@@ -114,7 +114,7 @@ cp webcaf/.env.example webcaf/.env
 docker compose up -d postgres redis
 ```
 
-WebCAF stores Django sessions exclusively in Redis. AWS environments must provide `REDIS_URL` for the managed ElastiCache endpoint, using `rediss://` when in-transit encryption is enabled.
+WebCAF stores Django sessions exclusively in Redis. AWS environments must provide `REDIS_URL` for the managed ElastiCache endpoint, using `rediss://` when in-transit encryption is enabled. Production uses ElastiCache Redis OSS 7.1, which AWS documents as compatible with the upstream Redis OSS 7.0 image used locally and in CI. Redis connection and socket operations time out after 5 seconds so an unavailable cache fails promptly instead of indefinitely blocking application workers.
 
 Then run in a terminal
 

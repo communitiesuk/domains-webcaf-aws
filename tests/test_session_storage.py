@@ -14,6 +14,8 @@ class RedisSessionStorageTest(TestCase):
             settings.CACHES[settings.SESSION_CACHE_ALIAS]["BACKEND"],
             "django.core.cache.backends.redis.RedisCache",
         )
+        self.assertEqual(settings.CACHES[settings.SESSION_CACHE_ALIAS]["OPTIONS"]["socket_connect_timeout"], 5)
+        self.assertEqual(settings.CACHES[settings.SESSION_CACHE_ALIAS]["OPTIONS"]["socket_timeout"], 5)
 
         session_store = import_module(settings.SESSION_ENGINE).SessionStore
         session = session_store()
