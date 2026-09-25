@@ -4,6 +4,7 @@ repos:
     hooks:
       - id: check-yaml
         args: [ --allow-multiple-documents ]
+        exclude: ^docker-compose\.one-login-feature-tests\.yml$
       - id: end-of-file-fixer
         exclude: webcaf/static|seed/
       - id: trailing-whitespace

@@ -64,6 +64,32 @@ services:
       - ./oauth-stub:/etc/dex
     command: [ "dex", "serve", "/etc/dex/config.yaml" ]
 
+  one-login-simulator:
+    profiles: [ "one-login-simulator" ]
+    image: ghcr.io/govuk-one-login/simulator:26.09.16@sha256:1f0930e04ced60b624c1b4e830cbe0a622be216b5065ece4756dbebdb0e92a60
+    ports:
+      - "3000:3000"
+    environment:
+      CLIENT_ID: webcaf-local
+      SCOPES: openid,email
+      REDIRECT_URLS: http://localhost:8010/one-login/callback/
+      POST_LOGOUT_REDIRECT_URLS: http://localhost:8010/
+      CLIENT_LOCS: P0
+      IDENTITY_VERIFICATION_SUPPORTED: "false"
+      ID_TOKEN_SIGNING_ALGORITHM: ES256
+      TOKEN_AUTH_METHOD: private_key_jwt
+      SIMULATOR_URL: http://localhost:3000
+      SUB: ${ONE_LOGIN_SIMULATOR_SUB:-urn:fdc:gov.uk:2022:EoM4c_EsB2Yo_NoV5leoJwlkOtcQk2nI74F1Y4EZ_Tw}
+      EMAIL: ${ONE_LOGIN_SIMULATOR_EMAIL:-alice@example.gov.uk}
+      EMAIL_VERIFIED: ${ONE_LOGIN_SIMULATOR_EMAIL_VERIFIED:-true}
+      INTERACTIVE_MODE: ${ONE_LOGIN_SIMULATOR_INTERACTIVE_MODE:-true}
+    healthcheck:
+      test: [ "CMD", "node", "-e", "fetch('http://localhost:3000/.well-known/openid-configuration').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   init:
     <<: *api-base
     restart: 'no'

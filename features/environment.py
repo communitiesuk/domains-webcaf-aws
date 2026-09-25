@@ -8,6 +8,7 @@ from django.db.models import F, Value
 from django.db.models.functions import Lower, Replace
 from playwright.sync_api import Page, sync_playwright
 
+from features.one_login_simulator import configure_identity
 from features.util import ORM_EXECUTOR, run_async_orm
 
 
@@ -27,6 +28,9 @@ def before_all(context):
 def before_scenario(context, scenario):
     context.page.context.clear_cookies()
     context.page.context.clear_permissions()
+    simulator_url = os.environ.get("ONE_LOGIN_SIMULATOR_URL")
+    if simulator_url:
+        configure_identity("alice@example.gov.uk", True, simulator_url)
     if "think_time" in context:
         delattr(context, "think_time")
 

@@ -20,6 +20,16 @@ behave:
 	FEATURE_TEST_ARGS="$(FEATURE_TEST_ARGS)" docker compose -f docker-compose.yml -f docker-compose.feature-tests.yml up --build --abort-on-container-exit --remove-orphans --exit-code-from feature-tests feature-tests
 	docker compose down
 
+behave_one_login:
+	FEATURE_TEST_ARGS="--tags=one_login" docker compose --profile one-login-simulator -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.one-login-feature-tests.yml up --build --abort-on-container-exit --remove-orphans --exit-code-from feature-tests feature-tests
+	docker compose --profile one-login-simulator -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.one-login-feature-tests.yml down
+
 up_dex:
 	#	Bring up dex container for working with local development
 	docker compose -f docker-compose.yml up -d oauth
+
+up_one_login_simulator:
+	docker compose --profile one-login-simulator up -d --wait postgres one-login-simulator
+
+one_login_user:
+	poetry run python -m features.one_login_simulator $(or $(PRESET),alice)

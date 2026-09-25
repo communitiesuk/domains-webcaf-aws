@@ -1,0 +1,42 @@
+x-one-login-application-variables: &one-login-application-variables
+  SSO_MODE: one-login
+  GOV_UK_ONE_LOGIN_CLIENT_ID: webcaf-local
+  GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH: /app/tests/fixtures/one-login-simulator-private-key.pem
+  GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL: http://one-login-simulator:3000/.well-known/openid-configuration
+  GOV_UK_ONE_LOGIN_SCOPE: openid email
+  GOV_UK_ONE_LOGIN_ENVIRONMENT: integration
+
+services:
+  one-login-simulator:
+    environment:
+      REDIRECT_URLS: http://web:8000/one-login/callback/
+      POST_LOGOUT_REDIRECT_URLS: http://web:8000/
+      SIMULATOR_URL: http://one-login-simulator:3000
+      INTERACTIVE_MODE: "false"
+
+  web:
+    environment:
+      <<: *one-login-application-variables
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+      one-login-simulator:
+        condition: service_healthy
+
+  init:
+    environment:
+      <<: *one-login-application-variables
+
+  feature-tests:
+    environment:
+      <<: *one-login-application-variables
+      ONE_LOGIN_SIMULATOR_URL: http://one-login-simulator:3000
+    depends_on: !override
+      web:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      one-login-simulator:
+        condition: service_healthy

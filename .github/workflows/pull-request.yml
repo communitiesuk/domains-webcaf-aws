@@ -74,6 +74,32 @@ jobs:
           fi
           done
           docker logs dex || true
+      - name: Start GOV.UK One Login simulator
+        run: |
+          docker run -d \
+            --name one-login-simulator \
+            -p 3000:3000 \
+            -e CLIENT_ID=webcaf-local \
+            -e SCOPES=openid,email \
+            -e REDIRECT_URLS=http://localhost:8010/one-login/callback/ \
+            -e POST_LOGOUT_REDIRECT_URLS=http://localhost:8010/ \
+            -e CLIENT_LOCS=P0 \
+            -e IDENTITY_VERIFICATION_SUPPORTED=false \
+            -e ID_TOKEN_SIGNING_ALGORITHM=ES256 \
+            -e TOKEN_AUTH_METHOD=private_key_jwt \
+            -e SIMULATOR_URL=http://localhost:3000 \
+            -e INTERACTIVE_MODE=false \
+            ghcr.io/govuk-one-login/simulator:26.09.16@sha256:1f0930e04ced60b624c1b4e830cbe0a622be216b5065ece4756dbebdb0e92a60
+      - name: Wait for GOV.UK One Login simulator
+        run: |
+          for i in {1..30}; do
+            if curl -sSf http://localhost:3000/.well-known/openid-configuration > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs one-login-simulator || true
+          exit 1
       - name: Run Unit Tests
         env:
           DATABASE_URL: postgresql://webcaf:webcaf@localhost:5432/webcaf
@@ -86,3 +112,17 @@ jobs:
           SSO_MODE: localhost
         run: |
           SECRET_KEY=unneeded DOMAIN_NAME=http://localhost:8010 poetry run python manage.py test -v 2
+      - name: Test GOV.UK One Login simulator flow
+        env:
+          SECRET_KEY: unneeded
+          DATABASE_URL: postgresql://webcaf:webcaf@localhost:5432/webcaf
+          DOMAIN_NAME: http://localhost:8010
+          ENVIRONMENT: local
+          SSO_MODE: one-login
+          RUN_ONE_LOGIN_SIMULATOR_TESTS: "true"
+          GOV_UK_ONE_LOGIN_CLIENT_ID: webcaf-local
+          GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH: tests/fixtures/one-login-simulator-private-key.pem
+          GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL: http://localhost:3000/.well-known/openid-configuration
+          GOV_UK_ONE_LOGIN_SCOPE: openid email
+          GOV_UK_ONE_LOGIN_ENVIRONMENT: integration
+        run: poetry run python manage.py test tests.test_one_login_simulator -v 2
