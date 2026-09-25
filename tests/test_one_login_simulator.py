@@ -4,7 +4,7 @@ from unittest import skipUnless
 
 import requests
 from django.contrib.auth import get_user_model
-from django.test import LiveServerTestCase
+from django.test import LiveServerTestCase, override_settings
 
 
 class SimulatorFormParser(HTMLParser):
@@ -39,6 +39,7 @@ class SimulatorFormParser(HTMLParser):
     os.environ.get("RUN_ONE_LOGIN_SIMULATOR_TESTS") == "true",
     "requires the local GOV.UK One Login simulator",
 )
+@override_settings(SESSION_COOKIE_SECURE=False)
 class OneLoginSimulatorTest(LiveServerTestCase):
     host = "localhost"
 
