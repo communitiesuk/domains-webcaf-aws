@@ -50,6 +50,7 @@ keyparams.txt
 Dockerfile
 Dockerfile-feature-tests
 docker-compose.yml
+docker-compose.override.yml
 docker-compose.feature-tests.yml
 .dockerignore
 

@@ -6,6 +6,35 @@ services:
       OVERRIDE_SSO_HOST: dex
       OVERRIDE_APP_HOST: web
       SSO_MODE: dex
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ./:/app:ro
+      - webcaf_home:/home/webcaf
+      - static-data:/app/webcaf/static
+    healthcheck:
+      test: [ "CMD", "python3.12", "-c", "import socket; socket.create_connection(('localhost', 8000), 2).close()" ]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  oauth:
+    volumes:
+      - ./oauth-stub:/etc/dex:ro
+    networks:
+      default:
+        aliases:
+          - dex
+
+  init:
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - python manage.py makemigrations --check --dry-run && python manage.py collectstatic --noinput && python manage.py migrate --noinput
+    volumes:
+      - ./:/app:ro
+      - static-data:/app/webcaf/static
 
   feature-tests:
     build:
@@ -14,10 +43,14 @@ services:
       args:
         BUILDKIT_INLINE_CACHE: "1"
     depends_on:
-      - web
-      - oauth
-      - postgres
-      - redis
+      web:
+        condition: service_healthy
+      oauth:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       SECRET_KEY: unused # pragma: allowlist secret
       DATABASE_URL: postgresql://webcaf:webcaf@postgres:5432/webcaf # pragma: allowlist secret
@@ -28,11 +61,14 @@ services:
       OVERRIDE_SSO_HOST: dex
       OVERRIDE_APP_HOST: web
       FEATURE_TEST_ARGS: ${FEATURE_TEST_ARGS:-}
+      PYTHONDONTWRITEBYTECODE: "1"
     volumes:
-      - ./:/app
+      - ./:/app:ro
+      - ./artifacts:/app/artifacts
+      - ./reports:/app/reports
     working_dir: /app
     command: > # pragma: allowlist secret
       bash -lc "
         echo 'Services ready. Starting tests...' &&
-        DATABASE_URL=postgresql://webcaf:webcaf@postgres:5432/webcaf poetry run behave -f behave_html_formatter:HTMLFormatter -o reports/report.html -D base_url=http://web:8000 $FEATURE_TEST_ARGS
+        DATABASE_URL=postgresql://webcaf:webcaf@postgres:5432/webcaf python3.12 -m behave -f behave_html_formatter:HTMLFormatter -o reports/report.html -D base_url=http://web:8000 $${FEATURE_TEST_ARGS}
       "

@@ -1,29 +1,33 @@
-#  BDD Testing framework
-This assumes that the application, the SSO system and the database systems are already running.
+# BDD feature tests
 
-The behave.ini file contains the names of the user emails and the organisations that can be used in the testing.
-This is fixed so that the cleanup process can reset the database to its orignal state before each scenario is run.
+The Behave scenarios run in a dedicated Docker Compose project named `webcaf-behave`. The project has its own
+PostgreSQL database, Valkey instance, network and volumes. It does not publish host ports, so it can run while the
+normal development stack is running.
 
-## Disable headless mode
-Sometimes it is easy to debug when we see what is displayed on the browser. To view the browser window, we have to
-disable the headless mode by providing a user data parameter.
+`make behave` removes stale feature-test resources before the run, applies committed migrations, creates scenario
+data and removes the test containers, network and volumes afterwards. Cleanup runs whether the scenarios pass or
+fail. The normal development database, containers and Python virtual environment are not used.
 
-You will need to add ```-D headless_testing=false``` to the main command to get this set up.
+## Running the tests
 
-Command to run.
 ```shell
-#  This will run the tests in headless mode.
-  make behave
+# Run all scenarios in headless Chromium.
+make behave
 
-  #  This will run the selected tests in headless mode.
-  make behave FEATURE_TEST_ARGS="-i admin-login.feature"
+# Run a selected feature.
+make behave FEATURE_TEST_ARGS="-i admin-login.feature"
+```
 
-  # If you want to see the browser window, then you will need to invoke
-  # behave directly from the command line.
-  # Single command: start containers and run the tests with browser visible.
-  docker compose -f docker-compose.yml up -d && \
-    SSO_MODE=localhost \
-    DATABASE_URL=postgresql://webcaf:webcaf@localhost:54321/webcaf \  #  pragma: allowlist secret
-    SECRET_KEY=unused \
-    poetry run behave -D headless_testing=false
+The HTML report is written to `reports/report.html`. Failed scenarios write screenshots and page HTML to
+`artifacts/`, and a failed run writes the Compose service logs to `artifacts/docker-compose.log` before cleanup.
+
+The containerized workflow is headless. Do not run Behave directly against the normal development Compose stack,
+because direct execution bypasses the disposable test database. Use focused features and the generated failure
+artifacts when debugging locally.
+
+If a run is forcibly terminated before its cleanup completes, the next `make behave` removes any stale isolated test
+resources before creating a fresh environment. They can also be removed explicitly with:
+
+```shell
+make behave-clean
 ```

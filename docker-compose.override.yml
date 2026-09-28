@@ -1,0 +1,17 @@
+services:
+  web:
+    ports:
+      - "8010:8000"
+
+  postgres:
+    ports:
+      - "54321:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  oauth:
+    container_name: dex
+    ports:
+      - "5556:5556"

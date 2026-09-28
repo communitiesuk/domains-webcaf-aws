@@ -82,7 +82,8 @@ This `can_edit` attribute is then available to templates and forms to decide whe
 docker compose up
 ```
 
-This brings up the full stack defined in `docker-compose.yml`:
+This brings up the full stack defined in `docker-compose.yml` and the automatically loaded development settings in
+`docker-compose.override.yml`:
 
 - `postgres` — the PostgreSQL database (also exposed on the host at port `54321`).
 - `redis` — Valkey session storage (also exposed on the host at port `6379`).
@@ -137,9 +138,14 @@ The unit tests and BDD feature tests run inside containers via the Make targets:
 
 ``` shell
 make test     # run the pytest suite (writes an HTML report to reports/)
-make behave   # build and run the behave feature tests
+make behave   # build and run Behave in an isolated, disposable Compose project
 make build    # (re)build the images
 ```
+
+The Behave workflow creates its own PostgreSQL database, Valkey instance, network and volumes. It applies migrations
+and scenario data automatically, then removes those resources whether the run passes or fails. It does not stop or
+modify the normal development stack. See [BDD feature tests](features/README.md) for focused runs, reports and failure
+artifacts.
 
 ### Privacy and Logging Best Practices
 
@@ -198,13 +204,14 @@ python manage.py add_seed_data
 
 ### End-to-end testing
 
-This service uses pytest-playwright to perform browser-based end-to-end tests. In order to run the tests,
-follow the steps above to install poetry and run a local server, then in a terminal:
+Browser-based end-to-end coverage is provided by the Behave and Playwright scenarios in `features/`. Run the suite in
+its isolated environment with:
 
 ``` shell
-cd end-to-end-tests
-poetry run pytest # add "--headed" to see the browser window
+make behave
 ```
+
+See [BDD feature tests](features/README.md) for more information.
 
 ### Deployment strategy
 
