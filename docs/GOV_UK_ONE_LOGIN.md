@@ -27,7 +27,7 @@ poetry run python manage.py migrate
 poetry run python manage.py runserver 0.0.0.0:8010
 ```
 
-Open `http://localhost:8010` and select **Sign in**. The simulator runs in interactive mode and displays a response form pre-populated with a production-shaped subject, `alice@example.gov.uk`, a verified email and the `P0` confidence level requested by WebCAF. Core Identity VC is an empty object and postal address details are blank because WebCAF requests authentication without identity verification. Select **Continue** to use those values, or edit them to exercise another response.
+Open `http://localhost:8010` and select **Sign in**. The simulator runs in interactive mode and displays a response form pre-populated with a production-shaped subject, `alice@example.gov.uk`, and a verified email. Select **Continue** to use those values, or edit them to exercise another response.
 
 Named presets can update the values shown on the next sign-in:
 
@@ -39,7 +39,7 @@ make one_login_user PRESET=assessor
 make one_login_user PRESET=unverified
 ```
 
-The available presets are `alice`, `admin`, `organisation_user`, `organisation_lead`, `cyber_advisor`, `assessor`, and `unverified`. Each preset uses `P0`, an empty Core Identity VC object and no postal address details. The empty object works around the simulator rejecting a blank Core Identity field when its interactive form is submitted; WebCAF does not request that claim. Running `make up_one_login_simulator` applies the Alice preset after startup. Set `ONE_LOGIN_SIMULATOR_INTERACTIVE_MODE=false` before starting the service if the configured response should be returned without displaying the form.
+The available presets are `alice`, `admin`, `organisation_user`, `organisation_lead`, `cyber_advisor`, `assessor`, and `unverified`. Restarting the simulator restores the Alice defaults. Set `ONE_LOGIN_SIMULATOR_INTERACTIVE_MODE=false` before starting the service if the configured response should be returned without displaying the form.
 
 For a new user, first add the exact email domain to **Allowed email domains** in Django admin. One Login creates the Django user but does not create a `UserProfile`, so an administrator must also assign the organisation and role before the account can use protected WebCAF functionality. Existing non-staff users are matched by email and retain their profiles.
 

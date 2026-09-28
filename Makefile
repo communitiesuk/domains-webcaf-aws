@@ -30,7 +30,6 @@ up_dex:
 
 up_one_login_simulator:
 	docker compose --profile one-login-simulator up -d --wait postgres one-login-simulator
-	$(MAKE) one_login_user PRESET=alice
 
 one_login_user:
 	poetry run python -m features.one_login_simulator $(or $(PRESET),alice)
