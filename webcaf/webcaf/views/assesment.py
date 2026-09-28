@@ -360,7 +360,8 @@ class CreateAssessmentView(LoginRequiredMixin, FormView):
         data["assessment"] = Assessment
         data["draft_assessment"] = self.request.session.get("draft_assessment", {})
 
-        # Hard code the router class version for now
+        # No assessment exists yet on this page, so the router comes from the
+        # configured default framework rather than from an assessment.
         configuration = Configuration.objects.get_default_config()
         framework_id = configuration.get_default_framework()
         router = routers[framework_id]
