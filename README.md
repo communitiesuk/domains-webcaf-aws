@@ -97,7 +97,7 @@ Alternatively, use the Make targets, which wrap the same compose files:
 ``` shell
 make up-devserver   # run the app with Django's auto-reloading runserver instead of Gunicorn
 make up_dex         # bring up only the DEX (oauth) container
-make up_one_login_simulator # bring up PostgreSQL and the One Login simulator
+make up_one_login_simulator # bring up PostgreSQL and the One Login simulator with Alice defaults
 make one_login_user PRESET=alice # select the simulator identity shown on the next sign-in
 make shell          # open a bash shell in the running web container
 make clear-db       # tear everything down and drop the Postgres volume
