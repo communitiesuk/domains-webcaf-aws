@@ -3,6 +3,7 @@ x-common-application-variables: &common-application-variables
   SECRET_KEY: "Unneeded"  # pragma: allowlist secret
   DJANGO_SETTINGS_MODULE: webcaf.settings
   DATABASE_URL: postgresql://webcaf:webcaf@postgres:5432/webcaf  # pragma: allowlist secret
+  REDIS_URL: redis://redis:6379/0
   ENVIRONMENT: 'local'
   GOOGLE_ANALYTICS_ID: GTM-TEST
 
@@ -32,6 +33,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       init:
         condition: service_completed_successfully
       oauth:
@@ -51,6 +54,16 @@ services:
       - postgres-data:/var/lib/postgresql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: valkey/valkey:9.0.6-alpine
+    ports:
+      - 6379:6379
+    healthcheck:
+      test: [ "CMD", "valkey-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
