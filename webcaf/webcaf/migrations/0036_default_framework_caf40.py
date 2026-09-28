@@ -32,7 +32,9 @@ def _switch_open_periods(apps, from_framework, to_framework):
     for configuration in Configuration.objects.all():
         config_data = configuration.config_data
         if config_data.get("default_framework") != from_framework:
-            # A framework already chosen through the admin is left alone.
+            # Already on the target framework, so there is nothing to move.
+            # Note this matches on the value, not on intent: a period an
+            # administrator has deliberately set to caf32 would still be moved.
             continue
         if not _is_still_open(config_data, now):
             continue
