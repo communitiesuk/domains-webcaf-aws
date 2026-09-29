@@ -4,22 +4,28 @@ WebCAF uses `govuk-onelogin-django` for GOV.UK One Login and retains `mozilla-dj
 
 ## Local simulator
 
-The official [GOV.UK One Login simulator](https://github.com/govuk-one-login/simulator) can exercise WebCAF's One Login protocol flow without a registered integration-environment client. It is opt-in and does not replace the default DEX Docker Compose workflow.
+The official [GOV.UK One Login simulator](https://github.com/govuk-one-login/simulator) is WebCAF's default local identity provider. It exercises the One Login protocol flow without a registered integration-environment client. DEX remains available through explicit commands for generic OIDC testing.
 
-Copy `webcaf/.env.example` to `webcaf/.env` and enable the documented simulator values:
+Copy `webcaf/.env.example` to `webcaf/.env`. The example enables these simulator values by default:
 
 ```text
 SSO_MODE=one-login
 GOV_UK_ONE_LOGIN_CLIENT_ID=webcaf-local
 GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH=tests/fixtures/one-login-simulator-private-key.pem
-GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL=http://localhost:3000/.well-known/openid-configuration
+GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL=http://one-login.localhost:3000/.well-known/openid-configuration
 GOV_UK_ONE_LOGIN_SCOPE="openid email"
 GOV_UK_ONE_LOGIN_ENVIRONMENT=integration
 ```
 
 The committed private key is the simulator project's published default test key. It is public, is not a deployment credential, and must never be used outside the local simulator.
 
-Start PostgreSQL, Valkey and the simulator, migrate the database, then run Django on the host:
+Start the complete containerised application at `http://localhost:8010` with:
+
+```shell
+docker compose up
+```
+
+The `one-login.localhost` simulator hostname resolves to the published simulator port for the host browser and to the simulator network alias for WebCAF's server-side requests. To run Django on the host instead, start PostgreSQL, Valkey and the simulator, then run migrations and the development server:
 
 ```shell
 make up_one_login_simulator
@@ -54,27 +60,31 @@ The test is skipped during normal local test runs. Run it only after starting th
 Stop the simulator with:
 
 ```shell
-docker compose --profile one-login-simulator stop one-login-simulator
+docker compose stop one-login-simulator
 ```
 
-This workflow intentionally runs Django on the host. The simulator publishes absolute endpoint URLs based on `http://localhost:3000`; those URLs cannot simultaneously refer to the host browser and a separate WebCAF container. DEX remains the supported provider for the default fully containerised development stack.
-
-See the [simulator evaluation](GOV_UK_ONE_LOGIN_SIMULATOR_EVALUATION.md) for its capabilities, limitations and recommended testing scope.
+The feature-test stack uses the internal `one-login-simulator` hostname because both WebCAF and Playwright run on the Compose network. This avoids relying on special `.localhost` resolution inside test containers while retaining a single issuer for each workflow.
 
 ## Simulator feature tests
 
 Run the shared application scenarios and One Login-specific browser scenarios with:
 
 ```shell
-make behave_one_login
+make behave
 ```
 
-The dedicated Compose overlay uses Docker-resolvable URLs for the Playwright browser, WebCAF and simulator. It runs the simulator non-interactively and configures a deterministic identity before each login. The 26 shared application scenarios run through both DEX and One Login; four additional scenarios cover a profiled user, a user without a profile, an unverified email, and front-channel logout specifically through One Login. The suite runs serially because `/config` controls global simulator state.
+The feature-test Compose configuration uses Docker-resolvable URLs for the Playwright browser, WebCAF and simulator. It runs the simulator non-interactively and configures a deterministic identity before each login. The default suite contains 26 application scenarios, two provider-independent Django admin scenarios, and four additional scenarios covering a profiled user, a user without a profile, an unverified email, and front-channel logout. The suite runs serially because `/config` controls global simulator state.
 
 Run only the four One Login-specific scenarios with:
 
 ```shell
-make behave_one_login FEATURE_TEST_ARGS="--tags=one_login"
+make behave FEATURE_TEST_ARGS="--tags=one_login"
+```
+
+Run the focused DEX login and logout coverage separately with:
+
+```shell
+make behave_dex
 ```
 
 ## One Login integration environment

@@ -5,7 +5,7 @@ Tests user creation and update behaviour against a real database.
 """
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from webcaf.auth import EMAIL_DOMAIN_REJECTED_SESSION_KEY, OIDCBackend
 from webcaf.webcaf.models import AllowedEmailDomain
@@ -19,6 +19,14 @@ CLAIMS = {
 }
 
 
+@override_settings(
+    OIDC_RP_CLIENT_ID="test-client",
+    OIDC_RP_CLIENT_SECRET="test-secret",  # pragma: allowlist secret
+    OIDC_OP_AUTHORIZATION_ENDPOINT="http://dex:5556/auth",
+    OIDC_OP_TOKEN_ENDPOINT="http://dex:5556/token",
+    OIDC_OP_USER_ENDPOINT="http://dex:5556/userinfo",
+    OIDC_OP_JWKS_ENDPOINT="http://dex:5556/keys",
+)
 class OIDCBackendIntegrationTest(TestCase):
     def setUp(self):
         self.backend = OIDCBackend()

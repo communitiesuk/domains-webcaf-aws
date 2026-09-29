@@ -64,6 +64,17 @@ class LogoutViewTest(TestCase):
         )
         self.assertNotIn("_auth_user_id", self.client.session)
 
+    @override_settings(SSO_MODE="dex", OIDC_OP_LOGOUT_ENDPOINT="")
+    def test_oidc_logout_without_provider_endpoint_clears_local_session(self):
+        session = self.client.session
+        session["oidc_id_token"] = "dex-id-token"
+        session.save()
+
+        response = self.client.post(reverse("logout"))
+
+        self.assertRedirects(response, reverse("index"))
+        self.assertNotIn("_auth_user_id", self.client.session)
+
     @override_settings(SSO_MODE="one-login")
     @patch("webcaf.webcaf.views.general.get_one_login_logout_url", side_effect=KeyError("id_token"))
     def test_provider_logout_failure_still_clears_local_session(self, get_logout_url):
@@ -79,7 +90,7 @@ class LogoutViewTest(TestCase):
         self.assertEqual(response.status_code, 405)
         self.assertIn("_auth_user_id", self.client.session)
 
-    def test_content_security_policy_allows_configured_logout_provider(self):
+    def test_content_security_policy_allows_default_provider(self):
         response = self.client.get(reverse("index"))
 
-        self.assertIn("form-action 'self' http://localhost:5556", response["Content-Security-Policy"])
+        self.assertIn("form-action 'self' http://one-login.localhost:3000", response["Content-Security-Policy"])

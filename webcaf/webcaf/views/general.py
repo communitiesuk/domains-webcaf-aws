@@ -133,7 +133,7 @@ def logout_view(request):
             logout_view_logger.exception("Unable to create the GOV.UK One Login logout URL")
     else:
         id_token = request.session.get("oidc_id_token")
-        if id_token:
+        if id_token and settings.OIDC_OP_LOGOUT_ENDPOINT:
             query = urlencode(
                 {
                     "id_token_hint": id_token,

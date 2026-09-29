@@ -1,4 +1,3 @@
-@one_login_compatible
 Feature: User login with a profile
 
 
@@ -12,9 +11,9 @@ Feature: User login with a profile
     Given the application is running
     And cookies have been "accepted"
     And Think time 1 seconds
-    When the user logs in with username  "<user_name>" and password "<password>"
+    When the user signs in with One Login as "<user_name>"
     Then they should see page title "<page_title>"
     And page contains text "<page_text>" in header
     Examples:
-      | user_name            | password | page_title                                                                       | page_text                                                                                                                                      |
-      | admin@example.gov.uk | password | GovAssure lead - My account - admin - Complete a WebCAF self-assessment - GOV.UK |  My GovAssure lead account  |
+      | user_name            | page_title                                                                       | page_text                     |
+      | admin@example.gov.uk | GovAssure lead - My account - admin - Complete a WebCAF self-assessment - GOV.UK | My GovAssure lead account     |

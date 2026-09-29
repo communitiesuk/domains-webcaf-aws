@@ -17,19 +17,20 @@ build:
 	BUILDKIT_PROGRESS=plain docker compose build
 
 behave:
-	FEATURE_TEST_ARGS="--tags=~one_login $(FEATURE_TEST_ARGS)" docker compose -f docker-compose.yml -f docker-compose.feature-tests.yml up --build --abort-on-container-exit --remove-orphans --exit-code-from feature-tests feature-tests
-	docker compose down
+	@status=0; FEATURE_TEST_ARGS="--tags=~dex $(FEATURE_TEST_ARGS)" docker compose -p webcaf-behave -f docker-compose.yml -f docker-compose.feature-tests.yml up --build --abort-on-container-exit --remove-orphans --exit-code-from feature-tests feature-tests || status=$$?; if [ $$status -ne 0 ]; then mkdir -p artifacts; docker compose -p webcaf-behave -f docker-compose.yml -f docker-compose.feature-tests.yml logs --no-color > artifacts/one-login-docker-compose.log; fi; docker compose -p webcaf-behave -f docker-compose.yml -f docker-compose.feature-tests.yml down -v; exit $$status
 
-behave_one_login:
-	FEATURE_TEST_ARGS="--tags=one_login_compatible $(FEATURE_TEST_ARGS)" docker compose --profile one-login-simulator -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.one-login-feature-tests.yml up --build --abort-on-container-exit --remove-orphans --exit-code-from feature-tests feature-tests
-	docker compose --profile one-login-simulator -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.one-login-feature-tests.yml down
+behave_dex:
+	@status=0; FEATURE_TEST_ARGS="--tags=dex $(FEATURE_TEST_ARGS)" docker compose -p webcaf-behave-dex --profile dex -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.dex.yml -f docker-compose.dex-feature-tests.yml up --build --abort-on-container-exit --remove-orphans --exit-code-from feature-tests feature-tests || status=$$?; if [ $$status -ne 0 ]; then mkdir -p artifacts; docker compose -p webcaf-behave-dex --profile dex -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.dex.yml -f docker-compose.dex-feature-tests.yml logs --no-color > artifacts/dex-docker-compose.log; fi; docker compose -p webcaf-behave-dex --profile dex -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.dex.yml -f docker-compose.dex-feature-tests.yml down -v; exit $$status
+
+behave-clean:
+	docker compose -p webcaf-behave -f docker-compose.yml -f docker-compose.feature-tests.yml down -v --remove-orphans
+	docker compose -p webcaf-behave-dex --profile dex -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.dex.yml -f docker-compose.dex-feature-tests.yml down -v --remove-orphans
 
 up_dex:
-	#	Bring up DEX and Valkey for local development
-	docker compose -f docker-compose.yml up -d --wait oauth redis
+	docker compose --profile dex -f docker-compose.yml -f docker-compose.dex.yml up -d --wait web
 
 up_one_login_simulator:
-	docker compose --profile one-login-simulator up -d --wait postgres redis one-login-simulator
+	docker compose up -d --wait postgres redis one-login-simulator
 	$(MAKE) one_login_user PRESET=alice
 
 one_login_user:

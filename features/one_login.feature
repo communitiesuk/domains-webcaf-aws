@@ -1,4 +1,4 @@
-@one_login @one_login_compatible
+@one_login
 Feature: GOV.UK One Login authentication
 
   Scenario: Existing user with a profile signs in

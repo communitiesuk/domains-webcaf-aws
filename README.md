@@ -86,8 +86,8 @@ This brings up the full stack defined in `docker-compose.yml`:
 
 - `postgres` — the PostgreSQL database (also exposed on the host at port `54321`).
 - `redis` — Valkey session storage (also exposed on the host at port `6379`).
-- `oauth` — a local [DEX](https://dexidp.io/) identity provider used for SSO (`SSO_MODE=dex`).
-- `one-login-simulator` — an opt-in GOV.UK One Login simulator profile for host-based development.
+- `one-login-simulator` — the default local GOV.UK One Login provider.
+- `oauth` — an optional [DEX](https://dexidp.io/) provider enabled only by explicit DEX commands.
 - `init` — a one-shot container that runs `local-init.sh` (`makemigrations`, `collectstatic`, then `migrate`) and then exits.
 - `web` — the application, served by Gunicorn with `--reload`, started once `init` has completed successfully and Postgres and Valkey are healthy.
 
@@ -97,7 +97,7 @@ Alternatively, use the Make targets, which wrap the same compose files:
 
 ``` shell
 make up-devserver   # run the app with Django's auto-reloading runserver instead of Gunicorn
-make up_dex         # bring up DEX and Valkey
+make up_dex         # bring up the full application stack with DEX instead of One Login
 make up_one_login_simulator # bring up PostgreSQL, Valkey and the One Login simulator with Alice defaults
 make one_login_user PRESET=alice # select the simulator identity shown on the next sign-in
 make shell          # open a bash shell in the running web container
@@ -110,11 +110,11 @@ make clear-db       # tear everything down and drop the Postgres volume
 
 Make sure the python version you use is the same as in the [Dockerfile](Dockerfile) (Python 3.12).
 
-The database credentials are defined in `docker-compose.yml`: the Postgres container uses the user/password/database `webcaf`/`webcaf`/`webcaf` and is exposed on the host at port `54321`. Valkey is exposed on port `6379`. To develop against them, create `webcaf/.env` from `webcaf/.env.example`, then start both services:
+The database credentials are defined in `docker-compose.yml`: the Postgres container uses the user/password/database `webcaf`/`webcaf`/`webcaf` and is exposed on the host at port `54321`. Valkey is exposed on port `6379`. To run Django on the host with the default One Login simulator, create `webcaf/.env` from `webcaf/.env.example`, then start its dependencies:
 
 ```
 cp webcaf/.env.example webcaf/.env
-docker compose up -d postgres redis
+make up_one_login_simulator
 ```
 
 WebCAF stores Django sessions exclusively in Valkey. AWS environments must provide `REDIS_URL` for the managed ElastiCache for Valkey endpoint, using `rediss://` when in-transit encryption is enabled. Production targets Valkey 9.0, matching the `valkey/valkey:9.0.6-alpine` image used locally and in CI. Valkey connection and socket operations time out after 5 seconds so an unavailable cache fails promptly instead of indefinitely blocking application workers.
@@ -140,8 +140,8 @@ The unit tests and BDD feature tests run inside containers via the Make targets:
 
 ``` shell
 make test     # run the pytest suite (writes an HTML report to reports/)
-make behave   # run the shared scenarios with DEX plus provider-independent admin scenarios
-make behave_one_login # run the shared application scenarios and One Login-specific scenarios with the simulator
+make behave   # run application, admin and One Login-specific scenarios with the simulator
+make behave_dex # run only the focused DEX authentication scenarios
 make build    # (re)build the images
 ```
 
@@ -171,9 +171,9 @@ We use the `SSO_MODE` environment variable to select authentication:
 - `one-login` uses GOV.UK One Login with `private_key_jwt` authentication.
 - `none` is reserved for build tasks that do not authenticate users.
 
-Set `SSO_MODE` in `.env` for direct local runs. Docker Compose deliberately remains configured for DEX. See [GOV.UK One Login](docs/GOV_UK_ONE_LOGIN.md) for local simulator and integration-environment setup, user mapping, logout, deployment configuration and secret handling. The [simulator evaluation](docs/GOV_UK_ONE_LOGIN_SIMULATOR_EVALUATION.md) records its intended use alongside DEX.
+One Login is the default for direct local runs and Docker Compose. Use `make up_dex` only when explicitly testing the generic OIDC integration. See [GOV.UK One Login](docs/GOV_UK_ONE_LOGIN.md) for local simulator and integration-environment setup, user mapping, logout, deployment configuration and secret handling.
 
-DEX has two commonly used users configured:
+The optional DEX configuration has two commonly used users:
 
 - a normal user called Alice, alice@example.gov.uk
 - Admin user called Tin, admin@example.gov.uk

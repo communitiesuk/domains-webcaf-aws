@@ -3,6 +3,7 @@ from html.parser import HTMLParser
 from unittest import skipUnless
 
 import requests
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import LiveServerTestCase, override_settings
 
@@ -45,15 +46,16 @@ class OneLoginSimulatorTest(LiveServerTestCase):
 
     def test_authenticates_verified_user(self):
         get_user_model().objects.create_user(username="alice@example.gov.uk", email="alice@example.gov.uk")
+        simulator_url = settings.GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL.removesuffix("/.well-known/openid-configuration")
 
         session = requests.Session()
-        simulator_config = session.get("http://localhost:3000/config", timeout=10).json()
+        simulator_config = session.get(f"{simulator_url}/config", timeout=10).json()
         original_redirect_urls = simulator_config["clientConfiguration"]["redirectUrls"]
         original_logout_urls = simulator_config["clientConfiguration"]["postLogoutRedirectUrls"]
         original_response_configuration = simulator_config["responseConfiguration"]
         original_error_configuration = simulator_config["errorConfiguration"]
         config_response = session.post(
-            "http://localhost:3000/config",
+            f"{simulator_url}/config",
             json={
                 "clientConfiguration": {
                     "redirectUrls": [f"{self.live_server_url}/one-login/callback/"],
@@ -72,10 +74,10 @@ class OneLoginSimulatorTest(LiveServerTestCase):
 
         try:
             response = session.get(f"{self.live_server_url}/my-account/", timeout=10)
-            if response.url.startswith("http://localhost:3000/authorize"):
+            if response.url.startswith(f"{simulator_url}/authorize"):
                 parser = SimulatorFormParser()
                 parser.feed(response.text)
-                self.assertEqual(parser.action, "http://localhost:3000/form-submit")
+                self.assertEqual(parser.action, f"{simulator_url}/form-submit")
                 response = session.post(parser.action, data=parser.fields, timeout=10)
 
             self.assertEqual(response.url, f"{self.live_server_url}/my-account/")
@@ -83,7 +85,7 @@ class OneLoginSimulatorTest(LiveServerTestCase):
             self.assertIn("You do not have a profile set up", response.text)
         finally:
             session.post(
-                "http://localhost:3000/config",
+                f"{simulator_url}/config",
                 json={
                     "clientConfiguration": {
                         "redirectUrls": original_redirect_urls,

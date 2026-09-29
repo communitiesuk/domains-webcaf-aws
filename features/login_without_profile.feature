@@ -1,4 +1,3 @@
-@one_login_compatible
 Feature: User login without a profile
 
   Background:
@@ -10,9 +9,9 @@ Feature: User login without a profile
     Given the application is running
     And cookies have been "accepted"
     And Think time 1 seconds
-    When the user logs in with username  "<user_name>" and password "<password>"
+    When the user signs in with One Login as "<user_name>"
     Then they should see page title "<page_title>"
     And page contains text "<page_text>" in banner
     Examples:
-      | user_name            | password | page_title                                                      | page_text                                                                              |
-      | alice@example.gov.uk | password | My account - alice - Complete a WebCAF self-assessment - GOV.UK | You do not have a profile set up. Please create one by contacting your GovAssure lead. |
+      | user_name            | page_title                                                      | page_text                                                                              |
+      | alice@example.gov.uk | My account - alice - Complete a WebCAF self-assessment - GOV.UK | You do not have a profile set up. Please create one by contacting your GovAssure lead. |

@@ -1,4 +1,3 @@
-@one_login_compatible
 Feature: Organisation user filling assessments
 
   Background:
@@ -9,7 +8,7 @@ Feature: Organisation user filling assessments
     And the application is running
     And cookies have been "accepted"
     And there is a "enhanced" profile assessment  for "System 1", "Ministry of Agriculture", for the period "current" in "draft" status and data " "
-    And the user logs in with username  "alice@example.gov.uk" and password "password"
+    And the user signs in with One Login as "alice@example.gov.uk"
 
   Scenario: Organisation user complete assessment process
     Given Think time 1 seconds

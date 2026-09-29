@@ -40,9 +40,8 @@ class LoginRequiredMiddlewareTest(TestCase):
 
     def test_middleware_initialization(self):
         """Test that middleware initializes with correct exempt URLs."""
-        self.assertIn(reverse("oidc_authentication_init"), self.middleware.exempt_url_prefixes)
-        self.assertIn(reverse("oidc_authentication_callback"), self.middleware.exempt_url_prefixes)
-        self.assertIn(reverse("oidc_logout"), self.middleware.exempt_url_prefixes)
+        self.assertIn(reverse("one_login:login"), self.middleware.exempt_url_prefixes)
+        self.assertIn(reverse("one_login:callback"), self.middleware.exempt_url_prefixes)
         self.assertIn("/assets/", self.middleware.exempt_url_prefixes)
         self.assertIn("/static/", self.middleware.exempt_url_prefixes)
         self.assertIn("/media", self.middleware.exempt_url_prefixes)
@@ -78,31 +77,30 @@ class LoginRequiredMiddlewareTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.get_response.assert_called_with(self.request)
 
-    def test_oidc_urls_allow_access(self):
-        """Test that OIDC authentication URLs allow access without authentication."""
-        oidc_paths = [
-            reverse("oidc_authentication_init"),
-            reverse("oidc_authentication_callback"),
-            reverse("oidc_logout"),
+    def test_one_login_urls_allow_access(self):
+        """Test that One Login URLs allow access without authentication."""
+        one_login_paths = [
+            reverse("one_login:login"),
+            reverse("one_login:callback"),
         ]
 
-        for path in oidc_paths:
+        for path in one_login_paths:
             self.request.path = path
             self.request.user = make_user(authenticated=False)
             response = self.middleware(self.request)
             self.assertEqual(response.status_code, 200)
             self.get_response.assert_called_with(self.request)
 
-    def test_unauthenticated_user_redirected_to_oidc(self):
-        """Test that unauthenticated users are redirected to OIDC authentication."""
+    def test_unauthenticated_user_redirected_to_one_login(self):
+        """Test that unauthenticated users are redirected to One Login."""
         self.request.path = "/some/protected/path"
         self.request.user = make_user(authenticated=False)
         response = self.middleware(self.request)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("oidc_authentication_init"))
+        self.assertEqual(response.url, reverse("one_login:login"))
 
-    @override_settings(SSO_MODE="one-login", LOGIN_URL="one_login:login")
-    def test_unauthenticated_user_redirected_to_one_login(self):
+    @override_settings(SSO_MODE="dex", LOGIN_URL="oidc_authentication_init")
+    def test_unauthenticated_user_redirected_to_oidc(self):
         middleware = LoginRequiredMiddleware(self.get_response)
         self.request.path = "/some/protected/path"
         self.request.user = make_user(authenticated=False)
@@ -110,9 +108,9 @@ class LoginRequiredMiddlewareTest(TestCase):
         response = middleware(self.request)
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("one_login:login"))
-        self.assertIn(reverse("one_login:callback"), middleware.exempt_url_prefixes)
-        self.assertNotIn(reverse("oidc_authentication_init"), middleware.exempt_url_prefixes)
+        self.assertEqual(response.url, reverse("oidc_authentication_init"))
+        self.assertIn(reverse("oidc_authentication_callback"), middleware.exempt_url_prefixes)
+        self.assertNotIn(reverse("one_login:login"), middleware.exempt_url_prefixes)
 
     @override_settings(ENABLED_2FA=False)
     def test_authenticated_user_allowed_when_2fa_disabled(self):
@@ -192,7 +190,7 @@ class LoginRequiredMiddlewareTest(TestCase):
             self.request.user = make_user(authenticated=False)
             response = self.middleware(self.request)
             self.assertEqual(response.status_code, 302)
-            self.assertEqual(response.url, reverse("oidc_authentication_init"))
+            self.assertEqual(response.url, reverse("one_login:login"))
 
     @patch("webcaf.auth.LoginRequiredMiddleware.logger")
     def test_middleware_logs_force_authentication(self, mock_logger):

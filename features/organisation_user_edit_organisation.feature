@@ -1,4 +1,3 @@
-@one_login_compatible
 Feature: Organisation user can edit an organisation's details
 
   Background:
@@ -8,7 +7,7 @@ Feature: Organisation user can edit an organisation's details
     And User "other@example.gov.uk" has the profile "Organisation user" assigned in "Ministry of Agriculture"
     And the application is running
     And cookies have been "accepted"
-    And the user logs in with username  "other@example.gov.uk" and password "password"
+    And the user signs in with One Login as "other@example.gov.uk"
 
   Scenario: Organisation user can login and has correct paths available for role in my account page
     Given Think time 1 seconds
