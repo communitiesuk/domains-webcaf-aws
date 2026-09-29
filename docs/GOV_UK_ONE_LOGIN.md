@@ -88,11 +88,11 @@ Post-logout redirect URI: http://localhost:8010/
 
 Create `webcaf/.env` from `webcaf/.env.example`, set `SSO_MODE=one-login`, and replace the simulator client ID, private key path and OpenID configuration URL with the registered integration-environment values. Keep the private key in the ignored repository-root `.secrets/` directory and set `GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH` to its absolute path or a path relative to the repository root.
 
-Install dependencies, then start the local PostgreSQL database and WebCAF with:
+Install dependencies, then start the local PostgreSQL database, Valkey and WebCAF with:
 
 ```shell
 poetry install
-docker compose up -d postgres
+docker compose up -d postgres redis
 poetry run python manage.py migrate
 poetry run python manage.py runserver 0.0.0.0:8010
 ```

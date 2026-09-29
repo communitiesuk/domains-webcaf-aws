@@ -16,6 +16,27 @@ The assessment covers WebCAF's current `govuk-onelogin-django` integration, loca
 
 Verification against the pinned image completed a real authorization request, RSA private-key JWT token exchange, ES256 ID-token and JWKS validation, UserInfo request, verified-email user match, and redirect to WebCAF's no-profile response. The test ran against an isolated Django test database and restored the simulator's redirect configuration afterward. Pull-request CI runs this protocol smoke test and a separate serial browser suite containing the shared application scenarios plus successful login, no-profile handling, unverified email rejection, and front-channel logout.
 
+## Acceptance criteria status
+
+| Acceptance criterion | Status | Summary |
+| --- | --- | --- |
+| Assess the simulator's capabilities and limitations against WebCAF's requirements | Met | The required One Login protocol behavior, supported simulator capabilities, and limitations are documented below. |
+| Evaluate local developer authentication using the simulator | Met | A host-based Django workflow using the simulator, PostgreSQL, and Valkey is documented and its networking constraints are recorded. |
+| Evaluate suitability for automated and BDD testing | Met | CI runs a protocol smoke test and a serial simulator-backed browser suite containing 26 shared application scenarios and four focused One Login scenarios. |
+| Document benefits and limitations compared with DEX | Met | The simulator's One Login fidelity and DEX's generic OIDC value are compared directly. |
+| Identify dependencies on future multiple-identity-provider requirements | Met | The unresolved route for internal users and the need for durable issuer-and-subject identity mapping are identified. |
+| Record whether to retain DEX, replace it, or support both | Met | The recommendation is to retain both for defined purposes, with the simulator supplementing rather than replacing DEX. |
+| Identify and ticket follow-on implementation work where required | Partially met | Three follow-on ticket drafts are recorded, but ticket identifiers or links must be added once the tickets are created. |
+
+Summary:
+
+- Retain DEX for generic OIDC development, the default fully containerised workflow, and generic OIDC regression coverage.
+- Use the One Login simulator for host-based One Login development, the protocol smoke test, and serial browser coverage.
+- Run the same 26 application scenarios through DEX and One Login, with four additional One Login-specific scenarios.
+- Keep mocked tests for fast, isolated application and transport-error coverage.
+- Add browser coverage for automatic account creation, disallowed domains, representative protocol errors, and signing-key rotation as follow-on work.
+- Add ticket identifiers or links to the follow-on section before treating every acceptance criterion as complete.
+
 ## WebCAF requirements
 
 WebCAF's One Login client currently requires:
@@ -66,7 +87,7 @@ The simulator cannot establish complete behavioral parity with deployed One Logi
 
 The simulator is suitable for local WebCAF authentication when Django runs on the host:
 
-- The simulator and PostgreSQL run in Docker, while Django uses `http://localhost:3000` for all discovered endpoints.
+- The simulator, PostgreSQL and Valkey run in Docker, while Django uses `http://localhost:3000` for all discovered endpoints and `redis://localhost:6379/0` for session storage.
 - Interactive mode allows developers to enter the email, verification state and subject needed for a scenario without maintaining static provider users.
 - The simulator's published test key works with WebCAF's existing private-key path configuration.
 - No new WebCAF authentication mode or production dependency is required.
@@ -77,14 +98,18 @@ The simulator is not a direct replacement for DEX in the default fully container
 
 The simulator is used for a serial browser suite. Each scenario configures a deterministic subject, email and verification state through `/config`, starts the WebCAF login, and allows the simulator to redirect immediately without interacting with provider UI. The same 26 application scenarios run through DEX and the simulator without duplicating their Gherkin definitions.
 
-The highest-value simulator-backed scenarios are:
+Current focused simulator-backed browser coverage includes:
 
 - Successful login for an existing user with a profile.
 - Successful protocol login for an existing user without a profile, ending on the current no-profile response.
-- Automatic creation for a verified user on an allowed domain.
-- Rejection of an unverified email or disallowed domain.
-- Authorization denial and representative invalid ID-token responses.
+- Rejection of an unverified email.
 - Front-channel logout and return to WebCAF.
+
+Candidate follow-on browser coverage includes:
+
+- Automatic creation for a verified user on an allowed domain.
+- Rejection of a user from a disallowed domain.
+- Authorization denial and representative invalid ID-token responses.
 - ID-token signing-key rotation.
 
 The existing mocked tests should remain because they are faster and can isolate application error handling. The full role and assessment BDD suite also remains on DEX to preserve generic OIDC coverage, while its shared scenarios run a second time through One Login to demonstrate provider parity.
