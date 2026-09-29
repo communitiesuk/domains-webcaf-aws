@@ -1,6 +1,7 @@
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -92,5 +93,7 @@ class LogoutViewTest(TestCase):
 
     def test_content_security_policy_allows_default_provider(self):
         response = self.client.get(reverse("index"))
+        provider_config = urlparse(settings.GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL)
+        provider_origin = f"{provider_config.scheme}://{provider_config.netloc}"
 
-        self.assertIn("form-action 'self' http://one-login.localhost:3000", response["Content-Security-Policy"])
+        self.assertIn(f"form-action 'self' {provider_origin}", response["Content-Security-Policy"])
