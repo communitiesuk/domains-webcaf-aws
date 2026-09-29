@@ -74,7 +74,7 @@ def before_scenario(context, scenario):
         Configuration.objects.create(
             name="default",
             config_data={
-                "default_framework": settings.WEBCAF_VERSION,
+                "default_framework": settings.DEFAULT_CAF_FRAMEWORK,
                 "current_assessment_period": assessment_period,
                 "assessment_period_end": f"31 March {assessment_year} 11:59pm",
             },

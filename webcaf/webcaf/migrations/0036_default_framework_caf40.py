@@ -1,53 +1,35 @@
-from datetime import datetime
-
 from django.db import migrations
-from django.utils import timezone
 
 OLD_FRAMEWORK = "caf32"
 NEW_FRAMEWORK = "caf40"
 
-# Matches the format written by 0016_configuration_name, e.g. "31 March 2027 11:59pm".
-PERIOD_END_FORMAT = "%d %B %Y %I:%M%p"
+# The configuration period new assessments are created against for MVP /
+# Private Beta. Named explicitly so that applying and reversing this migration
+# always act on the same record, whenever they are run.
+#
+# 25/26 is deliberately not listed. That period is a record of what its
+# assessments were carried out against, and they were carried out against
+# CAF 3.2.
+#
+# 0025_update_configuration addresses the same records by name.
+TARGET_PERIODS = ["26/27"]
 
 
-def _is_still_open(config_data, now):
-    """Whether this configuration period ends in the future.
-
-    A period that has already closed is a record of what that period ran on, so
-    it keeps the framework it was assessed against. An unparseable or missing
-    end date is treated as open, since the period cannot be shown to have ended.
-    """
-    raw = config_data.get("assessment_period_end")
-    if not raw:
-        return True
-    try:
-        return datetime.strptime(raw, PERIOD_END_FORMAT) >= now
-    except (TypeError, ValueError):
-        return True
-
-
-def _switch_open_periods(apps, from_framework, to_framework):
+def _set_default_framework(apps, framework):
     Configuration = apps.get_model("webcaf", "Configuration")
-    now = datetime.now(tz=timezone.get_current_timezone()).replace(tzinfo=None)
-    for configuration in Configuration.objects.all():
-        config_data = configuration.config_data
-        if config_data.get("default_framework") != from_framework:
-            # Already on the target framework, so there is nothing to move.
-            # Note this matches on the value, not on intent: a period an
-            # administrator has deliberately set to caf32 would still be moved.
-            continue
-        if not _is_still_open(config_data, now):
-            continue
-        config_data["default_framework"] = to_framework
+    # filter() rather than get(): an environment without these periods is left
+    # alone rather than failing the migration.
+    for configuration in Configuration.objects.filter(name__in=TARGET_PERIODS):
+        configuration.config_data["default_framework"] = framework
         configuration.save(update_fields=["config_data"])
 
 
 def set_caf40_as_default(apps, schema_editor):
-    _switch_open_periods(apps, OLD_FRAMEWORK, NEW_FRAMEWORK)
+    _set_default_framework(apps, NEW_FRAMEWORK)
 
 
 def restore_caf32_as_default(apps, schema_editor):
-    _switch_open_periods(apps, NEW_FRAMEWORK, OLD_FRAMEWORK)
+    _set_default_framework(apps, OLD_FRAMEWORK)
 
 
 class Migration(migrations.Migration):
@@ -57,17 +39,13 @@ class Migration(migrations.Migration):
     (views/assesment.py), so changing the model default alone leaves new
     assessments on 3.2.
 
-    Only periods that have not yet ended are moved. A closed period records the
-    framework its assessments were carried out against and must keep it — 25/26
-    ran on CAF 3.2. Configuration.objects.get_default_config() only ever selects
-    a period whose end date is in the future, so leaving closed periods alone
-    has no effect on which framework a new assessment gets.
+    Only the periods named in TARGET_PERIODS are touched, and both directions
+    act on exactly that set. Reversing therefore restores the same records the
+    forward migration changed, no matter how much time has passed or what the
+    values happen to be.
 
-    This makes the migration depend on when it runs, which is intended: it moves
-    whatever is still open at that point.
-
-    Existing assessments are unaffected either way, each one stores its own
-    framework and keeps it.
+    Existing assessments are unaffected: each one stores its own framework and
+    keeps it.
     """
 
     dependencies = [
