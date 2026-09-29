@@ -1,3 +1,4 @@
+@one_login_compatible
 Feature: Organisation user can edit an organisation's details
 
   Background:

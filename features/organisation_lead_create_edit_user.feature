@@ -1,3 +1,4 @@
+@one_login_compatible
 Feature: Create and edit a new user for the organisation
 
   Background:

@@ -21,15 +21,15 @@ behave:
 	docker compose down
 
 behave_one_login:
-	FEATURE_TEST_ARGS="--tags=one_login" docker compose --profile one-login-simulator -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.one-login-feature-tests.yml up --build --abort-on-container-exit --remove-orphans --exit-code-from feature-tests feature-tests
+	FEATURE_TEST_ARGS="--tags=one_login_compatible $(FEATURE_TEST_ARGS)" docker compose --profile one-login-simulator -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.one-login-feature-tests.yml up --build --abort-on-container-exit --remove-orphans --exit-code-from feature-tests feature-tests
 	docker compose --profile one-login-simulator -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.one-login-feature-tests.yml down
 
 up_dex:
-	#	Bring up dex container for working with local development
-	docker compose -f docker-compose.yml up -d oauth
+	#	Bring up DEX and Valkey for local development
+	docker compose -f docker-compose.yml up -d --wait oauth redis
 
 up_one_login_simulator:
-	docker compose --profile one-login-simulator up -d --wait postgres one-login-simulator
+	docker compose --profile one-login-simulator up -d --wait postgres redis one-login-simulator
 	$(MAKE) one_login_user PRESET=alice
 
 one_login_user:

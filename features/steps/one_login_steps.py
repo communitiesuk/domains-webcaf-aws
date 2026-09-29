@@ -1,3 +1,4 @@
+import os
 import re
 
 from behave import step
@@ -8,14 +9,14 @@ from features.one_login_simulator import configure_identity
 
 @step('the user signs in with One Login as "{user_name}"')
 def sign_in_with_one_login(context, user_name):
-    configure_identity(user_name, True)
+    configure_identity(user_name, True, os.environ["ONE_LOGIN_SIMULATOR_URL"])
     context.page.get_by_role("button", name="Sign in").click()
     context.current_email = user_name
 
 
 @step('the user attempts to sign in with an unverified One Login email "{user_name}"')
 def sign_in_with_unverified_one_login_email(context, user_name):
-    configure_identity(user_name, False)
+    configure_identity(user_name, False, os.environ["ONE_LOGIN_SIMULATOR_URL"])
     context.page.get_by_role("button", name="Sign in").click()
 
 

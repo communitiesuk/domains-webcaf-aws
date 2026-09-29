@@ -1,3 +1,4 @@
+@one_login_compatible
 Feature: User login without a profile
 
   Background:

@@ -1,3 +1,4 @@
+@one_login_compatible
 Feature: User login with a profile
 
 

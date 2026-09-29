@@ -1,4 +1,5 @@
-  Feature: Remove a user for the organisation
+@one_login_compatible
+Feature: Remove a user for the organisation
 
   Background:
     Given Organisation "Ministry of Agriculture" of type "ministerial-department" exists with systems "System 1, System 2, System 3"

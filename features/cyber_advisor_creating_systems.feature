@@ -1,3 +1,4 @@
+@one_login_compatible
 Feature: Cyber advisor can maintain systems
 
 

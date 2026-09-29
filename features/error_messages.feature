@@ -1,3 +1,4 @@
+@one_login_compatible
 Feature: Test user error messages appear as expected
 
   Background:

@@ -1,3 +1,4 @@
+@one_login_compatible
 Feature: Organisation user filling assessments
 
   Background:

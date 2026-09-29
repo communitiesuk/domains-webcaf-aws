@@ -1,3 +1,4 @@
+import os
 from time import sleep
 
 from behave import given, step, then
@@ -5,6 +6,7 @@ from behave.runner import Context
 from django.db import connection
 from playwright.sync_api import Page, expect
 
+from features.one_login_simulator import configure_identity
 from features.util import run_async_orm
 
 
@@ -29,9 +31,17 @@ def set_think_time(context, time):
 def confirm_user_exists(context, user_name):
     from django.contrib.auth.models import User
 
-    print(f"Creating user {user_name}")
-    user, _ = run_async_orm(User.objects.get_or_create, email=user_name, username=user_name)
-    print(f"user = {user} is in the system now")
+    def create_or_reset_user():
+        user, _ = User.objects.get_or_create(email=user_name, defaults={"username": user_name})
+        if user.is_staff or user.is_superuser:
+            raise RuntimeError("Feature-test fixture email belongs to a privileged user")
+        user.username = user_name
+        user.first_name = user_name.partition("@")[0]
+        user.last_name = ""
+        user.is_active = True
+        user.save(update_fields=["username", "first_name", "last_name", "is_active"])
+
+    run_async_orm(create_or_reset_user)
 
 
 @step('no login attempt blocks for the user "{user_name}"')
@@ -116,6 +126,16 @@ def assign_user_profile(context, user_name, role, organisation_name):
 @step('the user logs in with username  "{user_name}" and password "{password}"')
 def user_logging_in(context, user_name, password):
     page = context.page
+
+    if os.environ.get("SSO_MODE", "").lower() == "one-login":
+        simulator_url = os.environ.get("ONE_LOGIN_SIMULATOR_URL")
+        if not simulator_url:
+            raise RuntimeError("ONE_LOGIN_SIMULATOR_URL is required for One Login feature tests")
+        configure_identity(user_name, True, simulator_url)
+        page.get_by_role("button", name="Sign in").click()
+        context.current_email = user_name
+        return
+
     page.get_by_role("button", name="Sign in").click()
     if "think_time" in context:
         sleep(context.think_time)

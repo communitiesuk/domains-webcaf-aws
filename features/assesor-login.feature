@@ -1,3 +1,4 @@
+@one_login_compatible
 Feature: Assessor can log in and view assessments
 
 

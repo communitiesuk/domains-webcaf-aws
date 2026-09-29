@@ -19,7 +19,7 @@ GOV_UK_ONE_LOGIN_ENVIRONMENT=integration
 
 The committed private key is the simulator project's published default test key. It is public, is not a deployment credential, and must never be used outside the local simulator.
 
-Start PostgreSQL and the simulator, migrate the database, then run Django on the host:
+Start PostgreSQL, Valkey and the simulator, migrate the database, then run Django on the host:
 
 ```shell
 make up_one_login_simulator
@@ -63,13 +63,19 @@ See the [simulator evaluation](GOV_UK_ONE_LOGIN_SIMULATOR_EVALUATION.md) for its
 
 ## Simulator feature tests
 
-Run the focused One Login browser scenarios with:
+Run the shared application scenarios and One Login-specific browser scenarios with:
 
 ```shell
 make behave_one_login
 ```
 
-The dedicated Compose overlay uses Docker-resolvable URLs for the Playwright browser, WebCAF and simulator. It runs the simulator non-interactively, configures a deterministic identity before each login, and covers a profiled user, a user without a profile, an unverified email, and front-channel logout. The suite runs serially because `/config` controls global simulator state. The existing broad feature suite remains DEX-backed.
+The dedicated Compose overlay uses Docker-resolvable URLs for the Playwright browser, WebCAF and simulator. It runs the simulator non-interactively and configures a deterministic identity before each login. The 26 shared application scenarios run through both DEX and One Login; four additional scenarios cover a profiled user, a user without a profile, an unverified email, and front-channel logout specifically through One Login. The suite runs serially because `/config` controls global simulator state.
+
+Run only the four One Login-specific scenarios with:
+
+```shell
+make behave_one_login FEATURE_TEST_ARGS="--tags=one_login"
+```
 
 ## One Login integration environment
 

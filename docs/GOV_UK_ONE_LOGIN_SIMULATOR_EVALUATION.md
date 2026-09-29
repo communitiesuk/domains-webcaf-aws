@@ -4,7 +4,7 @@
 
 WebCAF should support both the GOV.UK One Login simulator and DEX for defined purposes.
 
-The simulator should be used for One Login-specific local development and focused end-to-end protocol tests. DEX should remain the provider for generic OIDC development and the existing broad BDD suite until WebCAF's future identity-provider requirements are agreed.
+The simulator should be used for One Login-specific local development, end-to-end protocol tests, and a second execution of the shared application BDD scenarios. DEX should remain the provider for generic OIDC development until WebCAF's future identity-provider requirements are agreed.
 
 The simulator supplements DEX; it does not replace it.
 
@@ -14,7 +14,7 @@ This assessment was completed for CS-435 against simulator image `ghcr.io/govuk-
 
 The assessment covers WebCAF's current `govuk-onelogin-django` integration, local developer authentication, browser-driven testing, comparison with DEX, and dependencies on possible multiple-identity-provider requirements.
 
-Verification against the pinned image completed a real authorization request, RSA private-key JWT token exchange, ES256 ID-token and JWKS validation, UserInfo request, verified-email user match, and redirect to WebCAF's no-profile response. The test ran against an isolated Django test database and restored the simulator's redirect configuration afterward. Pull-request CI runs this protocol smoke test and a separate serial browser suite for successful login, no-profile handling, unverified email rejection, and front-channel logout.
+Verification against the pinned image completed a real authorization request, RSA private-key JWT token exchange, ES256 ID-token and JWKS validation, UserInfo request, verified-email user match, and redirect to WebCAF's no-profile response. The test ran against an isolated Django test database and restored the simulator's redirect configuration afterward. Pull-request CI runs this protocol smoke test and a separate serial browser suite containing the shared application scenarios plus successful login, no-profile handling, unverified email rejection, and front-channel logout.
 
 ## WebCAF requirements
 
@@ -75,7 +75,7 @@ The simulator is not a direct replacement for DEX in the default fully container
 
 ## Automated and BDD testing assessment
 
-The simulator is used for a focused, serial browser suite. Each scenario configures a deterministic subject, email and verification state through `/config`, starts the WebCAF login, and allows the simulator to redirect immediately without interacting with provider UI.
+The simulator is used for a serial browser suite. Each scenario configures a deterministic subject, email and verification state through `/config`, starts the WebCAF login, and allows the simulator to redirect immediately without interacting with provider UI. The same 26 application scenarios run through DEX and the simulator without duplicating their Gherkin definitions.
 
 The highest-value simulator-backed scenarios are:
 
@@ -87,7 +87,7 @@ The highest-value simulator-backed scenarios are:
 - Front-channel logout and return to WebCAF.
 - ID-token signing-key rotation.
 
-The existing mocked tests should remain because they are faster and can isolate application error handling. The full role and assessment BDD suite should also remain on DEX initially: after login those scenarios test WebCAF authorization and business behavior rather than One Login, and duplicating the whole suite would increase runtime without proportionate coverage.
+The existing mocked tests should remain because they are faster and can isolate application error handling. The full role and assessment BDD suite also remains on DEX to preserve generic OIDC coverage, while its shared scenarios run a second time through One Login to demonstrate provider parity.
 
 A dedicated simulator Compose overlay and CI job keep this coverage separate from the current feature-test stack. In that environment the WebCAF container, simulator and Playwright browser share a Compose-resolvable simulator hostname, avoiding the host-browser networking constraint described above.
 
@@ -116,9 +116,9 @@ WebCAF currently links One Login users by verified email and requires `sub` with
 
 ## Recommendation
 
-Retain DEX as the default generic OIDC provider for the fully containerised development stack and broad BDD suite.
+Retain DEX as the default generic OIDC provider for the fully containerised development stack and generic OIDC BDD coverage.
 
-Use the One Login simulator as an opt-in local profile for host-based One Login development and retain the focused simulator-backed browser coverage in its serial CI job.
+Use the One Login simulator as an opt-in local profile for host-based One Login development. Run the shared application scenarios and focused simulator-backed browser coverage in its serial CI job.
 
 Review this decision after internal-user authentication and multi-provider identity mapping requirements have been agreed. No DEX removal work should be raised before that review.
 

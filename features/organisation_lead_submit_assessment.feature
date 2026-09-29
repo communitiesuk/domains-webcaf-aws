@@ -1,3 +1,4 @@
+@one_login_compatible
 Feature: Organisation lead can submit assessment
 
   Background:

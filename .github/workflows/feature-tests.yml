@@ -60,7 +60,7 @@ jobs:
             image=moby/buildkit:latest
             network=host
 
-      - name: Build and run GOV.UK One Login feature tests
+      - name: Build and run shared GOV.UK One Login feature tests
         env:
           DOCKER_BUILDKIT: 1
           COMPOSE_DOCKER_CLI_BUILD: 1
