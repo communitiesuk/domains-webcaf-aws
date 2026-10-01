@@ -489,3 +489,7 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 
 # Only send emails for staging and prod environments
 SEND_ASSESSMENT_COMPLETION_EMAILS = ENVIRONMENT in ["staging", "prod"]
+
+# The CAF framework a new assessment starts on. WebCAF supports both
+# CAF 3.2 and CAF 4.0; this is the default, not the version of WebCAF.
+DEFAULT_CAF_FRAMEWORK = "caf40"
