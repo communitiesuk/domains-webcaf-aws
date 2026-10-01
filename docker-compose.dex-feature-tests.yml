@@ -6,6 +6,11 @@ services:
       dockerfile: Dockerfile-dex-feature-tests
     ports: !override []
     volumes: !override []
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:5556/healthz" ]
+      interval: 2s
+      timeout: 3s
+      retries: 30
 
   web:
     environment:
@@ -28,4 +33,4 @@ services:
       redis:
         condition: service_healthy
       oauth:
-        condition: service_started
+        condition: service_healthy
