@@ -32,7 +32,10 @@ RUN poetry run playwright install chromium --with-deps && \
     echo "Playwright installation complete" && \
     poetry run playwright --version
 
-# Copy the rest
-COPY . .
+# Copy only the application and Behave sources needed at runtime.
+COPY manage.py behave.ini ./
+COPY webcaf ./webcaf
+COPY frameworks ./frameworks
+COPY features ./features
 
 CMD ["bash", "-lc", "pytest -q"]

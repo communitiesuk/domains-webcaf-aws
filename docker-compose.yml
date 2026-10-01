@@ -24,6 +24,8 @@ services:
   web:
     platform: linux/amd64
     <<: *api-base
+    ports:
+      - "8010:8000"
     #Added the reload flag so the application will be reloaded when the source is modified.
     entrypoint: [ "/usr/local/bin/gunicorn", "webcaf.wsgi:application", "--bind", "0.0.0.0:8000", "--timeout", "120", "--access-logfile", "-", "--reload" ]
     environment:
@@ -46,6 +48,8 @@ services:
   postgres:
     platform: linux/amd64
     image: postgres:18-alpine
+    ports:
+      - 54321:5432
     environment:
       POSTGRES_USER: webcaf
       POSTGRES_PASSWORD: webcaf  # pragma: allowlist secret
@@ -61,6 +65,8 @@ services:
 
   redis:
     image: valkey/valkey:9.0.6-alpine
+    ports:
+      - 6379:6379
     healthcheck:
       test: [ "CMD", "valkey-cli", "ping" ]
       interval: 10s
@@ -70,6 +76,8 @@ services:
   oauth:
     profiles: [ "dex" ]
     image: ghcr.io/dexidp/dex:v2.37.0
+    ports:
+      - "5556:5556"  # Dex HTTP server
     volumes:
       - ./oauth-stub:/etc/dex
     command: [ "dex", "serve", "/etc/dex/config.yaml" ]
@@ -80,6 +88,8 @@ services:
 
   one-login-simulator:
     image: ghcr.io/govuk-one-login/simulator:26.09.16@sha256:1f0930e04ced60b624c1b4e830cbe0a622be216b5065ece4756dbebdb0e92a60
+    ports:
+      - "3000:3000"
     environment:
       CLIENT_ID: webcaf-local
       SCOPES: openid,email

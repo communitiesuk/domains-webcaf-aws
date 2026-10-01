@@ -13,6 +13,11 @@ migrations, creates scenario data and removes the test containers, network and v
 whether the scenarios pass or fail. The normal development database, containers and Python virtual environment are
 not used.
 
+Application and Behave sources are built into the test images instead of mounting the repository at runtime. The only
+host directories mounted by the test runner are `reports/` and `artifacts/`; the tracked One Login test key is supplied
+as a read-only Compose secret. The focused DEX image also contains its test configuration rather than mounting
+`oauth-stub/`.
+
 The identifiers in `behave.ini` are cleanup filters used between scenarios so each scenario starts from predictable
 state in the disposable database. They do not restrict which records a scenario may create.
 

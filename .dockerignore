@@ -24,9 +24,7 @@ npm-debug.log*
 
 # Tests
 tests/
-features/
 reports/
-behave.ini
 
 # Documentation
 docs/
@@ -50,8 +48,8 @@ keyparams.txt
 # Docker files (prevent recursion)
 Dockerfile
 Dockerfile-feature-tests
+Dockerfile-dex-feature-tests
 docker-compose.yml
-docker-compose.override.yml
 docker-compose.feature-tests.yml
 docker-compose.dex.yml
 docker-compose.dex-feature-tests.yml

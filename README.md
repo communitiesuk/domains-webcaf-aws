@@ -82,8 +82,7 @@ This `can_edit` attribute is then available to templates and forms to decide whe
 docker compose up
 ```
 
-This brings up the full stack defined in `docker-compose.yml` and the automatically loaded development settings in
-`docker-compose.override.yml`:
+This brings up the full development stack defined in `docker-compose.yml`:
 
 - `postgres` — the PostgreSQL database (also exposed on the host at port `54321`).
 - `redis` — Valkey session storage (also exposed on the host at port `6379`).
@@ -146,9 +145,10 @@ make behave_dex # run focused DEX authentication scenarios in an isolated enviro
 make build    # (re)build the images
 ```
 
-The Behave workflow creates its own PostgreSQL database, Valkey instance, network and volumes. It applies migrations
-and scenario data automatically, then removes those resources whether the run passes or fails. It does not stop or
-modify the normal development stack. See [BDD feature tests](features/README.md) for focused runs, reports and failure
+The Behave workflow builds the application and test sources into dedicated images, then creates its own PostgreSQL
+database, Valkey instance, network and volumes. It applies migrations and scenario data automatically, then removes
+those resources whether the run passes or fails. It does not mount, stop or modify the normal development source,
+virtual environment or Compose stack. See [BDD feature tests](features/README.md) for focused runs, reports and failure
 artifacts.
 
 ### Privacy and Logging Best Practices

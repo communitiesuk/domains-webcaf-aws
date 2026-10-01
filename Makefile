@@ -1,16 +1,14 @@
-BEHAVE_PROJECT ?= webcaf-behave
-BEHAVE_COMPOSE = docker compose --project-name $(BEHAVE_PROJECT) -f docker-compose.yml -f docker-compose.feature-tests.yml
-BEHAVE_DEX_PROJECT ?= webcaf-behave-dex
-BEHAVE_DEX_COMPOSE = docker compose --project-name $(BEHAVE_DEX_PROJECT) --profile dex -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.dex.yml -f docker-compose.dex-feature-tests.yml
-DEV_DEX_COMPOSE = docker compose --profile dex -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.dex.yml
+BEHAVE_COMPOSE = docker compose --project-name webcaf-behave -f docker-compose.yml -f docker-compose.feature-tests.yml
+BEHAVE_DEX_COMPOSE = docker compose --project-name webcaf-behave-dex --profile dex -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.dex.yml -f docker-compose.dex-feature-tests.yml
+DEV_DEX_COMPOSE = docker compose --profile dex -f docker-compose.yml -f docker-compose.dex.yml
 
 .PHONY: up-devserver up-devserver-nodebug shell clear-db test build behave behave_dex behave-clean up_dex up_one_login_simulator one_login_user
 
 up-devserver:
-	docker compose run --rm --service-ports --entrypoint "python manage.py runserver 0.0.0.0:8000" web
+	docker compose -f docker-compose.yml run --rm --service-ports --entrypoint "python manage.py runserver 0.0.0.0:8000" web
 
 up-devserver-nodebug:
-	docker compose run --rm --service-ports --env DEBUG=False --entrypoint "python manage.py runserver 0.0.0.0:8000" web
+	docker compose -f docker-compose.yml run --rm --service-ports --env DEBUG=False --entrypoint "python manage.py runserver 0.0.0.0:8000" web
 
 shell:
 	docker compose exec web bash
@@ -59,8 +57,10 @@ behave_dex:
 	exit "$$cleanup_status"
 
 behave-clean:
-	$(BEHAVE_COMPOSE) down --volumes --remove-orphans
-	$(BEHAVE_DEX_COMPOSE) down --volumes --remove-orphans
+	@status=0; \
+	$(BEHAVE_COMPOSE) down --volumes --remove-orphans || status=1; \
+	$(BEHAVE_DEX_COMPOSE) down --volumes --remove-orphans || status=1; \
+	exit "$$status"
 
 up_dex:
 	$(DEV_DEX_COMPOSE) up -d --wait web

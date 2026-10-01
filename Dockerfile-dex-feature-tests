@@ -1,0 +1,3 @@
+FROM ghcr.io/dexidp/dex:v2.37.0
+
+COPY oauth-stub/config.yaml /etc/dex/config.yaml

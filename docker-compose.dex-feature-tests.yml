@@ -1,4 +1,12 @@
 services:
+  oauth:
+    image: !reset null
+    build:
+      context: .
+      dockerfile: Dockerfile-dex-feature-tests
+    ports: !override []
+    volumes: !override []
+
   web:
     environment:
       SSO_MODE: dex
