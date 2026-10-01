@@ -1200,11 +1200,11 @@ class Review(ReferenceGeneratorMixin, models.Model):
                 raise ValidationError("Review data cannot be changed after it has been marked as completed.")
 
             # If we have specifically added permissions for this object, then we should check that
-            if hasattr(self, "can_edit") and not getattr(self, "can_edit"):
+            if hasattr(self, "can_edit") and not self.can_edit:
                 raise ValidationError("You do not have permission to edit this report.")
 
-            if hasattr(self, "_original_last_updated") and getattr(self, "_original_last_updated"):
-                if old.last_updated != getattr(self, "_original_last_updated"):
+            if hasattr(self, "_original_last_updated") and self._original_last_updated:
+                if old.last_updated != self._original_last_updated:
                     raise ValidationError("Your copy of data has been updated since you last saved it.")
 
         super().save(*args, **kwargs)
@@ -1481,7 +1481,7 @@ class Tip(ReferenceGeneratorMixin, models.Model):
         :return: None
         """
         # If we have specifically added permissions for this object, then we should check that
-        if hasattr(self, "can_edit") and not getattr(self, "can_edit"):
+        if hasattr(self, "can_edit") and not self.can_edit:
             raise ValidationError("You do not have permission to edit this report.")
         super().save(*args, **kwargs)
 

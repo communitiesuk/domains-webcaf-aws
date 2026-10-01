@@ -357,7 +357,7 @@ def is_duplicate_questions_present(form: Form) -> bool:
     :param form: The Django form instance to check.
     :return: True if any question fields have a label suffix indicating they are identical to another field, False otherwise.
     """
-    for field_name, field in form.fields.items():
+    for _field_name, field in form.fields.items():
         if field.label_suffix and field.label_suffix.startswith("identical to"):
             return True
     return False

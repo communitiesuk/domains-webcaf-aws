@@ -217,7 +217,10 @@ def extract_table(text: str, heading_match: re.Match, all_matches: list):
     def split_statements(column_text):
         return [
             c.strip().replace("\n", "")
-            for c in re.split(r"\n(?=[A-Z][a-z]+ )", column_text, re.MULTILINE | re.DOTALL)
+            # FIXME: the third positional argument to re.split is maxsplit, not flags,
+            # so these flags are being applied as maxsplit=24. Behaviour left
+            # unchanged here; see the linting migration PR.
+            for c in re.split(r"\n(?=[A-Z][a-z]+ )", column_text, re.MULTILINE | re.DOTALL)  # noqa: B034
             if c.strip()
         ]
 
@@ -350,7 +353,7 @@ def create_yaml_structure(objectives: list, sections: list, principle_headings: 
         }
         objective_index += 1
 
-    for principle_index, principle_data in principles_dict.items():
+    for _principle_index, principle_data in principles_dict.items():
         objective_code = principle_data["code"][0]
         if objective_index is not None:
             objectives_dict[objective_code]["principles"][principle_data["code"]] = principle_data

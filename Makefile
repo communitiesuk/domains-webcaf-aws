@@ -13,6 +13,16 @@ clear-db:
 test:
 	docker compose run --rm --service-ports --remove-orphans --entrypoint "poetry run pytest --html=reports/pytest-report.html --self-contained-html" web
 	docker compose down
+lint:
+	#	Check formatting and linting without changing anything.
+	pre-commit run ruff-check --all-files
+	pre-commit run ruff-format --all-files
+
+format:
+	#	Apply Ruff's fixes and formatting across the repository.
+	pre-commit run ruff-check --all-files || true
+	pre-commit run ruff-format --all-files || true
+
 build:
 	BUILDKIT_PROGRESS=plain docker compose build
 

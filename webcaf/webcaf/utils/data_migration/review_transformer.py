@@ -31,7 +31,7 @@ def transform_review_v1_to_v2(
     objectives = definition_structure[version_key].get("objectives", {})
     for objective_key, objective in objectives.items():
         objective_entry = review.setdefault(objective_key, {})
-        for principle_key, principle in objective.get("principles", {}).items():
+        for _principle_key, principle in objective.get("principles", {}).items():
             for outcome_key, outcome in principle.get("outcomes", {}).items():
                 outcome_structure = _process_review_outcome(
                     outcome_key, outcome, outcomes, status_map, group_assessor_comments

@@ -17,7 +17,7 @@ def parse_caf_spec(spec: str) -> dict[str, dict[str, str]]:
     result: dict[str, dict[str, str]] = {}
     for line in lines[1:]:
         cells = [c.strip() for c in line.split("\t")]
-        row = dict(zip(headers, cells))
+        row = dict(zip(headers, cells, strict=False))
         for col in ("Baseline Profile", "Enhanced Profile"):
             if row[col] not in ALLOWED_PROFILE_VALUES:
                 raise ValueError(f"Invalid {col} value {row[col]!r} for {row[headers[0]]}")
