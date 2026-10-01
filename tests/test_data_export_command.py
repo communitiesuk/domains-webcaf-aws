@@ -102,6 +102,9 @@ class TestExportReviews(TestCase):
         self.assessment = Assessment.objects.create(
             system=self.system,
             status="submitted",
+            # Pinned: the assertions below are the caf32 baseline profile requirements,
+            # so this must not follow the configured default framework.
+            framework="caf32",
             assessment_period="2024/25",
             review_type="independent",
             assessments_data={

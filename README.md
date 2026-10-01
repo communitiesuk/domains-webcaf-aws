@@ -14,12 +14,22 @@ functioning of the application are:
 - default_framework
 
 Default values are provided in the migrations for the year 2025 and 2026.
+The end dates below were moved out from March by `0025_update_configuration`.
 
 Year 2025 values are:
-with the values of "25/26", "31 March 2026 11:59pm" and "caf32" respectively.
+with the values of "25/26", "31 August 2026 11:59pm" and "caf32" respectively.
 
 Year 2026 values are:
-with the values of "26/27", "31 March 2027 11:59pm" and "caf32" respectively.
+with the values of "26/27", "31 August 2027 11:59pm" and "caf40" respectively.
+
+A period that has already ended keeps the framework its assessments were
+carried out against, which is why 25/26 remains CAF 3.2.
+
+New assessments are created against `default_framework`, so CAF 4.0 is the
+framework a new assessment starts on. CAF 3.2 remains fully supported: every
+assessment stores the framework it was created with and keeps it, so
+assessments already started on 3.2 continue to be completed and reviewed
+against 3.2.
 
 This will enable the application to automatically switch to the next period when the current period ends.
 

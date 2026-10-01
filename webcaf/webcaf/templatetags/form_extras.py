@@ -92,10 +92,15 @@ def get_outcome_details(assessment, outcome_id):
     """
     outcome_details = {}
     section = assessment.get_section_by_outcome_id(outcome_id)
+    framework = assessment.framework
     # Confirmation is present in the data
     outcome_details["complete"] = "confirmation" in section if section else False
 
-    return outcome_details | IndicatorStatusChecker.get_status_for_indicator(section) if section else {}
+    return (
+        outcome_details | IndicatorStatusChecker.get_status_for_indicator(section, framework=framework)
+        if section
+        else {}
+    )
 
 
 @register.simple_tag()
@@ -375,10 +380,8 @@ def generate_assessment_progress_indicators(assessment: Assessment, principle_qu
         on, e.g. B1.a
     :type principle_question: str
     """
-    from webcaf.webcaf.frameworks import routers
-
     progress_dict: dict[str, Any] = {}
-    router = routers["caf32"]
+    router = assessment.get_router()
     sections = router.get_sections()
 
     if principle_question:
