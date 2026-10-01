@@ -1,0 +1,20 @@
+services:
+  one-login-simulator:
+    profiles: [ "one-login" ]
+
+  web:
+    environment:
+      SSO_MODE: dex
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+      oauth:
+        condition: service_started
+
+  init:
+    environment:
+      SSO_MODE: dex

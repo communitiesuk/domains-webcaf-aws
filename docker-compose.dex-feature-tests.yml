@@ -1,0 +1,23 @@
+services:
+  web:
+    environment:
+      SSO_MODE: dex
+      OVERRIDE_SSO_HOST: oauth
+      OVERRIDE_APP_HOST: web
+      LOGOUT_REDIRECT_URL: http://web:8000/
+
+  feature-tests:
+    environment:
+      SSO_MODE: dex
+      OVERRIDE_SSO_HOST: oauth
+      OVERRIDE_APP_HOST: web
+      ONE_LOGIN_SIMULATOR_URL: ""
+    depends_on: !override
+      web:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      oauth:
+        condition: service_started

@@ -7,6 +7,7 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 .cache/
+.venv/
 
 # Node.js
 node_modules/
@@ -52,6 +53,8 @@ Dockerfile-feature-tests
 docker-compose.yml
 docker-compose.override.yml
 docker-compose.feature-tests.yml
+docker-compose.dex.yml
+docker-compose.dex-feature-tests.yml
 .dockerignore
 
 webcaf/static

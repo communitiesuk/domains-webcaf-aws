@@ -6,6 +6,12 @@ x-common-application-variables: &common-application-variables
   REDIS_URL: redis://redis:6379/0
   ENVIRONMENT: 'local'
   GOOGLE_ANALYTICS_ID: GTM-TEST
+  SSO_MODE: one-login
+  GOV_UK_ONE_LOGIN_CLIENT_ID: webcaf-local
+  GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH: /app/tests/fixtures/one-login-simulator-private-key.pem
+  GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL: http://one-login.localhost:3000/.well-known/openid-configuration
+  GOV_UK_ONE_LOGIN_SCOPE: openid email
+  GOV_UK_ONE_LOGIN_ENVIRONMENT: integration
 
 x-api-base: &api-base
   platform: linux/amd64
@@ -23,7 +29,6 @@ services:
     environment:
       <<: *common-application-variables
       PYTHONBREAKPOINT: "ipdb.set_trace"
-      SSO_MODE: dex
     volumes:
       - .:/app
       - webcaf_home:/home/webcaf
@@ -35,8 +40,8 @@ services:
         condition: service_healthy
       init:
         condition: service_completed_successfully
-      oauth:
-        condition: service_started
+      one-login-simulator:
+        condition: service_healthy
 
   postgres:
     platform: linux/amd64
@@ -63,17 +68,48 @@ services:
       retries: 5
 
   oauth:
-    image: ghcr.io/dexidp/dex:latest
+    profiles: [ "dex" ]
+    image: ghcr.io/dexidp/dex:v2.37.0
     volumes:
       - ./oauth-stub:/etc/dex
     command: [ "dex", "serve", "/etc/dex/config.yaml" ]
+    networks:
+      default:
+        aliases:
+          - dex
+
+  one-login-simulator:
+    image: ghcr.io/govuk-one-login/simulator:26.09.16@sha256:1f0930e04ced60b624c1b4e830cbe0a622be216b5065ece4756dbebdb0e92a60
+    environment:
+      CLIENT_ID: webcaf-local
+      SCOPES: openid,email
+      REDIRECT_URLS: http://localhost:8010/one-login/callback/
+      POST_LOGOUT_REDIRECT_URLS: http://localhost:8010/
+      CLIENT_LOCS: P0
+      IDENTITY_VERIFICATION_SUPPORTED: "false"
+      ID_TOKEN_SIGNING_ALGORITHM: ES256
+      TOKEN_AUTH_METHOD: private_key_jwt
+      SIMULATOR_URL: http://one-login.localhost:3000
+      SUB: ${ONE_LOGIN_SIMULATOR_SUB:-urn:fdc:gov.uk:2022:EoM4c_EsB2Yo_NoV5leoJwlkOtcQk2nI74F1Y4EZ_Tw}
+      EMAIL: ${ONE_LOGIN_SIMULATOR_EMAIL:-alice@example.gov.uk}
+      EMAIL_VERIFIED: ${ONE_LOGIN_SIMULATOR_EMAIL_VERIFIED:-true}
+      INTERACTIVE_MODE: ${ONE_LOGIN_SIMULATOR_INTERACTIVE_MODE:-true}
+    healthcheck:
+      test: [ "CMD", "node", "-e", "fetch('http://localhost:3000/.well-known/openid-configuration').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      default:
+        aliases:
+          - one-login.localhost
 
   init:
     <<: *api-base
     restart: 'no'
     environment:
       <<: *common-application-variables
-      SSO_MODE: dex
     entrypoint: [ "/bin/sh", "/app/local-init.sh" ]
     volumes:
       - .:/app

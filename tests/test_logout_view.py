@@ -1,6 +1,7 @@
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -64,6 +65,17 @@ class LogoutViewTest(TestCase):
         )
         self.assertNotIn("_auth_user_id", self.client.session)
 
+    @override_settings(SSO_MODE="dex", OIDC_OP_LOGOUT_ENDPOINT="")
+    def test_oidc_logout_without_provider_endpoint_clears_local_session(self):
+        session = self.client.session
+        session["oidc_id_token"] = "dex-id-token"
+        session.save()
+
+        response = self.client.post(reverse("logout"))
+
+        self.assertRedirects(response, reverse("index"))
+        self.assertNotIn("_auth_user_id", self.client.session)
+
     @override_settings(SSO_MODE="one-login")
     @patch("webcaf.webcaf.views.general.get_one_login_logout_url", side_effect=KeyError("id_token"))
     def test_provider_logout_failure_still_clears_local_session(self, get_logout_url):
@@ -79,7 +91,9 @@ class LogoutViewTest(TestCase):
         self.assertEqual(response.status_code, 405)
         self.assertIn("_auth_user_id", self.client.session)
 
-    def test_content_security_policy_allows_configured_logout_provider(self):
+    def test_content_security_policy_allows_default_provider(self):
         response = self.client.get(reverse("index"))
+        provider_config = urlparse(settings.GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL)
+        provider_origin = f"{provider_config.scheme}://{provider_config.netloc}"
 
-        self.assertIn("form-action 'self' http://localhost:5556", response["Content-Security-Policy"])
+        self.assertIn(f"form-action 'self' {provider_origin}", response["Content-Security-Policy"])

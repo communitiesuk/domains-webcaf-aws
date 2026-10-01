@@ -1,4 +1,4 @@
-  Feature: Remove a user for the organisation
+Feature: Remove a user for the organisation
 
   Background:
     Given Organisation "Ministry of Agriculture" of type "ministerial-department" exists with systems "System 1, System 2, System 3"
@@ -9,7 +9,7 @@
     And User "alice@example.gov.uk" has the profile "Organisation user" assigned in "Ministry of Agriculture"
     And the application is running
     And cookies have been "accepted"
-    And the user logs in with username  "other@example.gov.uk" and password "password"
+    And the user signs in with One Login as "other@example.gov.uk"
 
     Scenario: GovAssure lead can remove user
         Given Think time 1 seconds

@@ -15,3 +15,7 @@ services:
     container_name: dex
     ports:
       - "5556:5556"
+
+  one-login-simulator:
+    ports:
+      - "3000:3000"
