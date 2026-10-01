@@ -29,9 +29,17 @@ def set_think_time(context, time):
 def confirm_user_exists(context, user_name):
     from django.contrib.auth.models import User
 
-    print(f"Creating user {user_name}")
-    user, _ = run_async_orm(User.objects.get_or_create, email=user_name, username=user_name)
-    print(f"user = {user} is in the system now")
+    def create_or_reset_user():
+        user, _ = User.objects.get_or_create(email=user_name, defaults={"username": user_name})
+        if user.is_staff or user.is_superuser:
+            raise RuntimeError("Feature-test fixture email belongs to a privileged user")
+        user.username = user_name
+        user.first_name = user_name.partition("@")[0]
+        user.last_name = ""
+        user.is_active = True
+        user.save(update_fields=["username", "first_name", "last_name", "is_active"])
+
+    run_async_orm(create_or_reset_user)
 
 
 @step('no login attempt blocks for the user "{user_name}"')
@@ -111,22 +119,6 @@ def assign_user_profile(context, user_name, role, organisation_name):
         )
 
     run_async_orm(create_profile)
-
-
-@step('the user logs in with username  "{user_name}" and password "{password}"')
-def user_logging_in(context, user_name, password):
-    page = context.page
-    page.get_by_role("button", name="Sign in").click()
-    if "think_time" in context:
-        sleep(context.think_time)
-    expect(page.get_by_role("heading")).to_contain_text("Log in to Your Account")
-
-    page.get_by_placeholder("email address").fill(user_name)
-    page.get_by_placeholder("password").fill(password)
-    page.get_by_role("button", name="Login").click()
-    expect(page.get_by_role("heading")).to_contain_text("Grant Access")
-    page.get_by_role("button", name="Grant Access").click()
-    context.current_email = user_name
 
 
 @then('they should see page title "{page_title}"')

@@ -1,29 +1,31 @@
-#  BDD Testing framework
-This assumes that the application, the SSO system and the database systems are already running.
+# BDD Testing framework
 
-The behave.ini file contains the names of the user emails and the organisations that can be used in the testing.
-This is fixed so that the cleanup process can reset the database to its orignal state before each scenario is run.
+One Login is the default identity provider for the containerised feature tests. `make behave` runs 26 application
+scenarios, four focused One Login scenarios, and two provider-independent Django admin scenarios. `make behave_dex`
+runs only the two scenarios tagged `@dex` that explicitly verify DEX login and logout.
 
-## Disable headless mode
-Sometimes it is easy to debug when we see what is displayed on the browser. To view the browser window, we have to
-disable the headless mode by providing a user data parameter.
+The `behave.ini` file contains the user emails and organisations removed between scenarios so each scenario starts from
+a predictable database state.
 
-You will need to add ```-D headless_testing=false``` to the main command to get this set up.
+## Commands
 
-Command to run.
 ```shell
-#  This will run the tests in headless mode.
-  make behave
+# Run the default One Login suite.
+make behave
 
-  #  This will run the selected tests in headless mode.
-  make behave FEATURE_TEST_ARGS="-i admin-login.feature"
+# Run only the four focused One Login scenarios.
+make behave FEATURE_TEST_ARGS="--tags=one_login"
 
-  # If you want to see the browser window, then you will need to invoke
-  # behave directly from the command line.
-  # Single command: start containers and run the tests with browser visible.
-  docker compose -f docker-compose.yml up -d && \
-    SSO_MODE=localhost \
-    DATABASE_URL=postgresql://webcaf:webcaf@localhost:54321/webcaf \  #  pragma: allowlist secret
-    SECRET_KEY=unused \
-    poetry run behave -D headless_testing=false
+# Run the focused DEX authentication scenarios.
+make behave_dex
+
+# Run a selected provider-independent feature with One Login services available.
+make behave FEATURE_TEST_ARGS="-i admin-login.feature"
+```
+
+Feature tests run headlessly by default. Pass `-D headless_testing=false` through `FEATURE_TEST_ARGS` to display the
+browser when the environment supports headed Playwright:
+
+```shell
+make behave FEATURE_TEST_ARGS="-D headless_testing=false"
 ```
