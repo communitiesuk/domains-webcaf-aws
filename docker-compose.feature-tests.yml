@@ -1,11 +1,45 @@
-# This file extends the base docker-compose.yml. It only defines/overrides
-# what is needed to run feature tests in a dedicated container.
+# This file extends the base docker-compose.yml with the default One Login
+# configuration needed to run feature tests in a dedicated container.
+x-one-login-feature-variables: &one-login-feature-variables
+  SSO_MODE: one-login
+  GOV_UK_ONE_LOGIN_CLIENT_ID: webcaf-local
+  GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH: /app/tests/fixtures/one-login-simulator-private-key.pem
+  GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL: http://one-login-simulator:3000/.well-known/openid-configuration
+  GOV_UK_ONE_LOGIN_SCOPE: openid email
+  GOV_UK_ONE_LOGIN_ENVIRONMENT: integration
+
 services:
-  web:
+  postgres:
+    ports: !override []
+
+  redis:
+    ports: !override []
+
+  one-login-simulator:
+    ports: !override []
     environment:
-      OVERRIDE_SSO_HOST: dex
-      OVERRIDE_APP_HOST: web
-      SSO_MODE: dex
+      REDIRECT_URLS: http://web:8000/one-login/callback/
+      POST_LOGOUT_REDIRECT_URLS: http://web:8000/
+      SIMULATOR_URL: http://one-login-simulator:3000
+      INTERACTIVE_MODE: "false"
+
+  web:
+    ports: !override []
+    environment:
+      <<: *one-login-feature-variables
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+      one-login-simulator:
+        condition: service_healthy
+
+  init:
+    environment:
+      <<: *one-login-feature-variables
 
   feature-tests:
     build:
@@ -13,20 +47,23 @@ services:
       dockerfile: Dockerfile-feature-tests
       args:
         BUILDKIT_INLINE_CACHE: "1"
-    depends_on:
-      - web
-      - oauth
-      - postgres
-      - redis
+    depends_on: !override
+      web:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      one-login-simulator:
+        condition: service_healthy
     environment:
+      <<: *one-login-feature-variables
       SECRET_KEY: unused # pragma: allowlist secret
       DATABASE_URL: postgresql://webcaf:webcaf@postgres:5432/webcaf # pragma: allowlist secret
       REDIS_URL: redis://redis:6379/0
-      SSO_MODE: localhost
       DOMAIN_NAME: http://web:8000
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
-      OVERRIDE_SSO_HOST: dex
-      OVERRIDE_APP_HOST: web
+      ONE_LOGIN_SIMULATOR_URL: http://one-login-simulator:3000
       FEATURE_TEST_ARGS: ${FEATURE_TEST_ARGS:-}
     volumes:
       - ./:/app
@@ -34,5 +71,5 @@ services:
     command: > # pragma: allowlist secret
       bash -lc "
         echo 'Services ready. Starting tests...' &&
-        DATABASE_URL=postgresql://webcaf:webcaf@postgres:5432/webcaf poetry run behave -f behave_html_formatter:HTMLFormatter -o reports/report.html -D base_url=http://web:8000 $FEATURE_TEST_ARGS
+        python3 -m behave -f behave_html_formatter:HTMLFormatter -o reports/report.html -D base_url=http://web:8000 $FEATURE_TEST_ARGS
       "

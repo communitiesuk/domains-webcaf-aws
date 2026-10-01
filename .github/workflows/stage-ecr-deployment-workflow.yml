@@ -2,9 +2,7 @@ name: Build & Publish Docker to ECR (Staging)
 
 #Run this workflow when a feature branch is merged into main. Image is deployed to staging environment.
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   id-token: write   # required for AWS OIDC

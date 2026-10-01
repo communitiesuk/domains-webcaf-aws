@@ -4,10 +4,12 @@ from pathlib import Path
 
 import django
 from behave.model_type import Status
+from django.conf import settings
 from django.db.models import F, Value
 from django.db.models.functions import Lower, Replace
 from playwright.sync_api import Page, sync_playwright
 
+from features.one_login_simulator import configure_identity
 from features.util import ORM_EXECUTOR, run_async_orm
 
 
@@ -27,6 +29,9 @@ def before_all(context):
 def before_scenario(context, scenario):
     context.page.context.clear_cookies()
     context.page.context.clear_permissions()
+    simulator_url = os.environ.get("ONE_LOGIN_SIMULATOR_URL")
+    if os.environ.get("SSO_MODE", "").lower() == "one-login" and simulator_url:
+        configure_identity("alice@example.gov.uk", True, simulator_url)
     if "think_time" in context:
         delattr(context, "think_time")
 
@@ -35,6 +40,8 @@ def before_scenario(context, scenario):
 
     def clear_db():
         print("****************** Clearing DB *****************************")
+        from django.contrib.auth.models import User
+
         from webcaf.webcaf.models import (
             Assessment,
             Configuration,
@@ -42,9 +49,11 @@ def before_scenario(context, scenario):
             UserProfile,
         )
 
-        Assessment.objects.filter(
-            created_by__email__in=[email.strip() for email in context.config.userdata.get("user_emails", "").split(",")]
-        ).delete()
+        test_user_emails = [
+            email.strip() for email in context.config.userdata.get("user_emails", "").split(",") if email.strip()
+        ]
+
+        Assessment.objects.filter(created_by__email__in=test_user_emails).delete()
 
         Assessment.objects.filter(
             system__organisation__name__in=[
@@ -53,11 +62,9 @@ def before_scenario(context, scenario):
         ).delete()
 
         UserProfile.objects.filter(
-            user__email__in=[email.strip() for email in context.config.userdata.get("user_emails", "").split(",")]
-        ).delete()
-
-        UserProfile.objects.filter(
-            user__email__in=[email.strip() for email in context.config.userdata.get("user_emails", "").split(",")]
+            user__email__in=test_user_emails,
+            user__is_staff=False,
+            user__is_superuser=False,
         ).delete()
 
         Organisation.objects.annotate(normalized_name=Replace(Lower(F("name")), Value(" "), Value(""))).filter(
@@ -67,13 +74,15 @@ def before_scenario(context, scenario):
             ]
         ).delete()
 
+        User.objects.filter(email__in=test_user_emails, is_staff=False, is_superuser=False).delete()
+
         Configuration.objects.all().delete()
         # We need to create a default configuration for testing purposes.
         assessment_period, assessment_year = get_current_assessment_period()
         Configuration.objects.create(
             name="default",
             config_data={
-                "default_framework": "caf32",
+                "default_framework": settings.DEFAULT_CAF_FRAMEWORK,
                 "current_assessment_period": assessment_period,
                 "assessment_period_end": f"31 March {assessment_year} 11:59pm",
             },

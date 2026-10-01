@@ -324,8 +324,8 @@ else:
     OIDC_OP_JWKS_ENDPOINT = f"http://{sso_host}:5556/keys"
     OIDC_STORE_ID_TOKEN = True
     OIDC_STORE_ACCESS_TOKEN = True
-    OIDC_OP_LOGOUT_ENDPOINT = f"http://{env.str('OVERRIDE_SSO_HOST', 'localhost')}:5556/auth/logout"
-    LOGOUT_REDIRECT_URL = f"http://{env.str('OVERRIDE_APP_HOST', 'localhost')}:8010/"
+    OIDC_OP_LOGOUT_ENDPOINT = env.str("OIDC_OP_LOGOUT_ENDPOINT", "")
+    LOGOUT_REDIRECT_URL = env.str("LOGOUT_REDIRECT_URL", f"http://{env.str('OVERRIDE_APP_HOST', 'localhost')}:8010/")
     # if we enable 2fa locally for testing this ensures we capture the token in the local console
     # rather than attempting to a send gov notify email
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -336,7 +336,11 @@ if SSO_MODE != "one-login":
 
 # The provider logout redirect follows a submitted local form. Chrome applies
 # form-action to that redirect, so allow only the configured provider origin.
-provider_config_url = GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL if SSO_MODE == "one-login" else OIDC_OP_LOGOUT_ENDPOINT
+provider_config_url = (
+    GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL
+    if SSO_MODE == "one-login"
+    else OIDC_OP_LOGOUT_ENDPOINT or OIDC_OP_AUTHORIZATION_ENDPOINT
+)
 provider_config = urlsplit(provider_config_url)
 provider_origin = f"{provider_config.scheme}://{provider_config.netloc}"
 
@@ -459,3 +463,7 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 
 # Only send emails for staging and prod environments
 SEND_ASSESSMENT_COMPLETION_EMAILS = ENVIRONMENT in ["staging", "prod"]
+
+# The CAF framework a new assessment starts on. WebCAF supports both
+# CAF 3.2 and CAF 4.0; this is the default, not the version of WebCAF.
+DEFAULT_CAF_FRAMEWORK = "caf40"

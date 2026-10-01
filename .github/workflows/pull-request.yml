@@ -59,31 +59,39 @@ jobs:
           DATABASE_URL: postgresql://webcaf:webcaf@localhost:5432/webcaf
           REDIS_URL: redis://localhost:6379/0
           DOMAIN_NAME: http://localhost:8010
-          SSO_MODE: localhost
+          SSO_MODE: one-login
+          GOV_UK_ONE_LOGIN_CLIENT_ID: webcaf-local
+          GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH: tests/fixtures/one-login-simulator-private-key.pem
+          GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL: http://localhost:3000/.well-known/openid-configuration
         run: |
           poetry run ./manage.py collectstatic --noinput
           poetry run ./manage.py migrate --noinput
-      - name: Start Dex container
+      - name: Start GOV.UK One Login simulator
         run: |
           docker run -d \
-            --name dex \
-            --volume ${{ github.workspace }}/oauth-stub:/etc/dex \
-            -p 5556:5556 \
-            ghcr.io/dexidp/dex:v2.37.0 \
-            dex serve /etc/dex/config.yaml
-      - name: Wait for Dex to be ready
+            --name one-login-simulator \
+            -p 3000:3000 \
+            -e CLIENT_ID=webcaf-local \
+            -e SCOPES=openid,email \
+            -e REDIRECT_URLS=http://localhost:8010/one-login/callback/ \
+            -e POST_LOGOUT_REDIRECT_URLS=http://localhost:8010/ \
+            -e CLIENT_LOCS=P0 \
+            -e IDENTITY_VERIFICATION_SUPPORTED=false \
+            -e ID_TOKEN_SIGNING_ALGORITHM=ES256 \
+            -e TOKEN_AUTH_METHOD=private_key_jwt \
+            -e SIMULATOR_URL=http://localhost:3000 \
+            -e INTERACTIVE_MODE=false \
+            ghcr.io/govuk-one-login/simulator:26.09.16@sha256:1f0930e04ced60b624c1b4e830cbe0a622be216b5065ece4756dbebdb0e92a60
+      - name: Wait for GOV.UK One Login simulator
         run: |
-          echo "Waiting for Dex..."
           for i in {1..30}; do
-          if curl -sSf http://localhost:5556/.well-known/openid-configuration > /dev/null; then
-          echo "Dex is ready."
-          break
-          else
-          echo "Dex not ready yet ($i)..."
-          sleep 2
-          fi
+            if curl -sSf http://localhost:3000/.well-known/openid-configuration > /dev/null; then
+              exit 0
+            fi
+            sleep 2
           done
-          docker logs dex || true
+          docker logs one-login-simulator || true
+          exit 1
       - name: Run Unit Tests
         env:
           DATABASE_URL: postgresql://webcaf:webcaf@localhost:5432/webcaf
@@ -94,6 +102,25 @@ jobs:
           AWS_ACCESS_KEY_ID: "dummy-key-id"
           AWS_SECRET_ACCESS_KEY: "dummy-key"
           ENVIRONMENT: 'local'
-          SSO_MODE: localhost
+          SSO_MODE: one-login
+          GOV_UK_ONE_LOGIN_CLIENT_ID: webcaf-local
+          GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH: tests/fixtures/one-login-simulator-private-key.pem
+          GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL: http://localhost:3000/.well-known/openid-configuration
+          GOV_UK_ONE_LOGIN_SCOPE: openid email
+          GOV_UK_ONE_LOGIN_ENVIRONMENT: integration
         run: |
           SECRET_KEY=unneeded DOMAIN_NAME=http://localhost:8010 poetry run python manage.py test -v 2
+      - name: Test GOV.UK One Login simulator flow
+        env:
+          SECRET_KEY: unneeded
+          DATABASE_URL: postgresql://webcaf:webcaf@localhost:5432/webcaf
+          DOMAIN_NAME: http://localhost:8010
+          ENVIRONMENT: local
+          SSO_MODE: one-login
+          RUN_ONE_LOGIN_SIMULATOR_TESTS: "true"
+          GOV_UK_ONE_LOGIN_CLIENT_ID: webcaf-local
+          GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH: tests/fixtures/one-login-simulator-private-key.pem
+          GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL: http://localhost:3000/.well-known/openid-configuration
+          GOV_UK_ONE_LOGIN_SCOPE: openid email
+          GOV_UK_ONE_LOGIN_ENVIRONMENT: integration
+        run: poetry run python manage.py test tests.test_one_login_simulator -v 2
