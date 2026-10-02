@@ -1,3 +1,9 @@
+BEHAVE_COMPOSE = docker compose --project-name webcaf-behave -f docker-compose.yml -f docker-compose.feature-tests.yml
+BEHAVE_DEX_COMPOSE = docker compose --project-name webcaf-behave-dex --profile dex -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.dex.yml -f docker-compose.dex-feature-tests.yml
+DEV_DEX_COMPOSE = docker compose --profile dex -f docker-compose.yml -f docker-compose.dex.yml
+
+.PHONY: up-devserver up-devserver-nodebug shell clear-db test build behave behave_dex behave-clean up_dex up_one_login_simulator one_login_user
+
 up-devserver:
 	docker compose -f docker-compose.yml run --rm --service-ports --entrypoint "python manage.py runserver 0.0.0.0:8000" web
 
@@ -17,17 +23,47 @@ build:
 	BUILDKIT_PROGRESS=plain docker compose build
 
 behave:
-	@status=0; FEATURE_TEST_ARGS="--tags=~dex $(FEATURE_TEST_ARGS)" docker compose -p webcaf-behave -f docker-compose.yml -f docker-compose.feature-tests.yml up --build --abort-on-container-exit --remove-orphans --exit-code-from feature-tests feature-tests || status=$$?; if [ $$status -ne 0 ]; then mkdir -p artifacts; docker compose -p webcaf-behave -f docker-compose.yml -f docker-compose.feature-tests.yml logs --no-color > artifacts/one-login-docker-compose.log; fi; docker compose -p webcaf-behave -f docker-compose.yml -f docker-compose.feature-tests.yml down -v; exit $$status
+	$(BEHAVE_COMPOSE) down --volumes --remove-orphans
+	mkdir -p artifacts reports
+	@status=0; cleanup_status=0; \
+	cleanup() { \
+		if [ "$$status" -ne 0 ]; then \
+			$(BEHAVE_COMPOSE) logs --no-color > artifacts/one-login-docker-compose.log 2>&1 || true; \
+		fi; \
+		$(BEHAVE_COMPOSE) down --volumes --remove-orphans || cleanup_status=$$?; \
+	}; \
+	trap 'status=130; cleanup; trap - INT; exit "$$status"' INT; \
+	trap 'status=143; cleanup; trap - TERM; exit "$$status"' TERM; \
+	FEATURE_TEST_ARGS="--tags=~dex $(FEATURE_TEST_ARGS)" $(BEHAVE_COMPOSE) up --build --abort-on-container-exit --remove-orphans --exit-code-from feature-tests feature-tests || status=$$?; \
+	cleanup; \
+	if [ "$$status" -ne 0 ]; then exit "$$status"; fi; \
+	exit "$$cleanup_status"
 
 behave_dex:
-	@status=0; FEATURE_TEST_ARGS="--tags=dex $(FEATURE_TEST_ARGS)" docker compose -p webcaf-behave-dex --profile dex -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.dex.yml -f docker-compose.dex-feature-tests.yml up --build --abort-on-container-exit --remove-orphans --exit-code-from feature-tests feature-tests || status=$$?; if [ $$status -ne 0 ]; then mkdir -p artifacts; docker compose -p webcaf-behave-dex --profile dex -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.dex.yml -f docker-compose.dex-feature-tests.yml logs --no-color > artifacts/dex-docker-compose.log; fi; docker compose -p webcaf-behave-dex --profile dex -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.dex.yml -f docker-compose.dex-feature-tests.yml down -v; exit $$status
+	$(BEHAVE_DEX_COMPOSE) down --volumes --remove-orphans
+	mkdir -p artifacts reports
+	@status=0; cleanup_status=0; \
+	cleanup() { \
+		if [ "$$status" -ne 0 ]; then \
+			$(BEHAVE_DEX_COMPOSE) logs --no-color > artifacts/dex-docker-compose.log 2>&1 || true; \
+		fi; \
+		$(BEHAVE_DEX_COMPOSE) down --volumes --remove-orphans || cleanup_status=$$?; \
+	}; \
+	trap 'status=130; cleanup; trap - INT; exit "$$status"' INT; \
+	trap 'status=143; cleanup; trap - TERM; exit "$$status"' TERM; \
+	FEATURE_TEST_ARGS="--tags=dex $(FEATURE_TEST_ARGS)" $(BEHAVE_DEX_COMPOSE) up --build --abort-on-container-exit --remove-orphans --exit-code-from feature-tests feature-tests || status=$$?; \
+	cleanup; \
+	if [ "$$status" -ne 0 ]; then exit "$$status"; fi; \
+	exit "$$cleanup_status"
 
 behave-clean:
-	docker compose -p webcaf-behave -f docker-compose.yml -f docker-compose.feature-tests.yml down -v --remove-orphans
-	docker compose -p webcaf-behave-dex --profile dex -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.dex.yml -f docker-compose.dex-feature-tests.yml down -v --remove-orphans
+	@status=0; \
+	$(BEHAVE_COMPOSE) down --volumes --remove-orphans || status=1; \
+	$(BEHAVE_DEX_COMPOSE) down --volumes --remove-orphans || status=1; \
+	exit "$$status"
 
 up_dex:
-	docker compose --profile dex -f docker-compose.yml -f docker-compose.dex.yml up -d --wait web
+	$(DEV_DEX_COMPOSE) up -d --wait web
 
 up_one_login_simulator:
 	docker compose up -d --wait postgres redis one-login-simulator

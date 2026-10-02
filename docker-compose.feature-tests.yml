@@ -3,7 +3,7 @@
 x-one-login-feature-variables: &one-login-feature-variables
   SSO_MODE: one-login
   GOV_UK_ONE_LOGIN_CLIENT_ID: webcaf-local
-  GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH: /app/tests/fixtures/one-login-simulator-private-key.pem
+  GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH: /run/secrets/one-login-private-key
   GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL: http://one-login-simulator:3000/.well-known/openid-configuration
   GOV_UK_ONE_LOGIN_SCOPE: openid email
   GOV_UK_ONE_LOGIN_ENVIRONMENT: integration
@@ -21,12 +21,26 @@ services:
       REDIRECT_URLS: http://web:8000/one-login/callback/
       POST_LOGOUT_REDIRECT_URLS: http://web:8000/
       SIMULATOR_URL: http://one-login-simulator:3000
+      SUB: urn:fdc:gov.uk:2022:EoM4c_EsB2Yo_NoV5leoJwlkOtcQk2nI74F1Y4EZ_Tw
+      EMAIL: alice@example.gov.uk
+      EMAIL_VERIFIED: "true"
       INTERACTIVE_MODE: "false"
 
   web:
     ports: !override []
     environment:
       <<: *one-login-feature-variables
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes: !override
+      - webcaf_home:/home/webcaf
+      - static-data:/app/webcaf/static
+    secrets:
+      - one-login-private-key
+    healthcheck:
+      test: [ "CMD", "python3.12", "-c", "import socket; socket.create_connection(('localhost', 8000), 2).close()" ]
+      interval: 2s
+      timeout: 3s
+      retries: 30
     depends_on: !override
       postgres:
         condition: service_healthy
@@ -40,6 +54,15 @@ services:
   init:
     environment:
       <<: *one-login-feature-variables
+      PYTHONDONTWRITEBYTECODE: "1"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - python manage.py makemigrations --check --dry-run && python manage.py collectstatic --noinput && python manage.py migrate --noinput
+    volumes: !override
+      - static-data:/app/webcaf/static
+    secrets:
+      - one-login-private-key
 
   feature-tests:
     build:
@@ -49,7 +72,7 @@ services:
         BUILDKIT_INLINE_CACHE: "1"
     depends_on: !override
       web:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
@@ -65,11 +88,19 @@ services:
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
       ONE_LOGIN_SIMULATOR_URL: http://one-login-simulator:3000
       FEATURE_TEST_ARGS: ${FEATURE_TEST_ARGS:-}
+      PYTHONDONTWRITEBYTECODE: "1"
     volumes:
-      - ./:/app
+      - ./artifacts:/app/artifacts
+      - ./reports:/app/reports
+    secrets:
+      - one-login-private-key
     working_dir: /app
     command: > # pragma: allowlist secret
       bash -lc "
         echo 'Services ready. Starting tests...' &&
-        python3 -m behave -f behave_html_formatter:HTMLFormatter -o reports/report.html -D base_url=http://web:8000 $FEATURE_TEST_ARGS
+        python3.12 -m behave -f behave_html_formatter:HTMLFormatter -o reports/report.html -D base_url=http://web:8000 $${FEATURE_TEST_ARGS}
       "
+
+secrets:
+  one-login-private-key:
+    file: ./tests/fixtures/one-login-simulator-private-key.pem

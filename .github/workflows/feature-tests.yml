@@ -30,17 +30,19 @@ jobs:
         run: |
           mkdir -p artifacts
           make behave
+
       - name: Upload artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: one-login-failure-logs
-          path: artifacts
+          path: |
+            artifacts
+            reports/report.html
 
       - name: Teardown
         if: always()
-        run: |
-          docker compose -p webcaf-behave -f docker-compose.yml -f docker-compose.feature-tests.yml down -v
+        run: make behave-clean
 
   dex-feature-tests:
     runs-on: ubuntu-latest
@@ -71,14 +73,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dex-failure-logs
-          path: artifacts
+          path: |
+            artifacts
+            reports/report.html
 
       - name: Teardown
         if: always()
-        run: >-
-          docker compose -p webcaf-behave-dex --profile dex
-          -f docker-compose.yml
-          -f docker-compose.feature-tests.yml
-          -f docker-compose.dex.yml
-          -f docker-compose.dex-feature-tests.yml
-          down -v
+        run: make behave-clean
