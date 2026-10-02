@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
 from django.contrib.auth.models import User
-from django.db import DatabaseError, connection, transaction
+from django.db import DatabaseError, IntegrityError, connection, transaction
 from django.test import Client, TransactionTestCase
 from django.urls import reverse
 
@@ -97,6 +97,17 @@ class SystemRLSTests(RestrictedRoleMixin, TransactionTestCase):
             self.assertEqual(System.objects.filter(id=self.system_b.id).update(name="Hidden update"), 0)
             deleted_count, _ = System.objects.filter(id=self.system_b.id).delete()
             self.assertEqual(deleted_count, 0)
+
+    def test_tenant_cannot_delete_another_tenants_system_via_organisation(self):
+        organisation_id = self.organisation_b.id
+        system_id = self.system_b.id
+
+        with self.assertRaises(IntegrityError):
+            with self.app_scope(organisation_id=self.organisation_a.id):
+                Organisation.objects.filter(id=organisation_id).delete()
+
+        self.assertTrue(Organisation.objects.filter(id=organisation_id).exists())
+        self.assertTrue(System.objects.filter(id=system_id).exists())
 
     def test_missing_context_exposes_no_system_rows(self):
         with self.app_scope(access_scope="public"):
