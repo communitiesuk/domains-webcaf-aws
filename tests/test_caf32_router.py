@@ -150,14 +150,13 @@ class TestCAF32Router(TestCase):
             self.fail("caf32_indicators_A1.a not found in urlpatterns")
         view = view_class()
         view.request = self.add_session_to_request(request)
-        with patch("webcaf.webcaf.models.UserProfile.objects.get") as mock_profile_get:
-            with patch("webcaf.webcaf.models.Assessment.objects.get") as mock_assessment_get:
-                mock_profile = Mock(UserProfile)
-                mock_assessment = Mock(Assessment)
-                mock_assessment.assessments_data.get.return_value = {}
-                mock_profile_get.return_value = mock_profile
-                mock_assessment_get.return_value = mock_assessment
-                context = view.get_context_data()
+        with patch("webcaf.webcaf.models.Assessment.objects.get") as mock_assessment_get:
+            mock_profile = Mock(UserProfile)
+            mock_assessment = Mock(Assessment)
+            mock_assessment.assessments_data.get.return_value = {}
+            view.request.current_profile = mock_profile
+            mock_assessment_get.return_value = mock_assessment
+            context = view.get_context_data()
         breadcrumbs = context.get("breadcrumbs")
         self.assertEqual(breadcrumbs[0]["text"], "My account")
         self.assertEqual(breadcrumbs[1]["text"], "Edit draft self-assessment")
@@ -175,17 +174,16 @@ class TestCAF32Router(TestCase):
             self.fail("caf32_confirmation_B2.a not found in urlpatterns")
         view = view_class()
         view.request = self.add_session_to_request(request)
-        with patch("webcaf.webcaf.models.UserProfile.objects.get") as mock_profile_get:
-            with patch("webcaf.webcaf.models.Assessment.objects.get") as mock_assessment_get:
-                mock_profile = Mock(UserProfile)
-                mock_assessment = Mock(
-                    Assessment,
-                    framework="caf32",
-                    assessments_data={"B2.a": {"indicators": {"indicator_1": {"id": "indicator_1"}}}},
-                )
-                mock_profile_get.return_value = mock_profile
-                mock_assessment_get.return_value = mock_assessment
-                context = view.get_context_data()
+        with patch("webcaf.webcaf.models.Assessment.objects.get") as mock_assessment_get:
+            mock_profile = Mock(UserProfile)
+            mock_assessment = Mock(
+                Assessment,
+                framework="caf32",
+                assessments_data={"B2.a": {"indicators": {"indicator_1": {"id": "indicator_1"}}}},
+            )
+            view.request.current_profile = mock_profile
+            mock_assessment_get.return_value = mock_assessment
+            context = view.get_context_data()
         breadcrumbs = context.get("breadcrumbs")
         for i, crumb in enumerate(breadcrumbs):
             if i != len(breadcrumbs) - 1:
