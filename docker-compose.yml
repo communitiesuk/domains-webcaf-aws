@@ -6,7 +6,13 @@ x-common-application-variables: &common-application-variables
   REDIS_URL: redis://redis:6379/0
   ENVIRONMENT: 'local'
   GOOGLE_ANALYTICS_ID: GTM-TEST
-  SSO_MODE: one-login
+
+  SSO_MODE: ${SSO_MODE:-one-login}
+
+  INTERNAL_ACCESS_CLIENT_ID: ${INTERNAL_ACCESS_CLIENT_ID:-}
+  INTERNAL_ACCESS_CLIENT_SECRET: ${INTERNAL_ACCESS_CLIENT_SECRET:-}  # pragma: allowlist secret
+  LOGOUT_REDIRECT_URL: ${LOGOUT_REDIRECT_URL:-http://localhost:8010/}
+
   GOV_UK_ONE_LOGIN_CLIENT_ID: webcaf-local
   GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH: /app/tests/fixtures/one-login-simulator-private-key.pem
   GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL: http://one-login.localhost:3000/.well-known/openid-configuration
