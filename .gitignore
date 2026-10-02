@@ -101,6 +101,10 @@ ipython_config.py
 #   commonly ignored for libraries.
 #   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
 #poetry.lock
+#   poetry.toml holds local Poetry settings, not project configuration. Committing
+#   one with virtualenvs.in-project = true puts a host .venv on /app inside the
+#   containers, where poetry run then resolves to the host interpreter.
+poetry.toml
 
 # pdm
 #   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
