@@ -5,12 +5,52 @@ import logging
 from abc import abstractmethod
 from datetime import timedelta
 
+from django.db import connection, transaction
 from django.shortcuts import redirect, render
 from django.utils.deprecation import MiddlewareMixin
 
 from webcaf.webcaf.utils.session import SessionUtil
 
 log_context: contextvars.ContextVar = contextvars.ContextVar("log_context", default={})
+
+
+class OrganisationContextMiddleware:
+    """Apply validated, transaction-local organisation context to database queries."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        with transaction.atomic():
+            profile = SessionUtil.resolve_current_user_profile(request)
+            user = getattr(request, "user", None)
+            user_id = str(user.id) if user and user.is_authenticated else ""
+
+            if user and user.is_authenticated and user.is_staff and request.path.startswith("/admin/"):
+                access_scope = "admin"
+                organisation_id = ""
+            elif profile and profile.organisation_id:
+                access_scope = "tenant"
+                organisation_id = str(profile.organisation_id)
+            else:
+                access_scope = "public"
+                organisation_id = ""
+
+            request.rls_scope = access_scope
+            self._set_database_context(user_id, organisation_id, access_scope)
+            response = self.get_response(request)
+
+            if response.status_code >= 500:
+                transaction.set_rollback(True)
+
+            return response
+
+    @staticmethod
+    def _set_database_context(user_id: str, organisation_id: str, access_scope: str) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT set_config('webcaf.user_id', %s, true)", [user_id])
+            cursor.execute("SELECT set_config('webcaf.organisation_id', %s, true)", [organisation_id])
+            cursor.execute("SELECT set_config('webcaf.access_scope', %s, true)", [access_scope])
 
 
 class DisableCacheMiddleware:
@@ -119,7 +159,7 @@ class LastOrganisationCookieMiddleware:
         response = self.get_response(request)
         current_profile = SessionUtil.get_current_user_profile(request=request)
         if request.user and request.user.is_authenticated and current_profile:
-            if request.COOKIES.get("last_org") != current_profile.id:
+            if request.COOKIES.get("last_org") != str(current_profile.id):
                 # Keep the cookie for 7 days
                 response.set_cookie("last_org", current_profile.id, max_age=timedelta(days=7))
 

@@ -111,6 +111,7 @@ make up_dex         # bring up the full application stack with DEX instead of On
 make up_one_login_simulator # bring up PostgreSQL, Valkey and the One Login simulator with Alice defaults
 make one_login_user PRESET=alice # select the simulator identity shown on the next sign-in
 make shell          # open a bash shell in the running web container
+make management-shell # open a migrator/owner shell for global management commands
 make clear-db       # tear everything down and drop the Postgres volume
 ```
 
@@ -120,7 +121,7 @@ make clear-db       # tear everything down and drop the Postgres volume
 
 Make sure the python version you use is the same as in the [Dockerfile](Dockerfile) (Python 3.12).
 
-The database credentials are defined in `docker-compose.yml`: the Postgres container uses the user/password/database `webcaf`/`webcaf`/`webcaf` and is exposed on the host at port `54321`. Valkey is exposed on port `6379`. To run Django on the host with the default One Login simulator, create `webcaf/.env` from `webcaf/.env.example`, then start its dependencies:
+The database credentials are defined in `docker-compose.yml`. PostgreSQL is exposed on host port `54321`. The web application uses the restricted `webcaf_app` role, while migrations use `webcaf_migrator` assuming `webcaf_owner`. Valkey is exposed on port `6379`. To run Django on the host with the default One Login simulator, create `webcaf/.env` from `webcaf/.env.example`, then start its dependencies:
 
 ```
 cp webcaf/.env.example webcaf/.env
@@ -135,7 +136,7 @@ Then run in a terminal
 pip install poetry pre-commit
 poetry install
 pre-commit install
-poetry run python manage.py migrate
+DATABASE_URL=postgresql://webcaf_migrator:webcaf_migrator@localhost:54321/webcaf DATABASE_ASSUME_ROLE=webcaf_owner poetry run python manage.py migrate # pragma: allowlist secret
 ```
 
 and to run the local server:
@@ -143,6 +144,10 @@ and to run the local server:
 ``` shell
 poetry run python manage.py runserver
 ```
+
+The role bootstrap runs only when PostgreSQL initialises a fresh volume. After pulling these role changes over an older local database, run `make clear-db` before restarting the stack. This deletes local database data.
+
+Commands that intentionally read or modify all organisations, including data export and seed commands, must run from `make management-shell`. The normal `make shell` uses `webcaf_app`; without an HTTP request context, RLS deliberately hides System rows from that role.
 
 ### Running tests
 
@@ -153,6 +158,12 @@ make test     # run the pytest suite (writes an HTML report to reports/)
 make behave   # run application, admin and One Login scenarios in an isolated environment
 make behave_dex # run focused DEX authentication scenarios in an isolated environment
 make build    # (re)build the images
+```
+
+Focused host tests need a role that can create Django's test database:
+
+``` shell
+DATABASE_URL=postgresql://webcaf:webcaf@localhost:54321/webcaf DATABASE_ASSUME_ROLE= poetry run pytest tests/test_rls.py # pragma: allowlist secret
 ```
 
 The Behave workflow builds the application and test sources into dedicated images, then creates its own PostgreSQL

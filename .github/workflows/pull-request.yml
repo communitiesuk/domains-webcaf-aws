@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres
+        image: postgres:18-alpine
         env:
           POSTGRES_DB: webcaf
           POSTGRES_USER: webcaf
@@ -50,13 +50,24 @@ jobs:
         run: |
           python -m pip install --upgrade poetry pre-commit
           poetry install --no-root
+      - name: Provision database roles
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          POSTGRES_DB: webcaf
+          POSTGRES_USER: webcaf
+          POSTGRES_PASSWORD: webcaf
+          WEBCAF_MIGRATOR_PASSWORD: webcaf_migrator
+          WEBCAF_APP_PASSWORD: webcaf_app
+        run: ./docker/postgres/init-roles.sh
       - name: Run linters
         run: |
           pre-commit run --all
       - name: Init server
         env:
           SECRET_KEY: blah
-          DATABASE_URL: postgresql://webcaf:webcaf@localhost:5432/webcaf
+          DATABASE_URL: postgresql://webcaf_migrator:webcaf_migrator@localhost:5432/webcaf
+          DATABASE_ASSUME_ROLE: webcaf_owner
           REDIS_URL: redis://localhost:6379/0
           DOMAIN_NAME: http://localhost:8010
           SSO_MODE: one-login
