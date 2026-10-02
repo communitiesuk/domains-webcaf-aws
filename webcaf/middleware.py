@@ -10,7 +10,9 @@ from django.utils.deprecation import MiddlewareMixin
 
 from webcaf.webcaf.utils.session import SessionUtil
 
-log_context: contextvars.ContextVar = contextvars.ContextVar("log_context", default={})
+# noqa B039: the default is never mutated in place, only set() and reset().
+# Changing it to None would break callers and tests that expect a mapping.
+log_context: contextvars.ContextVar = contextvars.ContextVar("log_context", default={})  # noqa: B039
 
 
 class DisableCacheMiddleware:

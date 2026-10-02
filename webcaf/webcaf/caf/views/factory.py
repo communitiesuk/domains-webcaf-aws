@@ -45,7 +45,7 @@ class ObjectiveView(FormViewWithBreadcrumbs):
         objective_data_ = self.extra_context["objective_data"]
         return super().build_breadcrumbs() + [
             {
-                "text": f'Objective {objective_data_["code"]} - {objective_data_["title"]}',
+                "text": f"Objective {objective_data_['code']} - {objective_data_['title']}",
             }
         ]
 
@@ -122,7 +122,7 @@ class BaseIndicatorsFormView(FormViewWithBreadcrumbs):
         assessment = SessionUtil.get_current_assessment(self.request)
         return super().build_breadcrumbs() + [
             {
-                "text": f'Objective {objective_data_["code"]} - {objective_data_["title"]}',
+                "text": f"Objective {objective_data_['code']} - {objective_data_['title']}",
                 "url": reverse_lazy(f"{assessment.framework}_objective_{objective_data_['code']}"),
             }
         ]
@@ -236,7 +236,7 @@ class OutcomeIndicatorsView(BaseIndicatorsFormView):
         for field_name, field in form.fields.items():
             if not field_name.endswith("_comment"):
                 duplicate_form_data[field.label].append((field, field_name))
-        for label, fields in duplicate_form_data.items():
+        for _label, fields in duplicate_form_data.items():
             if len(fields) > 1:
                 for field in fields:
                     field[0].label_suffix = self._build_duplicate_field_suffix(
@@ -262,7 +262,7 @@ class OutcomeIndicatorsView(BaseIndicatorsFormView):
         outcome = self.extra_context["outcome"]
         return super().build_breadcrumbs() + [
             {
-                "text": f'Objective {outcome["code"]} - {outcome["title"]}',
+                "text": f"Objective {outcome['code']} - {outcome['title']}",
             }
         ]
 
@@ -271,7 +271,7 @@ class OutcomeIndicatorsView(BaseIndicatorsFormView):
         # This will update any feilds that the user has changed.
         form.initial.update(form.cleaned_data)
         friendly_errors = set()
-        for error_field, errors in form.errors.items():
+        for error_field, _errors in form.errors.items():
             # validation on word count breaks the below so skip that and keep entered text
             if "_comment" in error_field:
                 error_message = "Word count limit exceeded in justifcation of answer for "
@@ -389,11 +389,11 @@ class OutcomeConfirmationView(BaseIndicatorsFormView):
         assessment = SessionUtil.get_current_assessment(self.request)
         return super().build_breadcrumbs() + [
             {
-                "text": f'Objective {outcome["code"]} - {outcome["title"]}',
+                "text": f"Objective {outcome['code']} - {outcome['title']}",
                 "url": reverse_lazy(f"{assessment.framework}_indicators_{self.class_id}"),
             },
             {
-                "text": f'Objective {outcome["code"]} - {outcome["title"]} outcome',
+                "text": f"Objective {outcome['code']} - {outcome['title']} outcome",
             },
         ]
 

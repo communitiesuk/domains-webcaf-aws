@@ -333,7 +333,11 @@ def fill_outcome(context: Context, outcome_text: str, section_keys: str, section
     # Now fill the answers
     print("Filling answers")
     section_filling_criteria = dict(
-        zip([s.strip() for s in section_keys.split(",")], [s.strip() for s in section_values.split(",")])
+        zip(
+            [s.strip() for s in section_keys.split(",")],
+            [s.strip() for s in section_values.split(",")],
+            strict=False,
+        )
     )
     checkboxes = page.locator("input[class='govuk-checkboxes__input']")
     checkboxes.last.wait_for(state="visible")

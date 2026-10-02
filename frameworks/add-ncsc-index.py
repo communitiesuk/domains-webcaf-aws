@@ -28,7 +28,7 @@ def main():
                 for group in ["achieved", "not-achieved", "partially-achieved"]:
                     group_short = {"achieved": "A", "not-achieved": "NA", "partially-achieved": "PA"}[group]
                     group_inds = indicators.get(group, {})
-                    for ind_key, ind_val in group_inds.items():
+                    for _ind_key, ind_val in group_inds.items():
                         group_counters[group] += 1
                         ncsc_index = f"{obj_key}{princ_key[-1]}.{out_key[-1]}.{group_short}.{group_counters[group]}"
                         ind_val["ncsc-index"] = ncsc_index

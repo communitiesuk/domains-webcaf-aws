@@ -9,25 +9,15 @@ repos:
         exclude: webcaf/static|seed/
       - id: trailing-whitespace
         exclude: webcaf/static|seed/
-  # Sort import statements
-  - repo: https://github.com/pycqa/isort
-    rev: 8.0.1
+  # Lint, sort imports and format. Replaces isort, black and flake8.
+  # Configuration lives in pyproject.toml under [tool.ruff].
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9
     hooks:
-      - id: isort
-        name: isort
-  # Enforce code style
-  - repo: https://github.com/psf/black
-    rev: 26.5.1
-    hooks:
-      - id: black
+      - id: ruff-check
+        args: [--fix]
         exclude: webcaf/static|seed/
-        language_version: python3.12
-
-  # Linting
-  - repo: https://github.com/PyCQA/flake8
-    rev: 7.3.0
-    hooks:
-      - id: flake8
+      - id: ruff-format
         exclude: webcaf/static|seed/
   # https://gds-way.cloudapps.digital/standards/pre-commit-hooks.html
   - repo: https://github.com/Yelp/detect-secrets
