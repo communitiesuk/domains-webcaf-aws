@@ -2,6 +2,7 @@ BEHAVE_COMPOSE = docker compose --project-name webcaf-behave -f docker-compose.y
 BEHAVE_DEX_COMPOSE = docker compose --project-name webcaf-behave-dex --profile dex -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.dex.yml -f docker-compose.dex-feature-tests.yml
 DEV_DEX_COMPOSE = docker compose --profile dex -f docker-compose.yml -f docker-compose.dex.yml
 TEST_DATABASE_URL = postgresql://webcaf:webcaf@postgres:5432/webcaf  # pragma: allowlist secret
+COMPOSE_PROJECT_NAME ?= $(notdir $(CURDIR))
 
 .PHONY: up-devserver up-devserver-nodebug shell management-shell clear-db test build behave behave_dex behave-clean up_dex up_one_login_simulator one_login_user
 
@@ -18,7 +19,10 @@ management-shell:
 	docker compose run --rm --entrypoint bash init
 
 clear-db:
-	docker compose down --volumes --remove-orphans
+	docker compose --project-name "$(COMPOSE_PROJECT_NAME)" down --remove-orphans
+	@if docker volume inspect "$(COMPOSE_PROJECT_NAME)_postgres-data" >/dev/null 2>&1; then \
+		docker volume rm "$(COMPOSE_PROJECT_NAME)_postgres-data"; \
+	fi
 
 test:
 	docker compose run --rm --service-ports --remove-orphans \

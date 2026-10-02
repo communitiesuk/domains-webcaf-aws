@@ -13,6 +13,7 @@ psql \
     --username "${POSTGRES_USER}" \
     --dbname "${POSTGRES_DB}" \
     --set ON_ERROR_STOP=1 \
+    --set database_name="${POSTGRES_DB}" \
     --set migrator_password="${WEBCAF_MIGRATOR_PASSWORD}" \
     --set app_password="${WEBCAF_APP_PASSWORD}" <<'SQL'
 CREATE ROLE webcaf_owner
@@ -28,13 +29,13 @@ ALTER ROLE webcaf_app PASSWORD :'app_password';
 
 GRANT webcaf_owner TO webcaf_migrator WITH INHERIT FALSE, SET TRUE;
 
-ALTER DATABASE webcaf OWNER TO webcaf_owner;
+ALTER DATABASE :"database_name" OWNER TO webcaf_owner;
 ALTER SCHEMA public OWNER TO webcaf_owner;
 
-REVOKE ALL ON DATABASE webcaf FROM PUBLIC;
+REVOKE ALL ON DATABASE :"database_name" FROM PUBLIC;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 
-GRANT CONNECT ON DATABASE webcaf TO webcaf_migrator, webcaf_app;
+GRANT CONNECT ON DATABASE :"database_name" TO webcaf_migrator, webcaf_app;
 GRANT USAGE ON SCHEMA public TO webcaf_app;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE webcaf_owner IN SCHEMA public
