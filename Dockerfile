@@ -20,7 +20,7 @@ RUN useradd -u 1000 -m webcaf
 
 # Poetry is pinned to the version that wrote poetry.lock. gunicorn comes from
 # the lock with the other runtime dependencies.
-RUN pip install poetry==2.5.1
+RUN pip install --no-cache-dir poetry==2.5.1
 
 COPY pyproject.toml poetry.lock /app/
 
