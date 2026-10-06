@@ -17,7 +17,7 @@ class Command(BaseCommand):
 
         with open(CSV_PATH, newline="", encoding="utf-8") as csvfile:
             reader = csv.DictReader(csvfile)
-            for count, row in enumerate(reader):  # noqa: B007 - count is used after the loop
+            for count, row in enumerate(reader):
                 pk = int(row["old_organisation_id"])
                 name = row["organisation_name"]
                 organisation_type = Organisation.get_type_id(row["organisation_type_description"])

@@ -608,7 +608,7 @@ def _set_header_properties(ws, widths, fix=True, bold=True, row_num=1):
     :type bold: bool, optional
     :return: None
     """
-    for cell, width in zip(ws[row_num], widths, strict=False):  # row 1
+    for cell, width in zip(ws[row_num], widths):  # row 1
         if bold:
             cell.font = Font(bold=True)
         if fix:

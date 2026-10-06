@@ -298,7 +298,7 @@ class TestReviewToExcelOtherReviewTypes(TestCase):
         cls.review_types = ["independent", "peer_review"]
         cls.reviews = {}
 
-        for review_type, system in zip(cls.review_types, [cls.system, cls.system_2], strict=False):
+        for review_type, system in zip(cls.review_types, [cls.system, cls.system_2]):
             assessment = Assessment.objects.create(
                 system=system,
                 status="submitted",

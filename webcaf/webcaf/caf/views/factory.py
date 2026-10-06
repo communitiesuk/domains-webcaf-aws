@@ -236,7 +236,7 @@ class OutcomeIndicatorsView(BaseIndicatorsFormView):
         for field_name, field in form.fields.items():
             if not field_name.endswith("_comment"):
                 duplicate_form_data[field.label].append((field, field_name))
-        for _label, fields in duplicate_form_data.items():
+        for label, fields in duplicate_form_data.items():
             if len(fields) > 1:
                 for field in fields:
                     field[0].label_suffix = self._build_duplicate_field_suffix(
@@ -271,7 +271,7 @@ class OutcomeIndicatorsView(BaseIndicatorsFormView):
         # This will update any feilds that the user has changed.
         form.initial.update(form.cleaned_data)
         friendly_errors = set()
-        for error_field, _errors in form.errors.items():
+        for error_field, errors in form.errors.items():
             # validation on word count breaks the below so skip that and keep entered text
             if "_comment" in error_field:
                 error_message = "Word count limit exceeded in justifcation of answer for "
