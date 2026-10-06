@@ -148,8 +148,9 @@ make lint     # report problems without changing anything
 make format   # apply Ruff's fixes and formatting
 ```
 
-Both run through pre-commit, so they use the same pinned Ruff version as CI and
-need no extra install. The hooks also run automatically on commit.
+Both run through pre-commit, which comes with the Poetry dev dependencies, so
+they use the same pinned Ruff version as CI. `make lint` only reports; the hooks
+that run automatically on commit apply fixes.
 
 mypy, detect-secrets and the security scanners are unaffected by Ruff and
 continue to run as separate hooks.

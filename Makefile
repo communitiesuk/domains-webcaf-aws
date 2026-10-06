@@ -21,8 +21,8 @@ test:
 	docker compose down
 lint:
 	#	Check formatting and linting without changing anything.
-	pre-commit run ruff-check --all-files
-	pre-commit run ruff-format --all-files
+	pre-commit run --hook-stage manual ruff-check-only --all-files
+	pre-commit run --hook-stage manual ruff-format-check --all-files
 
 format:
 	#	Apply Ruff's fixes and formatting across the repository.
