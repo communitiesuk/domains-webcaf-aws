@@ -118,7 +118,7 @@ make clear-db       # tear everything down and drop the Postgres volume
 
 ## Developing
 
-Make sure the python version you use is the same as in the [Dockerfile](Dockerfile) (Python 3.12).
+Make sure the python version you use is the same as in the [Dockerfile](Dockerfile) (Python 3.14).
 
 The database credentials are defined in `docker-compose.yml`: the Postgres container uses the user/password/database `webcaf`/`webcaf`/`webcaf` and is exposed on the host at port `54321`. Valkey is exposed on port `6379`. To run Django on the host with the default One Login simulator, create `webcaf/.env` from `webcaf/.env.example`, then start its dependencies:
 

@@ -4,14 +4,14 @@ ARG POETRY_ARGS="--no-root --no-ansi --only main"
 
 ARG GOV_UK_ONE_LOGIN_PRIVATE_KEY
 
-RUN dnf -y install python3.12 python3.12-devel python3-pip shadow-utils
+RUN dnf -y install python3.14 python3.14-devel python3-pip shadow-utils
 
 # Libraries used for PDF generation
 RUN dnf -y install pango gcc gcc-c++ zlib-devel libjpeg-devel openjpeg2-devel libffi-devel
 
 
-RUN ln -s /usr/bin/python3.12 /usr/bin/python
-RUN python3.12 -m ensurepip
+RUN ln -s /usr/bin/python3.14 /usr/bin/python
+RUN python3.14 -m ensurepip
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 
 RUN useradd -u 1000 -m webcaf

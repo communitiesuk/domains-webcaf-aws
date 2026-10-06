@@ -1,16 +1,22 @@
 # Playwright base image with all browser dependencies pre-installed
 FROM mcr.microsoft.com/playwright/python:v1.55.0-jammy
 
-# Install Python 3.12 via deadsnakes PPA
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    software-properties-common gnupg \
-    && add-apt-repository ppa:deadsnakes/ppa -y \
+# Install Python 3.14 via deadsnakes PPA. The PPA is added by hand rather
+# than with add-apt-repository: software-properties-common pulls in Ubuntu's
+# python3-cryptography and python3-jwt, which pip cannot uninstall, so Poetry
+# fails when the lock asks for other versions.
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gnupg \
+    && install -d -m 0755 /etc/apt/keyrings \
+    && curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xF23C5A6CF475977595C89F51BA6932366A755776" \
+       | gpg --dearmor -o /etc/apt/keyrings/deadsnakes.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/deadsnakes.gpg] https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) main" \
+       > /etc/apt/sources.list.d/deadsnakes.list \
     && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    python3.12 python3.12-venv python3.12-dev \
+    python3.14 python3.14-venv python3.14-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Point python3 to 3.12 and install pip
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 20 && \
+# Point python3 to 3.14 and install pip
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.14 20 && \
     curl -sS https://bootstrap.pypa.io/get-pip.py | python3 && \
     python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
@@ -27,7 +33,7 @@ RUN poetry config virtualenvs.create false && poetry install --no-root --no-ansi
 # Set Playwright browsers path outside /app to avoid volume mount overwriting
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Install Playwright browsers for Python 3.12
+# Install Playwright browsers
 RUN poetry run playwright install chromium --with-deps && \
     echo "Playwright installation complete" && \
     poetry run playwright --version

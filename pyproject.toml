@@ -6,7 +6,7 @@ authors = [
     { name = "Cyber and domain protection team" }
 ]
 readme = "README.md"
-requires-python = ">=3.12,<4"
+requires-python = ">=3.14,<3.15"
 dependencies = [
     "django (>=5.1.13,<5.2)",
     "whitenoise (>=6.9.0,<7.0.0)",
@@ -55,6 +55,9 @@ pytest-html = "^4.2.0"
 [tool.ruff]
 # https://gds-way.cloudapps.digital/manuals/programming-languages/python/python.html#maximum-line-length-of-120-characters
 line-length = 120
+# Ruff only writes syntax valid for this version. Kept below the runtime
+# (Python 3.14) on purpose: a py314 target rewrites `except (A, B):` into the
+# 3.14-only `except A, B:` form across the codebase.
 target-version = "py312"
 extend-exclude = [
     "venv*",

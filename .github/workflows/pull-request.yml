@@ -42,8 +42,8 @@ jobs:
           eval "$(pyenv init -)" && \
           for repo in ~/.pyenv/plugins/*/ ~/.pyenv/; do [[ -d "$repo/.git" ]] && (cd "$repo" && git remote set-head origin -a); done && \
           pyenv update && \
-          pyenv install 3.12 && \
-          pyenv global 3.12 && \
+          pyenv install 3.14 && \
+          pyenv global 3.14 && \
           pyenv rehash
       - uses: actions/checkout@v4
       - name: Install Dependencies
