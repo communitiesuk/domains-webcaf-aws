@@ -132,7 +132,7 @@ WebCAF stores Django sessions exclusively in Valkey. AWS environments must provi
 Then run in a terminal
 
 ``` shell
-pip install poetry pre-commit
+pip install poetry==2.5.1 pre-commit
 poetry install
 pre-commit install
 poetry run python manage.py migrate
@@ -160,6 +160,24 @@ and to run the local server:
 ``` shell
 poetry run python manage.py runserver
 ```
+
+### Dependency and image versions
+
+`pyproject.toml` states the versions WebCAF supports; `poetry.lock` fixes the exact
+versions installed everywhere: locally, in CI and in the deployed image. Use Poetry
+2.5.1, the version that wrote the lock. CI runs `poetry check --lock`, so after
+changing `pyproject.toml` run `poetry lock` and commit both files.
+
+Every Docker base image is pinned as `name:version@sha256:digest`, so a build cannot
+change when an upstream tag moves. To update one, get the new digest and replace both
+the version and the digest:
+
+``` shell
+docker buildx imagetools inspect postgres:18.6-alpine --format '{{json .Manifest}}'
+```
+
+Local and CI images should match what runs in AWS: Valkey 9.0 (ElastiCache) and the
+Postgres major used by RDS.
 
 ### Running tests
 
