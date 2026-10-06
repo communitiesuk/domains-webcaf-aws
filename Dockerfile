@@ -16,7 +16,9 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 
 RUN useradd -u 1000 -m webcaf
 
-RUN pip install poetry gunicorn
+# Poetry is pinned to the version that wrote poetry.lock. gunicorn comes from
+# the lock with the other runtime dependencies.
+RUN pip install poetry==2.5.1
 
 COPY pyproject.toml poetry.lock /app/
 

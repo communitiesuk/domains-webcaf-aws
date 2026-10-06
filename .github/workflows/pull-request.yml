@@ -48,7 +48,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Dependencies
         run: |
-          python -m pip install --upgrade poetry pre-commit
+          python -m pip install --upgrade poetry==2.5.1 pre-commit
+          # Fail if poetry.lock is out of date with pyproject.toml.
+          poetry check --lock
           poetry install --no-root
       - name: Run linters
         run: |
