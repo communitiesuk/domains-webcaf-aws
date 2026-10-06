@@ -434,7 +434,7 @@ class TipBulkReviewForm(ModelForm):
         """
         if commit:
             reason = self.cleaned_data["bulk_review_reason"]
-            for recommendation, _, action in self.cleaned_data["filtered_recommendations_with_group"]:
+            for recommendation, _, _action in self.cleaned_data["filtered_recommendations_with_group"]:
                 # If there is no action set for the recommendation,
                 # then we go ahead and set the action as action_not_planned
                 if self.instance.get_action(recommendation.id):

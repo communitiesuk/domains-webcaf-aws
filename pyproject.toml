@@ -52,13 +52,36 @@ pytest = "^9.1.1"
 pytest-django = "^4.12.0"
 pytest-html = "^4.2.0"
 
-[tool.isort]
-profile = "black"
-
-[tool.black]
+[tool.ruff]
 # https://gds-way.cloudapps.digital/manuals/programming-languages/python/python.html#maximum-line-length-of-120-characters
 line-length = 120
-target-version = ["py312"]
+target-version = "py312"
+extend-exclude = [
+    "venv*",
+    "cache",
+    "seed",
+    "webcaf/static",
+    "wsgi.py",
+    "asgi.py",
+]
+
+[tool.ruff.lint]
+# E/W/F and mccabe reproduce the previous Flake8 setup; I sorts imports,
+# replacing isort. Further rules (e.g. B, G from the MHCLG Way) are left for a
+# separate change so this migration stays like-for-like.
+select = ["E", "W", "F", "C90", "I"]
+ignore = [
+    # Whitespace before ':' in a slice. The formatter owns this whitespace.
+    "E203",
+    # Line too long. The formatter wraps what it can; the rest is deliberate.
+    "E501",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 14
+
+[tool.ruff.lint.isort]
+known-first-party = ["webcaf", "features", "tests"]
 
 [tool.mypy]
 ignore_missing_imports = true

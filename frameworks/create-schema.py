@@ -217,6 +217,9 @@ def extract_table(text: str, heading_match: re.Match, all_matches: list):
     def split_statements(column_text):
         return [
             c.strip().replace("\n", "")
+            # FIXME: the third positional argument to re.split is maxsplit, not flags,
+            # so these flags are being applied as maxsplit=24. Behaviour left
+            # unchanged here; needs its own ticket, as fixing it changes output.
             for c in re.split(r"\n(?=[A-Z][a-z]+ )", column_text, re.MULTILINE | re.DOTALL)
             if c.strip()
         ]

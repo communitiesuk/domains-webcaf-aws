@@ -147,6 +147,21 @@ Administrators must create the next configuration before the current period ends
 only assessments created afterwards. See [Managing assessment period cutoff dates](docs/MANAGING_CUTOFF_DATES.md) and
 the [framework definition guide](frameworks/README.md).
 
+## Code quality
+
+Ruff handles linting, import sorting, and formatting. Its configuration is in `pyproject.toml` under `[tool.ruff]`.
+Run the Make targets through Poetry so that they use the pre-commit executable installed with the development
+dependencies:
+
+```shell
+poetry run make lint    # report linting and formatting problems without changing files
+poetry run make format  # apply Ruff fixes and formatting
+```
+
+Both targets run the Ruff hooks from `.pre-commit-config.yaml`, ensuring the same pinned Ruff version is used locally
+and in CI. The normal commit-stage Ruff hooks apply fixes; `make lint` uses check-only hooks. Mypy and detect-secrets
+continue to run as separate pre-commit hooks.
+
 ## Tests and checks
 
 Run all pre-commit checks before the test suites:
