@@ -16,8 +16,12 @@ repos:
     hooks:
       - id: ruff-check
         args: [--fix]
+        types_or: [python, pyi]
         exclude: webcaf/static|seed/
       - id: ruff-format
+        # ruff-format also formats markdown by default; Black only formatted
+        # Python, so keep the same scope.
+        types_or: [python, pyi]
         exclude: webcaf/static|seed/
   # https://gds-way.cloudapps.digital/standards/pre-commit-hooks.html
   - repo: https://github.com/Yelp/detect-secrets
