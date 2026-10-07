@@ -171,8 +171,8 @@ changing `pyproject.toml` run `poetry lock` and commit both files.
 Docker base images use version tags, not digests, so a rebuild picks up the
 security patches published under that tag. To move to a new version, change the tag.
 
-Local and CI images should match what runs in AWS: Valkey 9.0 (ElastiCache) and the
-Postgres major used by RDS.
+Local and CI images should match what runs in AWS: Valkey 9.0 (ElastiCache) and
+Postgres 18.3 (RDS).
 
 ### Running tests
 
