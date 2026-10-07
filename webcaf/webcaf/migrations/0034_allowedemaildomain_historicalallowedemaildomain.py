@@ -8,7 +8,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("webcaf", "0033_settings_tip_max_words"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),

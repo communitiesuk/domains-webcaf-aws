@@ -35,8 +35,8 @@ def transform_assessment_v1_to_v2(
 
     # Process all outcomes
     objectives = definition_structure[version_key].get("objectives", {})
-    for objective_key, objective in objectives.items():
-        for principle_key, principle in objective.get("principles", {}).items():
+    for _objective_key, objective in objectives.items():
+        for _principle_key, principle in objective.get("principles", {}).items():
             for outcome_key, outcome in principle.get("outcomes", {}).items():
                 outcome_structure = _process_outcome(
                     outcome_key,
@@ -205,7 +205,7 @@ def _map_supplementary_questions(supplementary_questions: list) -> list[dict[str
     """Map supplementary questions to the expected format."""
     mapped_questions = []
     for question_entries in supplementary_questions:
-        for entry_type, question_entry in question_entries:
+        for _entry_type, question_entry in question_entries:
             mapped_questions.append({"key": question_entry["key"], "answer": question_entry["answer"]})
     return mapped_questions
 

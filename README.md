@@ -138,6 +138,23 @@ pre-commit install
 poetry run python manage.py migrate
 ```
 
+### Code quality
+
+Ruff handles linting, import sorting and formatting. Its configuration lives in
+`pyproject.toml` under `[tool.ruff]`; there is no separate config file.
+
+``` shell
+make lint     # report problems without changing anything
+make format   # apply Ruff's fixes and formatting
+```
+
+Both run through pre-commit, which comes with the Poetry dev dependencies, so
+they use the same pinned Ruff version as CI. `make lint` only reports; the hooks
+that run automatically on commit apply fixes.
+
+mypy, detect-secrets and the security scanners are unaffected by Ruff and
+continue to run as separate hooks.
+
 and to run the local server:
 
 ``` shell
