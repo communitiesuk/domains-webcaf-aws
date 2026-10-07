@@ -2,7 +2,7 @@ x-common-application-variables: &common-application-variables
   DEBUG: "True"
   SECRET_KEY: "Unneeded"  # pragma: allowlist secret
   DJANGO_SETTINGS_MODULE: webcaf.settings
-  DATABASE_URL: postgresql://webcaf:webcaf@postgres:5432/webcaf  # pragma: allowlist secret
+  DATABASE_URL: postgresql://webcaf_app:webcaf_app@postgres:5432/webcaf  # pragma: allowlist secret
   REDIS_URL: redis://redis:6379/0
   ENVIRONMENT: 'local'
   GOOGLE_ANALYTICS_ID: GTM-TEST
@@ -54,9 +54,12 @@ services:
       POSTGRES_USER: webcaf
       POSTGRES_PASSWORD: webcaf  # pragma: allowlist secret
       POSTGRES_DB: webcaf
+      WEBCAF_MIGRATOR_PASSWORD: webcaf_migrator  # pragma: allowlist secret
+      WEBCAF_APP_PASSWORD: webcaf_app  # pragma: allowlist secret
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
     volumes:
       - postgres-data:/var/lib/postgresql
+      - ./docker/postgres/init-roles.sh:/docker-entrypoint-initdb.d/10-init-roles.sh:ro
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready" ]
       interval: 10s
@@ -120,6 +123,8 @@ services:
     restart: 'no'
     environment:
       <<: *common-application-variables
+      DATABASE_URL: postgresql://webcaf_migrator:webcaf_migrator@postgres:5432/webcaf  # pragma: allowlist secret
+      DATABASE_ASSUME_ROLE: webcaf_owner
     entrypoint: [ "/bin/sh", "/app/local-init.sh" ]
     volumes:
       - .:/app

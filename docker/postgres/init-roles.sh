@@ -1,0 +1,45 @@
+#!/bin/sh
+set -eu
+
+: "${POSTGRES_DB:?POSTGRES_DB must be set}"
+: "${POSTGRES_USER:?POSTGRES_USER must be set}"
+: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}"
+: "${WEBCAF_MIGRATOR_PASSWORD:?WEBCAF_MIGRATOR_PASSWORD must be set}"
+: "${WEBCAF_APP_PASSWORD:?WEBCAF_APP_PASSWORD must be set}"
+
+export PGPASSWORD="${POSTGRES_PASSWORD}"
+
+psql \
+    --username "${POSTGRES_USER}" \
+    --dbname "${POSTGRES_DB}" \
+    --set ON_ERROR_STOP=1 \
+    --set database_name="${POSTGRES_DB}" \
+    --set migrator_password="${WEBCAF_MIGRATOR_PASSWORD}" \
+    --set app_password="${WEBCAF_APP_PASSWORD}" <<'SQL'
+CREATE ROLE webcaf_owner
+    NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+
+CREATE ROLE webcaf_migrator
+    LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+ALTER ROLE webcaf_migrator PASSWORD :'migrator_password';
+
+CREATE ROLE webcaf_app
+    LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+ALTER ROLE webcaf_app PASSWORD :'app_password';
+
+GRANT webcaf_owner TO webcaf_migrator WITH INHERIT FALSE, SET TRUE;
+
+ALTER DATABASE :"database_name" OWNER TO webcaf_owner;
+ALTER SCHEMA public OWNER TO webcaf_owner;
+
+REVOKE ALL ON DATABASE :"database_name" FROM PUBLIC;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+
+GRANT CONNECT ON DATABASE :"database_name" TO webcaf_migrator, webcaf_app;
+GRANT USAGE ON SCHEMA public TO webcaf_app;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE webcaf_owner IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO webcaf_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE webcaf_owner IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO webcaf_app;
+SQL

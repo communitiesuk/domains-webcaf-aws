@@ -88,6 +88,7 @@ class TestDownloadReportTemplateSelection(TestCase):
         view.object = self.peer_review
         request = self.factory.get(f"review/{self.peer_review.id}/<int:version>/download-report/")
         request.session = self.client.session
+        request.current_profile = self.user_profile
         view.request = request
         view.kwargs = {"pk": self.peer_review.id}
 
@@ -100,6 +101,7 @@ class TestDownloadReportTemplateSelection(TestCase):
         view.object = self.independent_review
         request = self.factory.get(f"review/{self.independent_review.id}/<int:version>/download-report/")
         request.session = self.client.session
+        request.current_profile = self.user_profile
         view.request = request
         view.kwargs = {"pk": self.independent_review.id}
         templates = view.get_template_names()

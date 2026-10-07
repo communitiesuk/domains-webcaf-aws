@@ -86,6 +86,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "webcaf.middleware.OrganisationContextMiddleware",
     "webcaf.middleware.RequestLoggingMiddleware",
     "axes.middleware.AxesMiddleware",
     "django_otp.middleware.OTPMiddleware",
@@ -146,6 +147,10 @@ else:
     DATABASES = {
         "default": env.db_url(default="postgresql:///webcaf"),  # type: ignore
     }
+
+database_assume_role = env.str("DATABASE_ASSUME_ROLE", default="")
+if database_assume_role:
+    DATABASES["default"].setdefault("OPTIONS", {})["assume_role"] = database_assume_role  # type: ignore[index]
 
 CACHES = {
     "default": {

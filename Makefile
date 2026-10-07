@@ -1,8 +1,10 @@
 BEHAVE_COMPOSE = docker compose --project-name webcaf-behave -f docker-compose.yml -f docker-compose.feature-tests.yml
 BEHAVE_DEX_COMPOSE = docker compose --project-name webcaf-behave-dex --profile dex -f docker-compose.yml -f docker-compose.feature-tests.yml -f docker-compose.dex.yml -f docker-compose.dex-feature-tests.yml
 DEV_DEX_COMPOSE = docker compose --profile dex -f docker-compose.yml -f docker-compose.dex.yml
+TEST_DATABASE_URL = postgresql://webcaf:webcaf@postgres:5432/webcaf  # pragma: allowlist secret
+COMPOSE_PROJECT_NAME ?= $(notdir $(CURDIR))
 
-.PHONY: up-devserver up-devserver-nodebug shell clear-db test build behave behave_dex behave-clean up_dex up_one_login_simulator one_login_user
+.PHONY: up-devserver up-devserver-nodebug shell management-shell clear-db test build behave behave_dex behave-clean up_dex up_one_login_simulator one_login_user
 
 up-devserver:
 	docker compose -f docker-compose.yml run --rm --service-ports --entrypoint "python manage.py runserver 0.0.0.0:8000" web
@@ -13,11 +15,20 @@ up-devserver-nodebug:
 shell:
 	docker compose exec web bash
 
+management-shell:
+	docker compose run --rm --entrypoint bash init
+
 clear-db:
-	docker compose down && docker container prune -f && docker volume rm domains-webcaf_postgres-data
+	docker compose --project-name "$(COMPOSE_PROJECT_NAME)" down --remove-orphans
+	@if docker volume inspect "$(COMPOSE_PROJECT_NAME)_postgres-data" >/dev/null 2>&1; then \
+		docker volume rm "$(COMPOSE_PROJECT_NAME)_postgres-data"; \
+	fi
 
 test:
-	docker compose run --rm --service-ports --remove-orphans --entrypoint "poetry run pytest --html=reports/pytest-report.html --self-contained-html" web
+	docker compose run --rm --service-ports --remove-orphans \
+		--env DATABASE_URL=$(TEST_DATABASE_URL) \
+		--env DATABASE_ASSUME_ROLE= \
+		--entrypoint "poetry run pytest --html=reports/pytest-report.html --self-contained-html" web
 	docker compose down
 lint:
 	#	Check formatting and linting without changing anything.
