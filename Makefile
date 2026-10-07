@@ -17,7 +17,7 @@ clear-db:
 	docker compose down && docker container prune -f && docker volume rm domains-webcaf_postgres-data
 
 test:
-	docker compose run --rm --service-ports --remove-orphans --entrypoint "poetry run pytest --html=reports/pytest-report.html --self-contained-html" web
+	docker compose run --rm --service-ports --remove-orphans --entrypoint "pytest --html=reports/pytest-report.html --self-contained-html" web
 	docker compose down
 lint:
 	#	Check formatting and linting without changing anything.
@@ -80,4 +80,4 @@ up_one_login_simulator:
 	$(MAKE) one_login_user PRESET=alice
 
 one_login_user:
-	poetry run python -m features.one_login_simulator $(or $(PRESET),alice)
+	uv run python -m features.one_login_simulator $(or $(PRESET),alice)
