@@ -1,6 +1,5 @@
-# Pinned by digest so the build cannot change when the tag moves (image of
-# 2026-09-29). Update the digest deliberately, e.g. through Dependabot.
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023@sha256:12052e9b5d3fd85769abbdd863dd038e1890c9ace31d5fdbe1afa78eda97d061
+# A version tag, not a digest, so each rebuild picks up security patches.
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
 ARG POETRY_ARGS="--no-root --no-ansi --only main"
 

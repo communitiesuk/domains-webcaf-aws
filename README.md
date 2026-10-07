@@ -168,13 +168,8 @@ versions installed everywhere: locally, in CI and in the deployed image. Use Poe
 2.5.1, the version that wrote the lock. CI runs `poetry check --lock`, so after
 changing `pyproject.toml` run `poetry lock` and commit both files.
 
-Every Docker base image is pinned as `name:version@sha256:digest`, so a build cannot
-change when an upstream tag moves. To update one, get the new digest and replace both
-the version and the digest:
-
-``` shell
-docker buildx imagetools inspect postgres:18.6-alpine --format '{{json .Manifest}}'
-```
+Docker base images use version tags, not digests, so a rebuild picks up the
+security patches published under that tag. To move to a new version, change the tag.
 
 Local and CI images should match what runs in AWS: Valkey 9.0 (ElastiCache) and the
 Postgres major used by RDS.
