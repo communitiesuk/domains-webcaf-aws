@@ -48,13 +48,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Dependencies
         run: |
-          python -m pip install --upgrade poetry==2.5.1 pre-commit
+          python -m pip install --upgrade poetry==2.5.1
           # Fail if poetry.lock is out of date with pyproject.toml.
           poetry check --lock
           poetry install --no-root
       - name: Run linters
         run: |
-          pre-commit run --all
+          poetry run pre-commit run --all
       - name: Init server
         env:
           SECRET_KEY: blah

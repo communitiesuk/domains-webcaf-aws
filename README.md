@@ -132,9 +132,9 @@ WebCAF stores Django sessions exclusively in Valkey. AWS environments must provi
 Then run in a terminal
 
 ``` shell
-pip install poetry==2.5.1 pre-commit
+pip install poetry==2.5.1
 poetry install
-pre-commit install
+poetry run pre-commit install
 poetry run python manage.py migrate
 ```
 
