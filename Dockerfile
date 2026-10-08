@@ -28,10 +28,12 @@ WORKDIR /app
 
 # Install exactly what uv.lock says, hashes checked, into the app's Python
 # (python3 on Amazon Linux is the OS's own 3.9). gunicorn comes from the lock.
+# --locked fails the build if uv.lock is out of step with pyproject.toml,
+# as poetry install did; --frozen would install a stale lock silently.
 # --no-config: the [tool.uv] settings in pyproject.toml are already applied
 # in uv.lock; read again here they would add an unpinned line that
 # --require-hashes rejects.
-RUN uv export --frozen --no-emit-project ${UV_EXPORT_ARGS} -o /tmp/requirements.txt && \
+RUN uv export --locked --no-emit-project ${UV_EXPORT_ARGS} -o /tmp/requirements.txt && \
   uv pip install --system --python /usr/bin/python3.14 --no-config --require-hashes --no-cache -r /tmp/requirements.txt && \
   rm /tmp/requirements.txt
 
