@@ -43,8 +43,8 @@ The `one-login.localhost` simulator hostname resolves to the published simulator
 
 ```shell
 make up_one_login_simulator
-poetry run python manage.py migrate
-poetry run python manage.py runserver 0.0.0.0:8010
+uv run python manage.py migrate
+uv run python manage.py runserver 0.0.0.0:8010
 ```
 
 Open `http://localhost:8010` and select **Sign in**. The simulator runs in interactive mode and displays a response form pre-populated with a production-shaped subject, `alice@example.gov.uk`, a verified email and the `P0` confidence level requested by WebCAF. Core Identity VC is an empty object and postal address details are blank because WebCAF requests authentication without identity verification. Select **Continue** to use those values, or edit them to exercise another response.
@@ -66,7 +66,7 @@ For a new user, first add the exact email domain to **Allowed email domains** in
 An opt-in smoke test performs a real authorization, token, JWKS and UserInfo exchange against the running simulator. It uses an isolated Django test database and restores the simulator's configured redirect URLs:
 
 ```shell
-RUN_ONE_LOGIN_SIMULATOR_TESTS=true poetry run python manage.py test tests.test_one_login_simulator
+RUN_ONE_LOGIN_SIMULATOR_TESTS=true uv run python manage.py test tests.test_one_login_simulator
 ```
 
 The test is skipped during normal local test runs. Run it only after starting the simulator and configuring `webcaf/.env` with the simulator values above. It supports both interactive and non-interactive simulator modes and runs automatically in pull-request CI.
@@ -115,10 +115,10 @@ Create `webcaf/.env` from `webcaf/.env.example`, set `SSO_MODE=one-login`, and r
 Install dependencies, then start the local PostgreSQL database, Valkey and WebCAF with:
 
 ```shell
-poetry install
+uv sync
 docker compose up -d postgres redis
-poetry run python manage.py migrate
-poetry run python manage.py runserver 0.0.0.0:8010
+uv run python manage.py migrate
+uv run python manage.py runserver 0.0.0.0:8010
 ```
 
 Open `http://localhost:8010`. The normal DEX Docker Compose workflow uses the same host port, so stop that stack before running the One Login integration server.

@@ -1,7 +1,9 @@
 # A version tag, not a digest, so each rebuild picks up security patches.
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
-ARG POETRY_ARGS="--no-root --no-ansi --only main"
+# Production installs the runtime dependencies only. docker-compose.yml passes
+# an empty value so the local web container also gets the dev tools.
+ARG UV_EXPORT_ARGS="--no-dev"
 
 ARG GOV_UK_ONE_LOGIN_PRIVATE_KEY
 
@@ -17,16 +19,23 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 
 RUN useradd -u 1000 -m webcaf
 
-# Poetry is pinned to the version that wrote poetry.lock. gunicorn comes from
-# the lock with the other runtime dependencies.
-RUN pip install --no-cache-dir poetry==2.5.1
+# uv is a single binary, at the version that wrote uv.lock.
+COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /usr/local/bin/uv
 
-COPY pyproject.toml poetry.lock /app/
+COPY pyproject.toml uv.lock /app/
 
 WORKDIR /app
 
-RUN poetry config virtualenvs.create false && \
-  poetry install ${POETRY_ARGS}
+# Install exactly what uv.lock says, hashes checked, into the app's Python
+# (python3 on Amazon Linux is the OS's own 3.9). gunicorn comes from the lock.
+# --locked fails the build if uv.lock is out of step with pyproject.toml,
+# as poetry install did; --frozen would install a stale lock silently.
+# --no-config: the [tool.uv] settings in pyproject.toml are already applied
+# in uv.lock; read again here they would add an unpinned line that
+# --require-hashes rejects.
+RUN uv export --locked --no-emit-project ${UV_EXPORT_ARGS} -o /tmp/requirements.txt && \
+  uv pip install --system --python /usr/bin/python3.14 --no-config --require-hashes --no-cache -r /tmp/requirements.txt && \
+  rm /tmp/requirements.txt
 
 COPY manage.py /app/
 COPY webcaf /app/webcaf

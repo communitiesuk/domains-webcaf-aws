@@ -18,7 +18,8 @@ x-api-base: &api-base
   build:
     context: .
     args:
-      POETRY_ARGS: "--no-root --no-ansi"
+      # Empty: the local containers also get the dev tools (pytest, behave).
+      UV_EXPORT_ARGS: ""
 
 services:
   web:
