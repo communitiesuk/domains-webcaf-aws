@@ -21,13 +21,13 @@ test:
 	docker compose down
 lint:
 	#	Check formatting and linting without changing anything.
-	poetry run pre-commit run --hook-stage manual ruff-check-only --all-files
-	poetry run pre-commit run --hook-stage manual ruff-format-check --all-files
+	uv run pre-commit run --hook-stage manual ruff-check-only --all-files
+	uv run pre-commit run --hook-stage manual ruff-format-check --all-files
 
 format:
 	#	Apply Ruff's fixes and formatting across the repository.
-	poetry run pre-commit run ruff-check --all-files || true
-	poetry run pre-commit run ruff-format --all-files || true
+	uv run pre-commit run ruff-check --all-files || true
+	uv run pre-commit run ruff-format --all-files || true
 
 build:
 	BUILDKIT_PROGRESS=plain docker compose build
