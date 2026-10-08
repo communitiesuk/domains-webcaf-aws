@@ -17,17 +17,17 @@ clear-db:
 	docker compose down && docker container prune -f && docker volume rm domains-webcaf_postgres-data
 
 test:
-	docker compose run --rm --service-ports --remove-orphans --entrypoint "poetry run pytest --html=reports/pytest-report.html --self-contained-html" web
+	docker compose run --rm --service-ports --remove-orphans --entrypoint "pytest --html=reports/pytest-report.html --self-contained-html" web
 	docker compose down
 lint:
 	#	Check formatting and linting without changing anything.
-	pre-commit run --hook-stage manual ruff-check-only --all-files
-	pre-commit run --hook-stage manual ruff-format-check --all-files
+	uv run pre-commit run --hook-stage manual ruff-check-only --all-files
+	uv run pre-commit run --hook-stage manual ruff-format-check --all-files
 
 format:
 	#	Apply Ruff's fixes and formatting across the repository.
-	pre-commit run ruff-check --all-files || true
-	pre-commit run ruff-format --all-files || true
+	uv run pre-commit run ruff-check --all-files || true
+	uv run pre-commit run ruff-format --all-files || true
 
 build:
 	BUILDKIT_PROGRESS=plain docker compose build
@@ -80,4 +80,4 @@ up_one_login_simulator:
 	$(MAKE) one_login_user PRESET=alice
 
 one_login_user:
-	poetry run python -m features.one_login_simulator $(or $(PRESET),alice)
+	uv run python -m features.one_login_simulator $(or $(PRESET),alice)

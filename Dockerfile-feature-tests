@@ -1,36 +1,50 @@
 # Playwright base image with all browser dependencies pre-installed
-FROM mcr.microsoft.com/playwright/python:v1.55.0-jammy
+# Matches the Playwright version in uv.lock, so the browsers fit the library.
+FROM mcr.microsoft.com/playwright/python:v1.63.0-noble
 
-# Install Python 3.12 via deadsnakes PPA
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    software-properties-common gnupg \
-    && add-apt-repository ppa:deadsnakes/ppa -y \
+# Install Python 3.14 via deadsnakes PPA. The PPA is added by hand rather
+# than with add-apt-repository: software-properties-common pulls in Ubuntu's
+# python3-cryptography and python3-jwt, which cannot be uninstalled, so the
+# dependency install fails when the lock asks for other versions.
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gnupg \
+    && install -d -m 0755 /etc/apt/keyrings \
+    && curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xF23C5A6CF475977595C89F51BA6932366A755776" \
+       | gpg --dearmor -o /etc/apt/keyrings/deadsnakes.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/deadsnakes.gpg] https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) main" \
+       > /etc/apt/sources.list.d/deadsnakes.list \
     && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    python3.12 python3.12-venv python3.12-dev \
+    python3.14 python3.14-venv python3.14-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Point python3 to 3.12 and install pip
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 20 && \
+# Point python3 to 3.14 and install pip
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.14 20 && \
     curl -sS https://bootstrap.pypa.io/get-pip.py | python3 && \
     python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
 WORKDIR /app
 
-# Install Poetry
-RUN curl -sSL https://install.python-poetry.org | python3 - && \
-    ln -s /root/.local/bin/poetry /usr/local/bin/poetry
+# uv is a single binary, at the version that wrote uv.lock.
+COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /usr/local/bin/uv
 
-# Install deps early for better caching
-COPY pyproject.toml poetry.lock ./
-RUN poetry config virtualenvs.create false && poetry install --no-root --no-ansi
+# Install deps early for better caching: everything in uv.lock, dev tools
+# included, into the image's Python 3.14.
+# --locked fails the build if uv.lock is out of step with pyproject.toml,
+# as poetry install did; --frozen would install a stale lock silently.
+# --no-config: the [tool.uv] settings in pyproject.toml are already applied
+# in uv.lock; read again here they would add an unpinned line that
+# --require-hashes rejects.
+COPY pyproject.toml uv.lock ./
+RUN uv export --locked --no-emit-project -o /tmp/requirements.txt && \
+    uv pip install --system --python /usr/bin/python3.14 --no-config --require-hashes --no-cache -r /tmp/requirements.txt && \
+    rm /tmp/requirements.txt
 
 # Set Playwright browsers path outside /app to avoid volume mount overwriting
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Install Playwright browsers for Python 3.12
-RUN poetry run playwright install chromium --with-deps && \
+# Install Playwright browsers
+RUN playwright install chromium --with-deps && \
     echo "Playwright installation complete" && \
-    poetry run playwright --version
+    playwright --version
 
 # Copy only the application and Behave sources needed at runtime.
 COPY manage.py behave.ini ./

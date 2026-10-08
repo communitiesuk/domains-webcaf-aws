@@ -24,14 +24,14 @@ The pre-commit `check-yaml` hook validates YAML syntax and catches duplicate key
 when changing CAF 3.2 because they cover different classes of error:
 
 ```shell
-poetry run python -m unittest tests.test_yaml
-poetry run pre-commit run check-yaml --files frameworks/cyber-assessment-framework-v3.2.yaml
+uv run python -m unittest tests.test_yaml
+uv run pre-commit run check-yaml --files frameworks/cyber-assessment-framework-v3.2.yaml
 ```
 
 The structural unit test is not yet parameterised for CAF 4.0. Run the YAML hook when changing that definition:
 
 ```shell
-poetry run pre-commit run check-yaml --files frameworks/cyber-assessment-framework-v4.0.yaml
+uv run pre-commit run check-yaml --files frameworks/cyber-assessment-framework-v4.0.yaml
 ```
 
 ## Reference scripts

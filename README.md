@@ -2,7 +2,7 @@
 
 [![Integration tests](https://github.com/communitiesuk/domains-webcaf-aws/actions/workflows/pull-request.yml/badge.svg?branch=main)](https://github.com/communitiesuk/domains-webcaf-aws/actions/workflows/pull-request.yml)
 [![Feature tests](https://github.com/communitiesuk/domains-webcaf-aws/actions/workflows/feature-tests.yml/badge.svg?branch=main)](https://github.com/communitiesuk/domains-webcaf-aws/actions/workflows/feature-tests.yml)
-![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Python 3.14](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)
 
 WebCAF enables users to assess their organisations against the NCSC Cyber Assessment Framework (CAF). Assessments
 retain the CAF version with which they were created, allowing multiple framework versions to remain in use.
@@ -16,12 +16,12 @@ The containerised development workflow requires:
 
 Running Django or repository tooling directly on the host also requires:
 
-- Python 3.12, as pinned in `.python-version`
-- [Poetry](https://python-poetry.org/docs/#installation)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) 0.12.23
 - The [native libraries required by WeasyPrint](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#installation),
   including Pango (`brew install pango` on macOS)
 
-Use a recent Docker Compose release. The feature-test Compose files use the `!override` and `!reset` YAML tags.
+uv uses `.python-version` to install and run Python 3.14. Use a recent Docker Compose release; the feature-test Compose
+files use the `!override` and `!reset` YAML tags.
 
 ## Run the application in Docker
 
@@ -33,8 +33,8 @@ docker compose up
 
 Open WebCAF at [http://localhost:8010](http://localhost:8010). The default stack contains:
 
-- `postgres`: PostgreSQL 18, exposed to the host on port `54321`
-- `redis`: Valkey 9.0, exposed to the host on port `6379`
+- `postgres`: PostgreSQL 18.3, exposed to the host on port `54321`
+- `redis`: Valkey 9.0.6, exposed to the host on port `6379`
 - `one-login-simulator`: the local GOV.UK One Login provider, exposed on port `3000`
 - `init`: a one-shot service that runs `makemigrations`, `collectstatic`, and `migrate`
 - `web`: WebCAF served by Gunicorn with source reloading enabled
@@ -60,16 +60,16 @@ Create the local environment file and install the Python dependencies before sta
 
 ```shell
 cp webcaf/.env.example webcaf/.env
-poetry install
-poetry run pre-commit install
+uv sync
+uv run pre-commit install
 make up_one_login_simulator
-poetry run python manage.py migrate
-poetry run python manage.py runserver 0.0.0.0:8010
+uv run python manage.py migrate
+uv run python manage.py runserver 127.0.0.1:8010
 ```
 
 The host server must use port `8010` because that port is registered for the local authentication callbacks.
-`make up_one_login_simulator` starts PostgreSQL, Valkey, and the simulator, and configures the Alice preset. It requires
-the Poetry environment to be installed because the preset is applied by a Python helper.
+`make up_one_login_simulator` starts PostgreSQL, Valkey, and the simulator, and configures the Alice preset. Run
+`uv sync` first because the preset helper uses the uv-managed development environment.
 
 ## Authentication
 
@@ -93,8 +93,8 @@ containerised `web` service does not take port `8010`:
 
 ```shell
 docker compose --profile dex up -d --wait postgres redis oauth
-poetry run python manage.py migrate
-poetry run python manage.py runserver 0.0.0.0:8010
+uv run python manage.py migrate
+uv run python manage.py runserver 127.0.0.1:8010
 ```
 
 The local DEX users are defined in `oauth-stub/config.yaml`; their development-only password is `password`.
@@ -107,8 +107,8 @@ integration-environment workflow, and the application configuration contract.
 The following commands are for local development only. Run them from the host when using the host workflow:
 
 ```shell
-poetry run python manage.py add_organisations
-poetry run python manage.py add_local_seed_data
+uv run python manage.py add_organisations
+uv run python manage.py add_local_seed_data
 ```
 
 For a running containerised application, run the equivalent commands in `web`:
@@ -147,27 +147,36 @@ Administrators must create the next configuration before the current period ends
 only assessments created afterwards. See [Managing assessment period cutoff dates](docs/MANAGING_CUTOFF_DATES.md) and
 the [framework definition guide](frameworks/README.md).
 
-## Code quality
+## Dependencies and code quality
+
+`pyproject.toml` defines the supported dependency ranges and `uv.lock` records the exact versions installed locally,
+in CI, and in application images. Use uv 0.12.23, the version that wrote the lock. `uv sync` creates `.venv` with
+Python 3.14, downloading Python when necessary.
+
+CI runs `uv lock --check`. After changing `pyproject.toml`, run `uv lock` and commit both files. Add a runtime dependency
+with `uv add <package>` or development tooling with `uv add --dev <package>`. Production images install runtime
+dependencies only; local Compose images also include development tools.
+
+Dockerfile base images use version tags so rebuilding picks up patches published under the selected tag. Update image
+tags deliberately when moving to a new version.
 
 Ruff handles linting, import sorting, and formatting. Its configuration is in `pyproject.toml` under `[tool.ruff]`.
-Run the Make targets through Poetry so that they use the pre-commit executable installed with the development
-dependencies:
+The Make targets invoke the Ruff hooks through uv and use the version pinned in `.pre-commit-config.yaml`:
 
 ```shell
-poetry run make lint    # report linting and formatting problems without changing files
-poetry run make format  # apply Ruff fixes and formatting
+make lint    # report linting and formatting problems without changing files
+make format  # apply Ruff fixes and formatting
 ```
 
-Both targets run the Ruff hooks from `.pre-commit-config.yaml`, ensuring the same pinned Ruff version is used locally
-and in CI. The normal commit-stage Ruff hooks apply fixes; `make lint` uses check-only hooks. Mypy and detect-secrets
-continue to run as separate pre-commit hooks.
+The normal commit-stage Ruff hooks apply fixes; `make lint` uses check-only hooks. Mypy and detect-secrets continue to
+run as separate pre-commit hooks.
 
 ## Tests and checks
 
 Run all pre-commit checks before the test suites:
 
 ```shell
-poetry run pre-commit run --all-files
+uv run pre-commit run --all
 ```
 
 Run the containerised pytest suite with:
@@ -183,7 +192,7 @@ the target can leave supporting services running; use `docker compose down` to c
 After starting PostgreSQL, Valkey, and the One Login simulator, an individual test can also run on the host:
 
 ```shell
-poetry run pytest tests/<test-file>.py::<test-name>
+uv run pytest tests/<test-file>.py::<test-name>
 ```
 
 Run the isolated browser suites with:

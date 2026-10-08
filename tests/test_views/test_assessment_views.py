@@ -46,6 +46,18 @@ class TestCreateAssessmentViews(SetupAssessmentTestData):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "assessment/choose-review-type.html")
 
+    def test_foreign_session_profile_cannot_establish_assessment_context(self):
+        foreign_user = self.org_map["Medium organisation"]["users"]["organisation_user"]
+        foreign_profile = foreign_user.profiles.get()
+        session = self.client.session
+        session["current_profile_id"] = foreign_profile.id
+        session.save()
+
+        response = self.client.get(self.create_assessment_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("current_profile_id", self.client.session)
+
     def test_profile_baseline(self):
         """test selection of baseline caf profile, results in simply returning to the draft asssessment page"""
 

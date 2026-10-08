@@ -27,13 +27,59 @@ class SessionUtil:
         """
         from webcaf.webcaf.models import UserProfile
 
+        if hasattr(request, "current_profile"):
+            return request.current_profile
+
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return None
+
         user_profile_id = request.session.get("current_profile_id")
+        if not user_profile_id:
+            return None
+
         try:
-            if user_profile_id:
-                return UserProfile.objects.get(id=user_profile_id)
-        except Exception:  # type: ignore[catching-any]
-            SessionUtil.logger.error(f"Unable to retrieve user profile with id {user_profile_id}")
-        return None
+            profile = UserProfile.objects.select_related("organisation").get(id=user_profile_id, user=user)
+        except (TypeError, ValueError, UserProfile.DoesNotExist):
+            SessionUtil.logger.warning("Unable to retrieve user profile with id %s", user_profile_id)
+            request.session.pop("current_profile_id", None)
+            return None
+
+        request.current_profile = profile
+        return profile
+
+    @staticmethod
+    def resolve_current_user_profile(request) -> Optional["UserProfile"]:
+        """Select an authenticated user's active profile from validated session or cookie state."""
+        from webcaf.webcaf.models import UserProfile
+
+        if hasattr(request, "current_profile"):
+            return request.current_profile
+
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            request.current_profile = None
+            return None
+
+        profiles = list(UserProfile.objects.filter(user=user).select_related("organisation").order_by("id"))
+        profiles_by_id = {str(profile.id): profile for profile in profiles}
+        selected_profile = profiles_by_id.get(str(request.session.get("current_profile_id", "")))
+
+        if selected_profile is None:
+            selected_profile = profiles_by_id.get(request.COOKIES.get("last_org", ""))
+        if selected_profile is None and profiles:
+            selected_profile = profiles[0]
+
+        if selected_profile is None:
+            request.session.pop("current_profile_id", None)
+        elif request.session.get("current_profile_id") != selected_profile.id:
+            request.session["current_profile_id"] = selected_profile.id
+
+        if request.session.get("profile_count") != len(profiles):
+            request.session["profile_count"] = len(profiles)
+
+        request.current_profile = selected_profile
+        return selected_profile
 
     @staticmethod
     def get_current_assessment(request, status_to_get: str | None = "draft") -> Optional["Assessment"]:
