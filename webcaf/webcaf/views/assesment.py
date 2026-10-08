@@ -11,7 +11,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import FormView, View
 
-from webcaf.webcaf.models import Assessment, Configuration, System, UserProfile
+from webcaf.webcaf.models import Assessment, Configuration, System
 from webcaf.webcaf.utils.excel_exporter import create_assessment_template_workbook
 from webcaf.webcaf.utils.excel_importer import (
     ExcelImportError,
@@ -19,6 +19,13 @@ from webcaf.webcaf.utils.excel_importer import (
 )
 from webcaf.webcaf.utils.permission import UserRoleCheckMixin
 from webcaf.webcaf.utils.session import SessionUtil
+
+
+def get_current_user_profile(request):
+    profile = SessionUtil.get_current_user_profile(request)
+    if profile is None:
+        raise PermissionDenied("You do not have an active user profile")
+    return profile
 
 
 class BaseAssessmentForm(forms.ModelForm):
@@ -64,7 +71,7 @@ class EditAssessmentView(LoginRequiredMixin, FormView):
     def get_context_data(self, **kwargs):
         data = {}
         assessment_id = self.kwargs.get("assessment_id")
-        current_profile = UserProfile.objects.get(id=self.request.session["current_profile_id"])
+        current_profile = get_current_user_profile(self.request)
         current_organisation = current_profile.organisation
 
         assessment = Assessment.objects.get(
@@ -79,7 +86,6 @@ class EditAssessmentView(LoginRequiredMixin, FormView):
         }
         # We need to access this information later in the assessment editing stages.
         self.request.session["draft_assessment"] = draft_assessment
-        user_profile = SessionUtil.get_current_user_profile(self.request)
         configuration = Configuration.objects.get_default_config()
 
         data.update(
@@ -107,7 +113,7 @@ class EditAssessmentView(LoginRequiredMixin, FormView):
                     )
                     .union(System.objects.filter(id=assessment.system_id))
                 ),
-                "current_profile": user_profile,
+                "current_profile": current_profile,
                 "review_form": AssessmentReviewTypeForm,
                 "current_assessment_period": configuration.get_current_assessment_period(),
                 "cutoff_time": configuration.get_submission_due_date().strftime("%I:%M%p"),
@@ -119,7 +125,7 @@ class EditAssessmentView(LoginRequiredMixin, FormView):
 
     def form_valid(self, form):
         draft_assessment = self.request.session["draft_assessment"]
-        current_organisation = UserProfile.objects.get(id=self.request.session["current_profile_id"]).organisation
+        current_organisation = get_current_user_profile(self.request).organisation
         if "system" in draft_assessment and "caf_profile" in draft_assessment and "review_type" in draft_assessment:
             # If the mandatory fields are provided, then we can go ahead and
             # edit the assessment instance in the database. This enables us to
@@ -154,8 +160,8 @@ class EditAssessmentView(LoginRequiredMixin, FormView):
         """
         kwargs = super().get_form_kwargs()
         assessment_to_modify = Assessment.objects.get(id=self.kwargs.get("assessment_id"), status="draft")
-        curren_organisation = UserProfile.objects.get(id=self.request.session["current_profile_id"]).organisation
-        if assessment_to_modify.system.id not in curren_organisation.systems.values_list("id", flat=True):
+        current_organisation = get_current_user_profile(self.request).organisation
+        if assessment_to_modify.system.id not in current_organisation.systems.values_list("id", flat=True):
             self.logger.error(
                 f"The user {self.request.user} does not have access to this assessment {assessment_to_modify}"
             )
@@ -302,7 +308,7 @@ class EditAssessmentSystemView(EditAssessmentView):
 
     def form_valid(self, form):
         draft_assessment = self.request.session["draft_assessment"]
-        current_user_profile = SessionUtil.get_current_user_profile(self.request)
+        current_user_profile = get_current_user_profile(self.request)
         if form.cleaned_data["system"].organisation != current_user_profile.organisation:
             # Just to make sure that the user is sending back the correct system
             # From the allowed systems for the organisation.
@@ -349,8 +355,7 @@ class CreateAssessmentView(LoginRequiredMixin, FormView):
         from webcaf.webcaf.frameworks import routers
 
         data = super().get_context_data(**kwargs)
-        profile_id = self.request.session["current_profile_id"]
-        profile = UserProfile.objects.get(user=self.request.user, id=profile_id)
+        profile = get_current_user_profile(self.request)
         data["breadcrumbs"] = [
             {"url": reverse("my-account"), "text": "My account"},
         ] + self.breadcrumbs()
@@ -407,7 +412,7 @@ class CreateAssessmentView(LoginRequiredMixin, FormView):
         :rtype: HttpResponse
         """
         draft_assessment = self.request.session["draft_assessment"]
-        current_organisation = UserProfile.objects.get(id=self.request.session["current_profile_id"]).organisation
+        current_organisation = get_current_user_profile(self.request).organisation
         if "system" in draft_assessment and "caf_profile" in draft_assessment and "review_type" in draft_assessment:
             # If the mandatory fields are provided, then we can go ahead and
             # create the assessment instance in the database. This enables us to
@@ -507,7 +512,7 @@ class CreateAssessmentSystemView(CreateAssessmentView):
 
     def form_valid(self, form):
         draft_assessment = self.request.session["draft_assessment"]
-        current_user_profile = SessionUtil.get_current_user_profile(self.request)
+        current_user_profile = get_current_user_profile(self.request)
         if form.cleaned_data["system"].organisation != current_user_profile.organisation:
             # Just to make sure that the user is sending back the correct system
             # From the allowed systems for the organisation.
