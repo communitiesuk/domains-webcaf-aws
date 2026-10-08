@@ -47,7 +47,7 @@ services:
 
   postgres:
     platform: linux/amd64
-    image: postgres:18-alpine
+    image: postgres:18.3-alpine
     ports:
       - 54321:5432
     environment:
@@ -75,7 +75,7 @@ services:
 
   oauth:
     profiles: [ "dex" ]
-    image: ghcr.io/dexidp/dex:v2.37.0
+    image: ghcr.io/dexidp/dex:v2.45.1
     ports:
       - "5556:5556"  # Dex HTTP server
     volumes:

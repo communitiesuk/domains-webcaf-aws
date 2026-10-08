@@ -1,4 +1,4 @@
-FROM ghcr.io/dexidp/dex:v2.37.0
+FROM ghcr.io/dexidp/dex:v2.45.1
 
 COPY oauth-stub/config.yaml /etc/dex/config.yaml
 

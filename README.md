@@ -118,7 +118,7 @@ make clear-db       # tear everything down and drop the Postgres volume
 
 ## Developing
 
-Make sure the python version you use is the same as in the [Dockerfile](Dockerfile) (Python 3.12).
+Make sure the python version you use is the same as in the [Dockerfile](Dockerfile) (Python 3.14).
 
 The database credentials are defined in `docker-compose.yml`: the Postgres container uses the user/password/database `webcaf`/`webcaf`/`webcaf` and is exposed on the host at port `54321`. Valkey is exposed on port `6379`. To run Django on the host with the default One Login simulator, create `webcaf/.env` from `webcaf/.env.example`, then start its dependencies:
 
@@ -132,9 +132,9 @@ WebCAF stores Django sessions exclusively in Valkey. AWS environments must provi
 Then run in a terminal
 
 ``` shell
-pip install poetry pre-commit
+pip install poetry==2.5.1
 poetry install
-pre-commit install
+poetry run pre-commit install
 poetry run python manage.py migrate
 ```
 
@@ -160,6 +160,19 @@ and to run the local server:
 ``` shell
 poetry run python manage.py runserver
 ```
+
+### Dependency and image versions
+
+`pyproject.toml` states the versions WebCAF supports; `poetry.lock` fixes the exact
+versions installed everywhere: locally, in CI and in the deployed image. Use Poetry
+2.5.1, the version that wrote the lock. CI runs `poetry check --lock`, so after
+changing `pyproject.toml` run `poetry lock` and commit both files.
+
+Docker base images use version tags, not digests, so a rebuild picks up the
+security patches published under that tag. To move to a new version, change the tag.
+
+Local and CI images should match what runs in AWS: Valkey 9.0 (ElastiCache) and
+Postgres 18.3 (RDS).
 
 ### Running tests
 
