@@ -35,6 +35,7 @@ print(
             "forwarded_https_secure": forwarded_https.is_secure(),
             "forwarded_https_url": forwarded_https.build_absolute_uri("/one-login/callback/"),
             "forwarded_http_secure": forwarded_http.is_secure(),
+            "forwarded_http_url": forwarded_http.build_absolute_uri("/one-login/callback/"),
             "local_http_secure": local_http.is_secure(),
             "local_http_url": local_http.build_absolute_uri("/"),
             "session_cookie_secure": settings.SESSION_COOKIE_SECURE,
@@ -85,6 +86,10 @@ class SecuritySettingsTest(SimpleTestCase):
         for debug, result in self.settings_by_debug.items():
             with self.subTest(debug=debug):
                 self.assertFalse(result["forwarded_http_secure"])
+                self.assertEqual(
+                    result["forwarded_http_url"],
+                    "http://localhost:8010/one-login/callback/",
+                )
                 self.assertFalse(result["local_http_secure"])
                 self.assertEqual(result["local_http_url"], "http://localhost:8010/")
 
