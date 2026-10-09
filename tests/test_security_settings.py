@@ -5,6 +5,9 @@ import sys
 
 from django.test import SimpleTestCase
 
+# Conditional settings are evaluated when the settings module is first imported.
+# override_settings(DEBUG=...) would change DEBUG afterward without re-running those branches,
+# so this probe runs in a fresh interpreter for each startup mode.
 REQUEST_SECURITY_SCRIPT = """
 import json
 
@@ -51,6 +54,8 @@ class SecuritySettingsTest(SimpleTestCase):
 
     @staticmethod
     def load_settings(debug):
+        # Explicit environment values take precedence over the local .env file and
+        # make each subprocess represent a deterministic Django startup mode.
         environment = os.environ.copy()
         environment["DEBUG"] = str(debug)
         environment["DJANGO_SETTINGS_MODULE"] = "webcaf.settings"
