@@ -395,8 +395,11 @@ ALLOW_LOGOUT_GET_METHOD = True
 LOGIN_REDIRECT_URL = "/my-account/"
 LOGIN_REDIRECT_URL_FAILURE = "/authentication-error/"
 
+# This is safe only while the application is reachable through a trusted proxy
+# that controls X-Forwarded-Proto. See docs/GOV_UK_ONE_LOGIN.md.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 if not DEBUG:
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     CSRF_COOKIE_SECURE = True
     CSRF_COOKIE_HTTPONLY = True
     CSRF_TRUSTED_ORIGINS = [f"https://{os.environ.get('DOMAIN_NAME', 'localhost')}"]

@@ -187,4 +187,6 @@ Redirect URI:             https://<sandbox-host>/one-login/callback/
 Post-logout redirect URI: https://<sandbox-host>/
 ```
 
-The application builds callback URLs from the incoming request and trusts `X-Forwarded-Proto` outside debug mode. The load balancer must preserve the public host and set `X-Forwarded-Proto=https`.
+The application builds callback and post-logout URLs from the incoming request. It uses `X-Forwarded-Proto` to identify HTTPS requests independently of debug mode, so the load balancer must preserve the public host and set an authoritative `X-Forwarded-Proto=https` value. Requests without that value, including normal local development over HTTP, remain HTTP.
+
+This configuration assumes the application can only be reached through the trusted load balancer or proxy, and that the final trusted proxy replaces any client-supplied `X-Forwarded-Proto` value. Django does not verify the source of this header. If an untrusted client can reach the application directly, a client-supplied value must not be trusted; network controls must prevent direct access to the application target.
