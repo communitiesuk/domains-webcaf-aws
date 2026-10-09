@@ -37,6 +37,23 @@ class LogoutViewTest(TestCase):
         )
         self.assertNotIn("_auth_user_id", self.client.session)
 
+    @override_settings(SSO_MODE="one-login")
+    @patch("webcaf.webcaf.views.general.get_one_login_logout_url")
+    def test_one_login_logout_uses_forwarded_https_for_redirect_uri(self, get_logout_url):
+        session = self.client.session
+        session["_one_login_token"] = {"id_token": "one-login-id-token"}
+        session.save()
+        get_logout_url.return_value = "https://example.com/logout"
+
+        response = self.client.post(
+            reverse("logout"),
+            HTTP_HOST="webcaf.example.gov.uk",
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+
+        self.assertEqual(get_logout_url.call_args.args[1], "https://webcaf.example.gov.uk/")
+        self.assertRedirects(response, "https://example.com/logout", fetch_redirect_response=False)
+
     @override_settings(
         SSO_MODE="local",
         OIDC_OP_LOGOUT_ENDPOINT="http://localhost:5556/auth/logout",
