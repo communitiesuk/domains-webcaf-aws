@@ -11,11 +11,11 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import DetailView, TemplateView, UpdateView
-from weasyprint import default_url_fetcher
 
 from webcaf import settings
 from webcaf.webcaf.models import Configuration, Review, Settings, System, UserProfile
 from webcaf.webcaf.notification import send_notify_email
+from webcaf.webcaf.pdf import StaticFileURLFetcher
 from webcaf.webcaf.utils import mask_email
 from webcaf.webcaf.utils.session import SessionUtil
 from webcaf.webcaf.utils.to_spreadsheet import review_to_excel
@@ -655,14 +655,11 @@ class DownloadReport(ShowReportView):
 
         html_string = render_to_string(self.get_template_names(), context, request=request)
 
-        # Generate PDF
-        # Need to set the absolute path to the static files as pdf generation does not work with relative paths
-        def custom_url_fetcher(url, timeout=10, ssl_context=None, http_headers=None):
-            return default_url_fetcher(
-                Path(settings.STATIC_ROOT + "/" + url.split("assets/")[-1]).as_uri(), timeout, ssl_context, http_headers
-            )
-
-        pdf = HTML(string=html_string, url_fetcher=custom_url_fetcher, base_url=Path(settings.STATIC_ROOT)).write_pdf()
+        # Generate PDF. Static assets are loaded from STATIC_ROOT, as PDF
+        # generation does not work with the relative paths Django emits.
+        pdf = HTML(
+            string=html_string, url_fetcher=StaticFileURLFetcher(), base_url=Path(settings.STATIC_ROOT)
+        ).write_pdf()
 
         # Return as PDF response
         response = HttpResponse(pdf, content_type="application/pdf")

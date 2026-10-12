@@ -99,8 +99,9 @@ class UserProfileView(UserRoleCheckMixin, UpdateView):
         # Capture the first instance of the user input, where we would get flagged
         # for unconfirmed changes.
         if len(form.errors) == 1 and "action" in form.errors:
-            current_profile_id = self.request.session.get("current_profile_id")
-            current_profile = UserProfile.objects.filter(user=self.request.user, id=current_profile_id).get()
+            current_profile = SessionUtil.get_current_user_profile(self.request)
+            if current_profile is None:
+                raise PermissionDenied("You do not have an active user profile")
             return render(self.request, "users/user-confirm.html", {"form": form, "current_profile": current_profile})
         # Remove the action field from the form. This is required to prevent
         # the form to be taken through the confirmation screens only.

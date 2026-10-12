@@ -14,7 +14,6 @@ from django.shortcuts import redirect
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.generic import FormView, TemplateView
-from weasyprint import default_url_fetcher
 
 from webcaf.webcaf.models import (
     Assessment,
@@ -24,6 +23,7 @@ from webcaf.webcaf.models import (
     UserProfile,
 )
 from webcaf.webcaf.notification import send_notify_email
+from webcaf.webcaf.pdf import StaticFileURLFetcher
 from webcaf.webcaf.utils import mask_email
 from webcaf.webcaf.utils.permission import UserRoleCheckMixin
 from webcaf.webcaf.utils.session import SessionUtil
@@ -379,12 +379,9 @@ class DownloadSubmittedAssessmentPdf(ViewSubmittedAssessment):
 
         # Generate PDF
         # Need to set the absolute path to the static files as pdf generation does not work with relative paths
-        def custom_url_fetcher(url, timeout=10, ssl_context=None, http_headers=None):
-            return default_url_fetcher(
-                Path(settings.STATIC_ROOT + "/" + url.split("assets/")[-1]).as_uri(), timeout, ssl_context, http_headers
-            )
-
-        pdf = HTML(string=html_string, url_fetcher=custom_url_fetcher, base_url=Path(settings.STATIC_ROOT)).write_pdf()
+        pdf = HTML(
+            string=html_string, url_fetcher=StaticFileURLFetcher(), base_url=Path(settings.STATIC_ROOT)
+        ).write_pdf()
         pdf_file = pdf
 
         # Return as PDF response

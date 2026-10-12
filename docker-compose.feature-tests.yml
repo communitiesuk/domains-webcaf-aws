@@ -37,7 +37,7 @@ services:
     secrets:
       - one-login-private-key
     healthcheck:
-      test: [ "CMD", "python3.12", "-c", "import socket; socket.create_connection(('localhost', 8000), 2).close()" ]
+      test: [ "CMD", "python3", "-c", "import socket; socket.create_connection(('localhost', 8000), 2).close()" ]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -98,7 +98,7 @@ services:
     command: > # pragma: allowlist secret
       bash -lc "
         echo 'Services ready. Starting tests...' &&
-        python3.12 -m behave -f behave_html_formatter:HTMLFormatter -o reports/report.html -D base_url=http://web:8000 $${FEATURE_TEST_ARGS}
+        python3 -m behave -f behave_html_formatter:HTMLFormatter -o reports/report.html -D base_url=http://web:8000 $${FEATURE_TEST_ARGS}
       "
 
 secrets:

@@ -6,7 +6,6 @@ x-common-application-variables: &common-application-variables
   REDIS_URL: redis://redis:6379/0
   ENVIRONMENT: 'local'
   GOOGLE_ANALYTICS_ID: GTM-TEST
-
   GOV_UK_ONE_LOGIN_CLIENT_ID: webcaf-local
   GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH: /app/tests/fixtures/one-login-simulator-private-key.pem
   GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL: http://one-login.localhost:3000/.well-known/openid-configuration
@@ -18,7 +17,8 @@ x-api-base: &api-base
   build:
     context: .
     args:
-      POETRY_ARGS: "--no-root --no-ansi"
+      # Empty: the local containers also get the dev tools (pytest, behave).
+      UV_EXPORT_ARGS: ""
 
 services:
   web:
@@ -49,7 +49,7 @@ services:
 
   postgres:
     platform: linux/amd64
-    image: postgres:18-alpine
+    image: postgres:18.3-alpine
     ports:
       - 54321:5432
     environment:
@@ -77,7 +77,7 @@ services:
 
   oauth:
     profiles: [ "dex" ]
-    image: ghcr.io/dexidp/dex:v2.37.0
+    image: ghcr.io/dexidp/dex:v2.45.1
     ports:
       - "5556:5556"  # Dex HTTP server
     volumes:

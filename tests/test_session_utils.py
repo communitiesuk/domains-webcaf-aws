@@ -4,29 +4,59 @@ from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
+from webcaf.webcaf.models import UserProfile
 from webcaf.webcaf.utils.session import SessionUtil
 
 
 class SessionUtilTests(SimpleTestCase):
     def test_get_current_user_profile_returns_profile(self):
-        request = SimpleNamespace(session={"current_profile_id": 42})
+        user = SimpleNamespace(is_authenticated=True)
+        request = SimpleNamespace(session={"current_profile_id": 42}, user=user)
         fake_profile = MagicMock()
 
-        with patch("webcaf.webcaf.models.UserProfile.objects.get", return_value=fake_profile) as mock_get:
+        with patch("webcaf.webcaf.models.UserProfile.objects.select_related") as mock_select_related:
+            mock_get = mock_select_related.return_value.get
+            mock_get.return_value = fake_profile
             result = SessionUtil.get_current_user_profile(request)
 
         self.assertIs(result, fake_profile)
-        mock_get.assert_called_once_with(id=42)
+        mock_get.assert_called_once_with(id=42, user=user)
+        self.assertIs(request.current_profile, fake_profile)
 
-    def test_get_current_user_profile_logs_and_returns_none_on_exception(self):
-        request = SimpleNamespace(session={"current_profile_id": 99})
+    def test_get_current_user_profile_rejects_foreign_or_stale_profile(self):
+        user = SimpleNamespace(is_authenticated=True)
+        request = SimpleNamespace(session={"current_profile_id": 99}, user=user)
 
-        with patch("webcaf.webcaf.models.UserProfile.objects.get", side_effect=Exception("db error")):
+        with patch("webcaf.webcaf.models.UserProfile.objects.select_related") as mock_select_related:
+            mock_select_related.return_value.get.side_effect = UserProfile.DoesNotExist
             with self.assertLogs("SessionUtil", level="WARN") as cm:
                 result = SessionUtil.get_current_user_profile(request)
 
         self.assertIsNone(result)
+        self.assertNotIn("current_profile_id", request.session)
         self.assertTrue(any("Unable to retrieve user profile with id 99" in m for m in cm.output))
+
+    def test_get_current_user_profile_returns_none_for_unauthenticated_user(self):
+        request = SimpleNamespace(
+            session={"current_profile_id": 42},
+            user=SimpleNamespace(is_authenticated=False),
+        )
+
+        with patch("webcaf.webcaf.models.UserProfile.objects.select_related") as mock_select_related:
+            result = SessionUtil.get_current_user_profile(request)
+
+        self.assertIsNone(result)
+        mock_select_related.assert_not_called()
+
+    def test_get_current_user_profile_uses_validated_request_profile(self):
+        fake_profile = MagicMock()
+        request = SimpleNamespace(current_profile=fake_profile)
+
+        with patch("webcaf.webcaf.models.UserProfile.objects.select_related") as mock_select_related:
+            result = SessionUtil.get_current_user_profile(request)
+
+        self.assertIs(result, fake_profile)
+        mock_select_related.assert_not_called()
 
     def test_get_current_assessment_returns_assessment_when_found(self):
         request = SimpleNamespace(session={"draft_assessment": {"assessment_id": 7}})

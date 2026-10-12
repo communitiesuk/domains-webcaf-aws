@@ -15,6 +15,7 @@ is registered in ``settings.MIDDLEWARE``), covering:
 """
 
 import pytest
+from django.contrib.auth.models import User
 from django.test import Client
 from django.urls import reverse
 
@@ -72,6 +73,74 @@ class TestAccountMiddlewareIntegration(BaseViewTest):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.client.session["current_profile_id"], self.first_profile.id)
         self.assertEqual(response.context["current_profile"].id, self.first_profile.id)
+
+    def test_malformed_cookie_falls_back_to_first_profile(self):
+        self.client.cookies["last_org"] = "not-a-profile-id"
+
+        response = self.client.get(reverse("my-account"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.session["current_profile_id"], self.first_profile.id)
+        self.assertEqual(response.context["current_profile"].id, self.first_profile.id)
+
+    def test_foreign_session_profile_falls_back_to_owned_profile(self):
+        foreign_user = self.org_map["Medium organisation"]["users"]["organisation_user"]
+        foreign_profile = UserProfile.objects.get(user=foreign_user)
+        session = self.client.session
+        session["current_profile_id"] = foreign_profile.id
+        session.save()
+
+        response = self.client.get(reverse("my-account"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.session["current_profile_id"], self.first_profile.id)
+        self.assertEqual(response.context["current_profile"].id, self.first_profile.id)
+
+    def test_stale_session_profile_falls_back_to_owned_profile(self):
+        session = self.client.session
+        session["current_profile_id"] = 999999
+        session.save()
+
+        response = self.client.get(reverse("my-account"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.session["current_profile_id"], self.first_profile.id)
+        self.assertEqual(response.context["current_profile"].id, self.first_profile.id)
+
+    def test_user_without_owned_profile_has_no_organisation_context(self):
+        user_without_profile = User.objects.create_user(username="no-profile-user")
+        foreign_profile = self.first_profile
+        self.client.force_login(user_without_profile)
+        session = self.client.session
+        session["current_profile_id"] = foreign_profile.id
+        session.save()
+
+        response = self.client.get(reverse("my-account"))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("current_profile_id", self.client.session)
+        self.assertEqual(self.client.session["profile_count"], 0)
+
+    def test_switches_between_profiles_owned_by_authenticated_user(self):
+        response = self.client.post(
+            reverse("change-organisation"),
+            {"profile_id": self.second_profile.id},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.session["current_profile_id"], self.second_profile.id)
+        self.assertEqual(response.context["current_profile"].id, self.second_profile.id)
+
+    def test_cannot_switch_to_foreign_profile(self):
+        self.client.get(reverse("my-account"))
+        foreign_user = self.org_map["Medium organisation"]["users"]["organisation_user"]
+        foreign_profile = UserProfile.objects.get(user=foreign_user)
+
+        response = self.client.post(reverse("change-organisation"), {"profile_id": foreign_profile.id})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.client.session["current_profile_id"], self.first_profile.id)
 
     def test_cookie_set_by_middleware_is_honoured_on_next_request(self):
         """

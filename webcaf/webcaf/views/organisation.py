@@ -173,6 +173,7 @@ class ChangeActiveProfileView(LoginRequiredMixin, TemplateView):
             profile = UserProfile.objects.filter(user=self.request.user, id=profile_id).first()
             if profile:
                 self.request.session["current_profile_id"] = profile.id
+                self.request.current_profile = profile
             else:
                 self.logger.error(f"The user {self.request.user.id} could not switch profile as not found")
                 return render(request, "user-pages/no-profile-setup.html", status=403)

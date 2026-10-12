@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.views.generic import FormView, TemplateView, UpdateView
 
 from webcaf.webcaf.forms.general import NextActionForm
-from webcaf.webcaf.models import Configuration, System, UserProfile
+from webcaf.webcaf.models import Configuration, System
 from webcaf.webcaf.utils.permission import PermissionUtil, UserRoleCheckMixin
 from webcaf.webcaf.utils.session import SessionUtil
 
@@ -88,8 +88,9 @@ class SystemView(UserRoleCheckMixin, SystemContextDataMixin, FormView):
         return ["cyber_advisor"]
 
     def form_valid(self, form):
-        current_profile_id = self.request.session.get("current_profile_id")
-        current_profile = UserProfile.objects.filter(user=self.request.user, id=current_profile_id).get()
+        current_profile = SessionUtil.get_current_user_profile(self.request)
+        if current_profile is None:
+            raise PermissionDenied("You do not have an active user profile")
         if form.cleaned_data["action"] == "change":
             return self.form_invalid(form)
 

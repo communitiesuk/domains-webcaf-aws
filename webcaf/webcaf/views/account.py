@@ -1,11 +1,10 @@
-import logging
-
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.generic import TemplateView
 
 from webcaf.webcaf.models import Assessment, System, UserProfile
+from webcaf.webcaf.utils.session import SessionUtil
 
 
 class AccountView(LoginRequiredMixin, TemplateView):
@@ -21,7 +20,6 @@ class AccountView(LoginRequiredMixin, TemplateView):
     """
 
     template_name = "user-pages/my-account.html"
-    logger = logging.getLogger("AccountView")
 
     def get_context_data(self, **kwargs):
         """
@@ -31,7 +29,7 @@ class AccountView(LoginRequiredMixin, TemplateView):
         :return:
         """
         data = super().get_context_data(**kwargs)
-        current_profile = self.get_or_pick_user_profile()
+        current_profile = SessionUtil.resolve_current_user_profile(self.request)
         if current_profile:
             # Data used by the page.
             data["current_profile"] = current_profile
@@ -65,38 +63,7 @@ class AccountView(LoginRequiredMixin, TemplateView):
         return data
 
     def get_or_pick_user_profile(self) -> UserProfile | None:
-        if self.request.user.is_authenticated:
-            current_profile_id = self.request.session.get("current_profile_id")
-            profile_id_from_cookie: str | None = self.request.COOKIES.get("last_org")
-            # On the landing for the very first time, select the first profile to be displayed
-            # The user is allowed to change this later through the screen
-            profiles = list(UserProfile.objects.filter(user=self.request.user).order_by("id").all())
-            if current_profile_id is None:
-                if profiles:
-                    if profile_id_from_cookie is None:
-                        # No cookie present, default to first profile
-                        current_profile_id = int(profiles[0].id)
-                    else:
-                        # Make sure the id is valid by checking against the existing profiles for the user
-                        last_profile = next(
-                            filter(lambda profile: profile.id == int(profile_id_from_cookie), profiles), None
-                        )
-                        if last_profile is None:
-                            self.logger.warning(
-                                f"Invalid profile ID {profile_id_from_cookie} for user {self.request.user.id}. Defaulting to first profile."
-                            )
-                            current_profile_id = int(profiles[0].id)
-                        else:
-                            self.logger.info(
-                                f"Using profile ID {profile_id_from_cookie} (from cookie) for user {self.request.user.id}"
-                            )
-                            current_profile_id = last_profile.id
-                else:
-                    return None
-            self.request.session["current_profile_id"] = current_profile_id
-            self.request.session["profile_count"] = len(profiles)
-            return UserProfile.objects.filter(user=self.request.user, id=str(current_profile_id)).first()
-        return None
+        return SessionUtil.resolve_current_user_profile(self.request)
 
     def get(self, request, *args, **kwargs):
         """

@@ -118,7 +118,7 @@ make clear-db       # tear everything down and drop the Postgres volume
 
 ## Developing
 
-Make sure the python version you use is the same as in the [Dockerfile](Dockerfile) (Python 3.12).
+Make sure the python version you use is the same as in the [Dockerfile](Dockerfile) (Python 3.14).
 
 The database credentials are defined in `docker-compose.yml`: the Postgres container uses the user/password/database `webcaf`/`webcaf`/`webcaf` and is exposed on the host at port `54321`. Valkey is exposed on port `6379`. To run Django on the host with the default One Login simulator, create `webcaf/.env` from `webcaf/.env.example`, then start its dependencies:
 
@@ -129,13 +129,13 @@ make up_one_login_simulator
 
 WebCAF stores Django sessions exclusively in Valkey. AWS environments must provide `REDIS_URL` for the managed ElastiCache for Valkey endpoint, using `rediss://` when in-transit encryption is enabled. Production targets Valkey 9.0, matching the `valkey/valkey:9.0.6-alpine` image used locally and in CI. Valkey connection and socket operations time out after 5 seconds so an unavailable cache fails promptly instead of indefinitely blocking application workers.
 
-Then run in a terminal
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) 0.12.23,
+then run in a terminal
 
 ``` shell
-pip install poetry pre-commit
-poetry install
-pre-commit install
-poetry run python manage.py migrate
+uv sync
+uv run pre-commit install
+uv run python manage.py migrate
 ```
 
 ### Code quality
@@ -148,7 +148,7 @@ make lint     # report problems without changing anything
 make format   # apply Ruff's fixes and formatting
 ```
 
-Both run through pre-commit, which comes with the Poetry dev dependencies, so
+Both run through pre-commit, which comes with the dev dependencies, so
 they use the same pinned Ruff version as CI. `make lint` only reports; the hooks
 that run automatically on commit apply fixes.
 
@@ -158,8 +158,26 @@ continue to run as separate hooks.
 and to run the local server:
 
 ``` shell
-poetry run python manage.py runserver
+uv run python manage.py runserver
 ```
+
+### Dependency and image versions
+
+`pyproject.toml` states the versions WebCAF supports; `uv.lock` fixes the exact
+versions installed everywhere: locally, in CI and in the deployed image. Use uv
+0.12.23, the version that wrote the lock. `uv sync` creates `.venv` with Python
+3.14 (from `.python-version`), downloading it if needed. CI runs `uv lock --check`,
+so after changing `pyproject.toml` run `uv lock` and commit both files. To add a
+dependency, use `uv add <package>` (or `uv add --dev <package>` for tooling).
+
+The production image installs the runtime dependencies only (`--no-dev`); the local
+Compose containers also get the dev tools.
+
+Docker base images use version tags, not digests, so a rebuild picks up the
+security patches published under that tag. To move to a new version, change the tag.
+
+Local and CI images should match what runs in AWS: Valkey 9.0 (ElastiCache) and
+Postgres 18.3 (RDS).
 
 ### Running tests
 

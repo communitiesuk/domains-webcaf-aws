@@ -6,55 +6,63 @@ authors = [
     { name = "Cyber and domain protection team" }
 ]
 readme = "README.md"
-requires-python = ">=3.12,<4"
+requires-python = ">=3.14,<3.15"
 dependencies = [
-    "django (>=5.1.13,<5.2)",
-    "whitenoise (>=6.9.0,<7.0.0)",
-    "django-environ (>=0.12.0,<0.13.0)",
-    "python-dotenv (>=1.1.0,<2.0.0)",
+    "django (>=5.2.17,<5.3)",
+    "whitenoise (>=6.12.0,<7.0.0)",
+    "django-environ (>=0.14.0,<0.15.0)",
+    "python-dotenv (>=1.2.4,<2.0.0)",
     "django-csp (>=4.0,<5.0)",
-    "govuk-frontend-django (==0.15.1)",
-    "psycopg[binary] (>=3.2.9,<4.0.0)",
-    "pyyaml (>=6.0.2,<7.0.0)",
-    "mozilla-django-oidc (>=4.0.1,<5.0.0)",
-    "govuk-onelogin-django (==0.4.21)",
+    "govuk-frontend-django (>=0.22.0,<0.23.0)",
+    "psycopg[binary] (>=3.3.6,<4.0.0)",
+    "pyyaml (>=6.0.3,<7.0.0)",
+    "mozilla-django-oidc (>=5.0.2,<6.0.0)",
+    "govuk-onelogin-django (>=0.5.0,<0.6.0)",
     "django-multiselectfield (>=1.0.1,<2.0.0)",
     "openpyxl (>=3.1.5,<4.0.0)",
-    "django-simple-history (>=3.10.1,<4.0.0)",
-    "django-axes (>=8.0.0,<9.0.0)",
-    "weasyprint (>=66.0,<67.0)",
-    "sentry-sdk[django] (>=2.8.0,<3.0.0)",
-    "django-otp (==1.6.1)",
-    "notifications-python-client (==10.0.1)",
-    "fonttools (>=4,<5)",
+    "django-simple-history (>=3.13.0,<4.0.0)",
+    "django-axes (>=8.3.1,<9.0.0)",
+    "weasyprint (>=70.0,<71.0)",
+    "sentry-sdk[django] (>=2.71.0,<3.0.0)",
+    "django-otp (>=1.7.3,<2.0.0)",
+    "notifications-python-client (>=12.2.0,<13.0.0)",
+    "fonttools (>=4.66.1,<5)",
     "pypdf (>=6.19.0,<7)",
-    "charset-normalizer (>=3.4.5,<4.0.0)",
-    "boto3 (>=1.42.73,<2.0.0)",
-    "boto3-stubs (>=1.42.73,<2.0.0)",
+    "charset-normalizer (>=3.5.2,<4.0.0)",
+    "boto3 (>=1.43.108,<2.0.0)",
     "python-slugify (>=8.0.4,<9.0.0)",
     "redis (>=8.1.0,<9.0.0)",
+    "gunicorn (>=26.2.0,<27.0.0)",
 ]
 
-[tool.poetry.group.dev.dependencies]
-pre-commit = "^4.6.0"
-ipdb = "^0.13.13"
-web-pdb = "^1.6.2"
-types-markdown = "^3.6.0.20240316"
-parameterized = "^0.9.0"
-django-stubs = { extras = ["compatible-mypy"], version = "^5.1.3" }
-playwright = "^1.55.0"
-pytest-playwright = "^0.7.0"
-behave = "^1.2.6"
-ruamel-yaml = "^0.18.15"
-behave-html-formatter = "^0.9.10"
-freezegun = "^1.5.5"
-pytest = "^9.1.1"
-pytest-django = "^4.12.0"
-pytest-html = "^4.2.0"
+[dependency-groups]
+# Development tooling. The ranges keep Poetry's caret meaning: ^0.13.13 is
+# <0.14, not <1.
+dev = [
+    "pre-commit>=4.6.2,<5",
+    "ipdb>=0.13.13,<0.14",
+    "web-pdb>=2.0.1,<3",
+    "types-markdown>=3.10.2.20260712,<4",
+    "parameterized>=0.9.0,<0.10",
+    "django-stubs[compatible-mypy]>=5.2.9,<5.3",
+    "playwright>=1.63.0,<2",
+    "pytest-playwright>=0.9.0,<0.10",
+    "behave>=1.3.3,<2",
+    "ruamel-yaml>=0.19.1,<0.20",
+    "behave-html-formatter>=0.9.10,<0.10",
+    "freezegun>=1.5.5,<2",
+    "pytest>=9.1.1,<10",
+    "pytest-django>=4.14.0,<5",
+    "pytest-html>=4.2.0,<5",
+    "boto3-stubs>=1.43.108,<2",
+]
 
 [tool.ruff]
 # https://gds-way.cloudapps.digital/manuals/programming-languages/python/python.html#maximum-line-length-of-120-characters
 line-length = 120
+# Ruff only writes syntax valid for this version. Kept below the runtime
+# (Python 3.14) on purpose: a py314 target rewrites `except (A, B):` into the
+# 3.14-only `except A, B:` form across the codebase.
 target-version = "py312"
 extend-exclude = [
     "venv*",
@@ -91,11 +99,10 @@ plugins = ['mypy_django_plugin.main']
 [tool.django-stubs]
 django_settings_module = "webcaf.settings"
 
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
-
-
-[tool.poetry.dependencies]
-# Disallow the problamatic versions that have the vulnerability
-litellm = "!=1.82.7, !=1.82.8"
+[tool.uv]
+# WebCAF is an application, not a package: install its dependencies only.
+package = false
+# Never resolve these versions, even transitively. litellm 1.82.7 and 1.82.8
+# have a known vulnerability; this carries over the block that was in
+# [tool.poetry.dependencies].
+constraint-dependencies = ["litellm!=1.82.7,!=1.82.8"]
