@@ -156,6 +156,21 @@ class OutcomeIndicatorsViewTests(BaseViewTest):
         self.assessment.refresh_from_db()
         self.assertEqual(self.assessment.assessments_data, answered)
 
+    def test_cyber_advisor_continues_through_an_answered_outcome_without_changing_it(self):
+        answered = {"A1.a": {"indicators": {"achieved_A1.a.5": True, "not-achieved_A1.a.1": False}}}
+        self.assessment.assessments_data = answered
+        self.assessment.last_updated_by = None
+        self.assessment.save()
+        self.sign_in_as_cyber_advisor()
+
+        response = self.client.post(self.url, data={"achieved_A1.a.6": True}, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.redirect_chain, [(self.confirmation_url, 302)])
+        self.assessment.refresh_from_db()
+        self.assertEqual(self.assessment.assessments_data, answered)
+        self.assertIsNone(self.assessment.last_updated_by)
+
     def test_confirmation_for_an_unanswered_outcome_redirects_to_the_objective(self):
         self.assessment.assessments_data = {}
         self.assessment.save()
