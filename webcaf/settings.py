@@ -257,10 +257,36 @@ LOGGING = {
 }
 
 SSO_MODE = env.str("SSO_MODE", "one-login").lower()
-if SSO_MODE not in {"external", "one-login", "dex", "local", "localhost", "none"}:
+if SSO_MODE not in {
+    "external",
+    "internal-access",
+    "one-login",
+    "dex",
+    "local",
+    "localhost",
+    "none",
+}:
     raise ImproperlyConfigured(f"Unsupported SSO_MODE: {SSO_MODE}")
 
-if SSO_MODE == "external":
+if SSO_MODE == "internal-access":
+    OIDC_RP_CLIENT_ID = env.str("INTERNAL_ACCESS_CLIENT_ID")
+    OIDC_RP_CLIENT_SECRET = env.str("INTERNAL_ACCESS_CLIENT_SECRET")  # pragma: allowlist secret
+
+    OIDC_OP_AUTHORIZATION_ENDPOINT = env.str("INTERNAL_ACCESS_AUTHORIZATION_ENDPOINT")
+    OIDC_OP_TOKEN_ENDPOINT = env.str("INTERNAL_ACCESS_TOKEN_ENDPOINT")
+    OIDC_OP_USER_ENDPOINT = env.str("INTERNAL_ACCESS_USERINFO_ENDPOINT")
+    OIDC_OP_JWKS_ENDPOINT = env.str("INTERNAL_ACCESS_JWKS_ENDPOINT")
+    OIDC_OP_LOGOUT_ENDPOINT = env.str("INTERNAL_ACCESS_LOGOUT_ENDPOINT")
+
+    OIDC_STORE_ID_TOKEN = True
+    OIDC_STORE_ACCESS_TOKEN = True
+
+    LOGOUT_REDIRECT_URL = env.str("LOGOUT_REDIRECT_URL")
+    NOTIFY_API_KEY = env.str("NOTIFY_API_KEY", "")
+    NOTIFY_OTP_TEMPLATE_ID = env.str("NOTIFY_OTP_TEMPLATE_ID", "")
+    ENABLED_2FA = ENVIRONMENT not in ["dev", "test"]
+
+elif SSO_MODE == "external":
     OIDC_RP_CLIENT_ID = env.str("OIDC_RP_CLIENT_ID")
     OIDC_RP_CLIENT_SECRET = env.str("OIDC_RP_CLIENT_SECRET")  # pragma: allowlist secret
     OIDC_OP_AUTHORIZATION_ENDPOINT = env.str("OIDC_OP_AUTHORIZATION_ENDPOINT")
