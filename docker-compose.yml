@@ -29,7 +29,8 @@ services:
     #Added the reload flag so the application will be reloaded when the source is modified.
     entrypoint: [ "/usr/local/bin/gunicorn", "webcaf.wsgi:application", "--bind", "0.0.0.0:8000", "--timeout", "120", "--access-logfile", "-", "--reload" ]
     env_file:
-      - ./webcaf/.env
+      - path: ./webcaf/.env
+        required: false
     environment:
       <<: *common-application-variables
       PYTHONBREAKPOINT: "ipdb.set_trace"
@@ -121,7 +122,8 @@ services:
     <<: *api-base
     restart: 'no'
     env_file:
-      - ./webcaf/.env
+      - path: ./webcaf/.env
+        required: false
     environment:
       <<: *common-application-variables
     entrypoint: [ "/bin/sh", "/app/local-init.sh" ]

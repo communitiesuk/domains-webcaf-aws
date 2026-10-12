@@ -43,8 +43,14 @@ def test_internal_access_settings():
     settings = run_settings(
         {
             "SSO_MODE": "internal-access",
+            "ENVIRONMENT": "local",
             "INTERNAL_ACCESS_CLIENT_ID": "test-client-id",
             "INTERNAL_ACCESS_CLIENT_SECRET": "test-client-secret",  # pragma: allowlist secret
+            "INTERNAL_ACCESS_AUTHORIZATION_ENDPOINT": "https://example.test/authorize",
+            "INTERNAL_ACCESS_TOKEN_ENDPOINT": "https://example.test/token",
+            "INTERNAL_ACCESS_USERINFO_ENDPOINT": "https://example.test/userinfo",
+            "INTERNAL_ACCESS_JWKS_ENDPOINT": "https://example.test/jwks",
+            "INTERNAL_ACCESS_LOGOUT_ENDPOINT": "https://example.test/logout",
             "LOGOUT_REDIRECT_URL": "http://localhost:8010/",
         }
     )
@@ -58,13 +64,32 @@ def test_internal_access_settings():
         ),
         "test-client-id",
         "test-client-secret",
-        "https://sso.service.security.gov.uk/oauth2/authorization",
-        "https://sso.service.security.gov.uk/oauth2/token",
-        "https://sso.service.security.gov.uk/oauth2/userinfo",
-        "https://sso.service.security.gov.uk/.well-known/jwks.json",
-        "https://sso.service.security.gov.uk/sign-out",
+        "https://example.test/authorize",
+        "https://example.test/token",
+        "https://example.test/userinfo",
+        "https://example.test/jwks",
+        "https://example.test/logout",
         "True",
         "True",
         "http://localhost:8010/",
-        "False",
+        "True",
     ]
+
+
+def test_internal_access_disables_2fa_in_test_environment():
+    settings = run_settings(
+        {
+            "SSO_MODE": "internal-access",
+            "ENVIRONMENT": "test",
+            "INTERNAL_ACCESS_CLIENT_ID": "test-client-id",
+            "INTERNAL_ACCESS_CLIENT_SECRET": "test-client-secret",  # pragma: allowlist secret
+            "INTERNAL_ACCESS_AUTHORIZATION_ENDPOINT": "https://example.test/authorize",
+            "INTERNAL_ACCESS_TOKEN_ENDPOINT": "https://example.test/token",
+            "INTERNAL_ACCESS_USERINFO_ENDPOINT": "https://example.test/userinfo",
+            "INTERNAL_ACCESS_JWKS_ENDPOINT": "https://example.test/jwks",
+            "INTERNAL_ACCESS_LOGOUT_ENDPOINT": "https://example.test/logout",
+            "LOGOUT_REDIRECT_URL": "http://localhost:8010/",
+        }
+    )
+
+    assert settings[-1] == "False"

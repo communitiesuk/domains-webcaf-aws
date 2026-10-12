@@ -272,11 +272,11 @@ if SSO_MODE == "internal-access":
     OIDC_RP_CLIENT_ID = env.str("INTERNAL_ACCESS_CLIENT_ID")
     OIDC_RP_CLIENT_SECRET = env.str("INTERNAL_ACCESS_CLIENT_SECRET")  # pragma: allowlist secret
 
-    OIDC_OP_AUTHORIZATION_ENDPOINT = "https://sso.service.security.gov.uk/oauth2/authorization"
-    OIDC_OP_TOKEN_ENDPOINT = "https://sso.service.security.gov.uk/oauth2/token"
-    OIDC_OP_USER_ENDPOINT = "https://sso.service.security.gov.uk/oauth2/userinfo"
-    OIDC_OP_JWKS_ENDPOINT = "https://sso.service.security.gov.uk/.well-known/jwks.json"
-    OIDC_OP_LOGOUT_ENDPOINT = "https://sso.service.security.gov.uk/sign-out"
+    OIDC_OP_AUTHORIZATION_ENDPOINT = env.str("INTERNAL_ACCESS_AUTHORIZATION_ENDPOINT")
+    OIDC_OP_TOKEN_ENDPOINT = env.str("INTERNAL_ACCESS_TOKEN_ENDPOINT")
+    OIDC_OP_USER_ENDPOINT = env.str("INTERNAL_ACCESS_USERINFO_ENDPOINT")
+    OIDC_OP_JWKS_ENDPOINT = env.str("INTERNAL_ACCESS_JWKS_ENDPOINT")
+    OIDC_OP_LOGOUT_ENDPOINT = env.str("INTERNAL_ACCESS_LOGOUT_ENDPOINT")
 
     OIDC_STORE_ID_TOKEN = True
     OIDC_STORE_ACCESS_TOKEN = True
@@ -284,7 +284,7 @@ if SSO_MODE == "internal-access":
     LOGOUT_REDIRECT_URL = env.str("LOGOUT_REDIRECT_URL")
     NOTIFY_API_KEY = env.str("NOTIFY_API_KEY", "")
     NOTIFY_OTP_TEMPLATE_ID = env.str("NOTIFY_OTP_TEMPLATE_ID", "")
-    ENABLED_2FA = False
+    ENABLED_2FA = ENVIRONMENT not in ["dev", "test"]
 
 elif SSO_MODE == "external":
     OIDC_RP_CLIENT_ID = env.str("OIDC_RP_CLIENT_ID")
