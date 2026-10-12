@@ -17,8 +17,9 @@ clear-db:
 	docker compose down && docker container prune -f && docker volume rm domains-webcaf_postgres-data
 
 test:
-	docker compose run --rm --service-ports --remove-orphans --entrypoint "pytest --html=reports/pytest-report.html --self-contained-html" web
+	docker compose run --rm --service-ports --remove-orphans -e SSO_MODE=one-login --entrypoint "pytest --html=reports/pytest-report.html --self-contained-html" web
 	docker compose down
+
 lint:
 	#	Check formatting and linting without changing anything.
 	uv run pre-commit run --hook-stage manual ruff-check-only --all-files

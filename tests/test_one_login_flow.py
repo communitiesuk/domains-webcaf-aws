@@ -19,7 +19,6 @@ ONE_LOGIN_SETTINGS = {
     "GOV_UK_ONE_LOGIN_AUTHENTICATION_LEVEL": AuthenticationLevel.MEDIUM_LEVEL,
     "GOV_UK_ONE_LOGIN_CONFIDENCE_LEVEL": IdentityConfidenceLevel.NONE,
     "ALLOWED_HOSTS": ["localhost", "testserver"],
-    "SECURE_PROXY_SSL_HEADER": ("HTTP_X_FORWARDED_PROTO", "https"),
 }
 
 

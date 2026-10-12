@@ -11,6 +11,10 @@ permissions:
   id-token: write   # required for AWS OIDC
   contents: read
 
+concurrency:
+    group: sandbox
+    cancel-in-progress: false
+
 jobs:
   build-and-push:
     name: CI - Build and push to ECR
