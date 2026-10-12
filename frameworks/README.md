@@ -1,39 +1,45 @@
-# YAML Representation of CAF
+# CAF framework definitions
 
-`cyber-assessment-framework-v3.2.yaml` a YAML representation of the 3.2 CAF from the [NCSC PDF version](https://www.ncsc.gov.uk/static-assets/documents/cyber-assessment-framework-v3.2.pdf).
+WebCAF currently contains these NCSC Cyber Assessment Framework definitions:
+
+- `cyber-assessment-framework-v3.2.yaml`: CAF 3.2, retained for assessments created against CAF 3.2
+- `cyber-assessment-framework-v4.0.yaml`: CAF 4.0, used by the seeded `26/27` assessment-period configuration
+
+Each assessment stores its framework version. The application resolves the corresponding router through
+`Assessment.get_router()` rather than applying one framework globally.
 
 ## Structure
 
-The YAML reflects the hierarchy of concepts in the CAF: Objectives, which have Principles, which have 'Sections' (the CAF doesn't seem to give these a name), which have Indicators. Indicators are grouped under 'Achieved', 'Not Achieved' etc.
+The YAML follows the CAF hierarchy of objectives, principles, outcomes, and indicators. Indicators are grouped by
+status, such as `achieved`, `partially-achieved`, and `not-achieved`. Objectives, principles, outcomes, and indicators
+have indexes used by the application and data exports.
 
-Each of Objectives, Principles, Sections and Indicators has its own index.
+## Validation
 
-## Testing
+`tests/test_yaml.py` currently loads the CAF 3.2 file. It checks its schema and verifies that principle, outcome, and
+indicator indexes are unique after parsing. It does not verify objective-key uniqueness because duplicate keys in the
+same YAML mapping are overwritten while loading.
 
-`tests/test_yaml.py` tests that the indexes (objectives, principles, sections, indicators) are unique. It cannot catch duplicate indexes (i.e. two indicators with index `A1.a.1`) when these happen in the same YAML dictionary (e.g. the duplicates are both under the same 'Achieved' heading) because the second just overwrites the first when the YAML is parsed.
+The pre-commit `check-yaml` hook validates YAML syntax and catches duplicate keys in the same mapping. Run both checks
+when changing CAF 3.2 because they cover different classes of error:
 
-The `check-yaml` pre-commit hook *will* catch duplicate index values in the same dictionary but *will not* catch them when they're spread across multiple dictionaries because this is perfectly valid YAML (duplicate keys in a YAML dictionary is strictly speaking valid, but in practice almost always a sign of an error so the hook catches it).
-
-To test changes to the YAML file it is therefore important to run the following from the project root:
-
+```shell
+uv run python -m unittest tests.test_yaml
+uv run pre-commit run check-yaml --files frameworks/cyber-assessment-framework-v3.2.yaml
 ```
-python -m unittest tests.test_yaml
-pre-commit run check-yaml --files frameworks/cyber-assessment-framework-v3.2.yaml
+
+The structural unit test is not yet parameterised for CAF 4.0. Run the YAML hook when changing that definition:
+
+```shell
+uv run pre-commit run check-yaml --files frameworks/cyber-assessment-framework-v4.0.yaml
 ```
 
-## create-schema.py
+## Reference scripts
 
-The script does *most* of the work involved in creating a YAML representation of the CAF from the PDF.
+`create-schema.py` performed most of the original conversion from the CAF 3.2 PDF. Indicator grouping and content that
+crossed PDF pages required manual correction, so the script is retained as a reference rather than a repeatable
+generator.
 
-Comments in the script refer to some limitations to the degree of automation possible, the biggest being that the parser could not sort the indicators under 'Achieved', 'Not achieved' etc and this had to be done manually. There were other problems with matching indictors, e.g. when they spanned two pages, which became apparent later, needing further manual work.
-
-In hindsight it would probably have been quicker to scrape the web version, even though it's spread across several pages which would somehow have to be stitched together.
-
-The script could be improved in many, many ways but was of no use once manual editing began and is kept just for reference.
-
-
-## caf32-reindex.py
-
-Used to re-index the indicators, repacing the global, numerical index with one based on each indicator's position in the nested structure such that `1` became `A1.a.1`.
-
-We may need to create new, additional indexes on the indicators corresponding to those in subsequent CAF versions, in which case this script might act as a basis.
+`caf32-reindex.py` replaced the original global numerical indicator indexes with indexes based on their positions in
+the nested CAF 3.2 structure, such as `A1.a.1`. It may be useful as a reference if future framework versions need
+additional indexes.

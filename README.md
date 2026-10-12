@@ -1,292 +1,238 @@
-# WebCAF Prototype
+# WebCAF
 
-Application to enable users to self-assess against the NCSC Cyber Assessment Framework, designed to
-enable future versions or different assessments to be represented with minimal code additions.
+[![Integration tests](https://github.com/communitiesuk/domains-webcaf-aws/actions/workflows/pull-request.yml/badge.svg?branch=main)](https://github.com/communitiesuk/domains-webcaf-aws/actions/workflows/pull-request.yml)
+[![Feature tests](https://github.com/communitiesuk/domains-webcaf-aws/actions/workflows/feature-tests.yml/badge.svg?branch=main)](https://github.com/communitiesuk/domains-webcaf-aws/actions/workflows/feature-tests.yml)
+![Python 3.14](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)
 
-# Configuration
+WebCAF enables users to assess their organisations against the NCSC Cyber Assessment Framework (CAF). Assessments
+retain the CAF version with which they were created, allowing multiple framework versions to remain in use.
 
-We store the default configuration in the database, which can be accessed through the admin screens. The fields that are
-required for the
-functioning of the application are:
+## Prerequisites
 
-- current_assessment_period
-- assessment_period_end
-- default_framework
+The containerised development workflow requires:
 
-Default values are provided in the migrations for the year 2025 and 2026.
-The end dates below were moved out from March by `0025_update_configuration`.
+- Docker with Docker Compose
+- Make
 
-Year 2025 values are:
-with the values of "25/26", "31 August 2026 11:59pm" and "caf32" respectively.
+Running Django or repository tooling directly on the host also requires:
 
-Year 2026 values are:
-with the values of "26/27", "31 August 2027 11:59pm" and "caf40" respectively.
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) 0.12.23
+- The [native libraries required by WeasyPrint](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#installation),
+  including Pango (`brew install pango` on macOS)
 
-A period that has already ended keeps the framework its assessments were
-carried out against, which is why 25/26 remains CAF 3.2.
+uv uses `.python-version` to install and run Python 3.14. Use a recent Docker Compose release; the feature-test Compose
+files use the `!override` and `!reset` YAML tags.
 
-New assessments are created against `default_framework`, so CAF 4.0 is the
-framework a new assessment starts on. CAF 3.2 remains fully supported: every
-assessment stores the framework it was created with and keeps it, so
-assessments already started on 3.2 continue to be completed and reviewed
-against 3.2.
+## Run the application in Docker
 
-This will enable the application to automatically switch to the next period when the current period ends.
+Start the default development stack from the repository root:
 
-**NOTE:** Users will need to add a new configuration for the period after the current period ends
-
-# Review permissions
-
-
-The review pages use a common mixin to manage who can view and edit content. The logic lives in `webcaf/webcaf/views/assessor/util.py` in the `BaseReviewMixin`, which extends `UserRoleCheckMixin`.
-
-- Allowed roles for review-related views are returned by `BaseReviewMixin.get_allowed_roles()`:
-  - `cyber_advisor`
-  - `organisation_lead`
-  - `reviewer`
-  - `assessor`
-
-- Read-only roles are returned by `BaseReviewMixin.get_read_only_roles()`. By default this is:
-  - `organisation_lead`
-
-- The edit permission flag is set on the object returned by the view’s `get_object()` implementation inside `BaseReviewMixin`. Specifically:
-
-  - When an object is fetched, the current user’s `UserProfile.role` is checked.
-  - The mixin sets `obj.can_edit = current_profile.role not in self.get_read_only_roles()`.
-  - As a result, all allowed roles can edit except those explicitly listed as read‑only (currently `organisation_lead`).
-
-This `can_edit` attribute is then available to templates and forms to decide whether to render edit controls (e.g. show/hide buttons) or enforce read-only behaviour. If additional roles should be read-only in future, override `get_read_only_roles()` in a subclass or update the default list in the mixin.
-
-The mixin also sets `login_url` to the OIDC route and leverages `UserRoleCheckMixin` to enforce authentication and role checks across review-related views.
-
-
-# Tip permissions
-
-
-The Tip (Targeted Improvement Plan) pages use a common mixin to manage who can view and edit content. The logic lives in `webcaf/webcaf/tip/util.py` in the `BaseTipMixin`, which extends `UserRoleCheckMixin`.
-
-- Allowed roles for tip-related views are returned by `BaseTipMixin.get_allowed_roles()`:
-  - `cyber_advisor`
-  - `organisation_lead`
-  - `organisation_user`
-
-- Read-only roles are returned by `BaseTipMixin.get_read_only_roles()`. By default this is:
-  - `cyber_advisor`
-
-- The edit permission flag is set on the object returned by the view’s `get_object()` implementation inside `BaseTipMixin`. Specifically:
-
-  - When an object is fetched, the current user’s `UserProfile.role` is checked.
-  - The mixin sets `obj.can_edit = current_profile and current_profile.role not in self.get_read_only_roles()`.
-  - Additionally, once a tip has been submitted (`tip.is_submitted`), `can_edit` is forced to `False`, so submitted tips are read-only for everyone.
-
-- Which tips a user can see is scoped by `BaseTipMixin.get_tip_for_user()` (used by `get_queryset()`): only tips belonging to the user’s own organisation whose underlying review has been finalised (the assessment is `submitted` and `review_finalised` is set) are returned.
-
-- Approving and rejecting a tip is separate from editing and is restricted to Django staff users. The `Tip` model defines the custom permissions `can_approve_tip` and `can_reject_tip` (see `Tip.Meta.permissions`), and `Tip.approve()` / `Tip.reject()` both require `current_user.is_staff`.
-
-This `can_edit` attribute is then available to templates and forms to decide whether to render edit controls or enforce read-only behaviour. As with reviews, the mixin also sets `login_url` to the OIDC route and leverages `UserRoleCheckMixin` to enforce authentication and role checks across tip-related views.
-
-
-## Running
-
-```
+```shell
 docker compose up
 ```
 
-This brings up the full development stack defined in `docker-compose.yml`:
+Open WebCAF at [http://localhost:8010](http://localhost:8010). The default stack contains:
 
-- `postgres` — the PostgreSQL database (also exposed on the host at port `54321`).
-- `redis` — Valkey session storage (also exposed on the host at port `6379`).
-- `one-login-simulator` — the default local GOV.UK One Login provider.
-- `oauth` — an optional [DEX](https://dexidp.io/) provider enabled only by explicit DEX commands.
-- `init` — a one-shot container that runs `local-init.sh` (`makemigrations`, `collectstatic`, then `migrate`) and then exits.
-- `web` — the application, served by Gunicorn with `--reload`, started once `init` has completed successfully and Postgres and Valkey are healthy.
+- `postgres`: PostgreSQL 18.3, exposed to the host on port `54321`
+- `redis`: Valkey 9.0.6, exposed to the host on port `6379`
+- `one-login-simulator`: the local GOV.UK One Login provider, exposed on port `3000`
+- `init`: a one-shot service that runs `makemigrations`, `collectstatic`, and `migrate`
+- `web`: WebCAF served by Gunicorn with source reloading enabled
 
-The app is available at `localhost:8010/` and supports the CAF v3.2 and v4.0 frameworks (v3.2 is the default).
+The repository is bind-mounted into `init` and `web`. If model changes do not have a migration, startup can create a
+migration file in the working tree; review and commit it where appropriate.
 
-Alternatively, use the Make targets, which wrap the same compose files:
+Useful development commands are:
 
-``` shell
-make up-devserver   # run the app with Django's auto-reloading runserver instead of Gunicorn
-make up_dex         # bring up the full application stack with DEX instead of One Login
-make up_one_login_simulator # bring up PostgreSQL, Valkey and the One Login simulator with Alice defaults
-make one_login_user PRESET=alice # select the simulator identity shown on the next sign-in
-make shell          # open a bash shell in the running web container
-make clear-db       # tear everything down and drop the Postgres volume
+```shell
+make up-devserver  # use Django's development server instead of Gunicorn
+make build         # rebuild the Compose images
+make shell         # open a shell in the running web container
+docker compose down
 ```
 
+`make shell` requires the `web` service to be running. Database data remains in the Compose volume after
+`docker compose down`; use `docker compose down --volumes` only when you intentionally want to delete local data.
 
+## Run Django on the host
 
-## Developing
+Create the local environment file and install the Python dependencies before starting the One Login simulator:
 
-Make sure the python version you use is the same as in the [Dockerfile](Dockerfile) (Python 3.14).
-
-The database credentials are defined in `docker-compose.yml`: the Postgres container uses the user/password/database `webcaf`/`webcaf`/`webcaf` and is exposed on the host at port `54321`. Valkey is exposed on port `6379`. To run Django on the host with the default One Login simulator, create `webcaf/.env` from `webcaf/.env.example`, then start its dependencies:
-
-```
+```shell
 cp webcaf/.env.example webcaf/.env
-make up_one_login_simulator
-```
-
-WebCAF stores Django sessions exclusively in Valkey. AWS environments must provide `REDIS_URL` for the managed ElastiCache for Valkey endpoint, using `rediss://` when in-transit encryption is enabled. Production targets Valkey 9.0, matching the `valkey/valkey:9.0.6-alpine` image used locally and in CI. Valkey connection and socket operations time out after 5 seconds so an unavailable cache fails promptly instead of indefinitely blocking application workers.
-
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) 0.12.23,
-then run in a terminal
-
-``` shell
 uv sync
 uv run pre-commit install
+make up_one_login_simulator
 uv run python manage.py migrate
+uv run python manage.py runserver 127.0.0.1:8010
 ```
 
-### Code quality
+The host server must use port `8010` because that port is registered for the local authentication callbacks.
+`make up_one_login_simulator` starts PostgreSQL, Valkey, and the simulator, and configures the Alice preset. Run
+`uv sync` first because the preset helper uses the uv-managed development environment.
 
-Ruff handles linting, import sorting and formatting. Its configuration lives in
-`pyproject.toml` under `[tool.ruff]`; there is no separate config file.
+## Authentication
 
-``` shell
-make lint     # report problems without changing anything
-make format   # apply Ruff's fixes and formatting
+GOV.UK One Login is the default identity provider for local development and BDD tests. DEX is retained for explicit
+generic OIDC testing. `SSO_MODE` supports these modes:
+
+- `one-login`: GOV.UK One Login or the local simulator; this is the local default
+- `dex`: DEX reached by its Compose network name; used by the fully containerised DEX workflow
+- `local` or `localhost`: DEX reached at `localhost:5556`; used when Django runs on the host
+- `external`: a generic provider configured through the `OIDC_*` environment variables
+- `none`: build-time tasks that do not need to authenticate a user
+
+Start the complete containerised application with DEX instead of One Login using:
+
+```shell
+make up_dex
 ```
 
-Both run through pre-commit, which comes with the dev dependencies, so
-they use the same pinned Ruff version as CI. `make lint` only reports; the hooks
-that run automatically on commit apply fixes.
+To run Django on the host with DEX, set `SSO_MODE=local` in `webcaf/.env`, then start only its dependencies so that the
+containerised `web` service does not take port `8010`:
 
-mypy, detect-secrets and the security scanners are unaffected by Ruff and
-continue to run as separate hooks.
-
-and to run the local server:
-
-``` shell
-uv run python manage.py runserver
+```shell
+docker compose --profile dex up -d --wait postgres redis oauth
+uv run python manage.py migrate
+uv run python manage.py runserver 127.0.0.1:8010
 ```
 
-### Dependency and image versions
+The local DEX users are defined in `oauth-stub/config.yaml`; their development-only password is `password`.
 
-`pyproject.toml` states the versions WebCAF supports; `uv.lock` fixes the exact
-versions installed everywhere: locally, in CI and in the deployed image. Use uv
-0.12.23, the version that wrote the lock. `uv sync` creates `.venv` with Python
-3.14 (from `.python-version`), downloading it if needed. CI runs `uv lock --check`,
-so after changing `pyproject.toml` run `uv lock` and commit both files. To add a
-dependency, use `uv add <package>` (or `uv add --dev <package>` for tooling).
+See [GOV.UK One Login](docs/GOV_UK_ONE_LOGIN.md) for simulator presets, user mapping, authentication policy, the
+integration-environment workflow, and the application configuration contract.
 
-The production image installs the runtime dependencies only (`--no-dev`); the local
-Compose containers also get the dev tools.
+## Local data and first sign-in
 
-Docker base images use version tags, not digests, so a rebuild picks up the
-security patches published under that tag. To move to a new version, change the tag.
+The following commands are for local development only. Run them from the host when using the host workflow:
 
-Local and CI images should match what runs in AWS: Valkey 9.0 (ElastiCache) and
-Postgres 18.3 (RDS).
-
-### Running tests
-
-The unit tests and BDD feature tests run inside containers via the Make targets:
-
-``` shell
-make test     # run the pytest suite (writes an HTML report to reports/)
-make behave   # run application, admin and One Login scenarios in an isolated environment
-make behave_dex # run focused DEX authentication scenarios in an isolated environment
-make build    # (re)build the images
+```shell
+uv run python manage.py add_organisations
+uv run python manage.py add_local_seed_data
 ```
 
-The Behave workflow builds the application and test sources into dedicated images, then creates its own PostgreSQL
-database, Valkey instance, network and volumes. It applies migrations and scenario data automatically, then removes
-those resources whether the run passes or fails. It does not mount, stop or modify the normal development source,
-virtual environment or Compose stack. See [BDD feature tests](features/README.md) for focused runs, reports and failure
-artifacts.
+For a running containerised application, run the equivalent commands in `web`:
 
-### Privacy and Logging Best Practices
+```shell
+docker compose exec web python manage.py add_organisations
+docker compose exec web python manage.py add_local_seed_data
+```
 
-**IMPORTANT:** When logging user information (emails, usernames, or any personally identifiable information), always use the `mask_email` utility function to protect user privacy.
+`add_organisations` loads `webcaf/seed/webcaf-orgs.csv` only when the organisation table is empty.
+`add_local_seed_data` requires at least one organisation and creates development systems and the local Django
+superuser `admin` with password `password`. If the configured Alice and admin DEX users already exist, it also creates
+profiles for them against the first organisation.
+
+A fresh database has no allowed email domains. To use the One Login simulator for the first time:
+
+1. Run both local data commands above.
+2. Sign in to `/admin/` with the local `admin` account and add `example.gov.uk` to **Allowed email domains**.
+3. Sign in through One Login once so that WebCAF creates the Alice Django user.
+4. Assign that user an organisation and role in Django admin.
+
+Authentication creates or matches a Django user but does not create its `UserProfile`, organisation, or role.
+
+## CAF versions and assessment periods
+
+WebCAF supports CAF 3.2 (`caf32`) and CAF 4.0 (`caf40`). Every assessment stores its framework version and continues to
+use that version throughout completion and review.
+
+New assessments use the `default_framework` from the earliest database `Configuration` whose
+`assessment_period_end` has not passed. Fresh databases currently seed:
+
+- `25/26`, ending 31 August 2026 at 11:59pm, using CAF 3.2
+- `26/27`, ending 31 August 2027 at 11:59pm, using CAF 4.0
+
+Administrators must create the next configuration before the current period ends. Changing a period's default affects
+only assessments created afterwards. See [Managing assessment period cutoff dates](docs/MANAGING_CUTOFF_DATES.md) and
+the [framework definition guide](frameworks/README.md).
+
+## Dependencies and code quality
+
+`pyproject.toml` defines the supported dependency ranges and `uv.lock` records the exact versions installed locally,
+in CI, and in application images. Use uv 0.12.23, the version that wrote the lock. `uv sync` creates `.venv` with
+Python 3.14, downloading Python when necessary.
+
+CI runs `uv lock --check`. After changing `pyproject.toml`, run `uv lock` and commit both files. Add a runtime dependency
+with `uv add <package>` or development tooling with `uv add --dev <package>`. Production images install runtime
+dependencies only; local Compose images also include development tools.
+
+Dockerfile base images use version tags so rebuilding picks up patches published under the selected tag. Update image
+tags deliberately when moving to a new version.
+
+Ruff handles linting, import sorting, and formatting. Its configuration is in `pyproject.toml` under `[tool.ruff]`.
+The Make targets invoke the Ruff hooks through uv and use the version pinned in `.pre-commit-config.yaml`:
+
+```shell
+make lint    # report linting and formatting problems without changing files
+make format  # apply Ruff fixes and formatting
+```
+
+The normal commit-stage Ruff hooks apply fixes; `make lint` uses check-only hooks. Mypy and detect-secrets continue to
+run as separate pre-commit hooks.
+
+## Tests and checks
+
+Run all pre-commit checks before the test suites:
+
+```shell
+uv run pre-commit run --all
+```
+
+Run the containerised pytest suite with:
+
+```shell
+make test
+```
+
+The report is written to `reports/pytest-report.html`. This target uses the normal Compose project and runs
+`docker compose down` after a successful test run, so stop the development stack before invoking it. If pytest fails,
+the target can leave supporting services running; use `docker compose down` to clean them up.
+
+After starting PostgreSQL, Valkey, and the One Login simulator, an individual test can also run on the host:
+
+```shell
+uv run pytest tests/<test-file>.py::<test-name>
+```
+
+Run the isolated browser suites with:
+
+```shell
+make behave      # application, Django admin, and GOV.UK One Login scenarios
+make behave_dex  # focused DEX login and logout scenarios
+```
+
+The Behave targets use disposable Compose projects and clean up after success or failure. See
+[BDD feature tests](features/README.md) for focused runs, reports, failure artifacts, and cleanup commands.
+
+## Development conventions
+
+### Logging user information
+
+Never log raw email addresses or other user identifiers. Use `mask_email` when an email address is needed for
+diagnostics:
 
 ```python
 from webcaf.webcaf.utils import mask_email
 
-# Good - email is masked
-logger.info(f"Sent verification to {mask_email(user.email)}")
-
-# Bad - exposes full email address
-logger.info(f"Sent verification to {user.email}")
+logger.info("Sent verification to %s", mask_email(user.email))
 ```
 
-The `mask_email` function replaces email addresses with a masked version (e.g., `us***@example.com`), showing only the first two characters of the username while preserving the domain for debugging purposes.
+### Review permissions
 
-### SSO settings
+Review views use `BaseReviewMixin` in `webcaf/webcaf/views/assessor/util.py`. The allowed roles are `cyber_advisor`,
+`organisation_lead`, `reviewer`, and `assessor`; `organisation_lead` is read-only by default. The mixin sets `can_edit`
+on the returned object for templates and forms.
 
-We use the `SSO_MODE` environment variable to select authentication:
+### Targeted Improvement Plan permissions
 
-- `dex` connects to the DEX container in the local Docker Compose stack.
-- `local` or `localhost` connects to DEX on the host at `localhost:5556`.
-- `external` uses the generic `OIDC_*` environment variables.
-- `one-login` uses GOV.UK One Login with `private_key_jwt` authentication.
-- `none` is reserved for build tasks that do not authenticate users.
+Targeted Improvement Plan views use `BaseTipMixin` in `webcaf/webcaf/tip/util.py`. The allowed roles are
+`cyber_advisor`, `organisation_lead`, and `organisation_user`; `cyber_advisor` is read-only by default. Submitted plans
+are read-only for everyone. The model restricts approval and rejection to Django staff users. In Django admin, either
+the `can_approve_tip` or `can_reject_tip` permission currently grants access to both actions.
 
-One Login is the default for direct local runs and Docker Compose. Use `make up_dex` only when explicitly testing the generic OIDC integration. See [GOV.UK One Login](docs/GOV_UK_ONE_LOGIN.md) for local simulator and integration-environment setup, user mapping, logout, deployment configuration and secret handling.
+## Environment operations
 
-The optional DEX configuration has two commonly used users:
-
-- a normal user called Alice, alice@example.gov.uk
-- Admin user called Tin, admin@example.gov.uk
-
-Both the users have the same password set to 'password'
-
-### Seed Data
-
-Use this command, either locally or in deployment, to load the initial list of organisations into the database:
-
-```
-python manage.py add_organisations
-```
-
-The following command will add an admin user ("admin", "password"). If you have already logged in with either of the SSO
-users, the command will set up a UserProfile for each and attach it to the Organisation. If you have not logged in with
-one of the SSO users then as far as Django is concerned it does not exist and this step is skipped. See the terminal
-output for more information.
-
-```
-python manage.py add_seed_data
-```
-
-> This command requires one or more organisations to exist in the database. Use the add_organisations command to do
-> this.
-
-### End-to-end testing
-
-Browser-based end-to-end coverage is provided by the Behave and Playwright scenarios in `features/`. Run the suite in
-its isolated environment with:
-
-``` shell
-make behave
-```
-
-See [BDD feature tests](features/README.md) for more information.
-
-### Deployment strategy
-
-#### Staging
-
-We deploy the latest image created from the main branch to staging. Each time a PR is merged to main,
-the image is rebuilt and deployed to staging. This is hanby the stage-ecr-deployment-workflow in the GitHub Actions.
-
-#### Production
-
-We deploy the latest image created from the main branch to production. Each time a release tag i.e release-v1.0.0 is
-created from
-the main branch.
-the image is rebuilt and deployed to production. This is handled by the prod-ecr-deployment-workflow in the GitHub
-Actions.
-
-#### dependencies
-
-- Production and the staging account information are stored in the GitHub secrets.
-    - Deployment roles are created in the domains-iac repo.
-        - You will need to run the following once per account to enable Github OIDC login for the workflow to obtain the
-          credentials.
-      ```bash
-       aws iam create-open-id-connect-provider \
-       --url https://token.actions.githubusercontent.com \
-       --client-id-list sts.amazonaws.com \
-       --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1 --profile <profile>
-       ```
-      NOTE: if the github changes the thumbprint, you will need to run the above command with the new value.
+Deployment procedures, AWS account bootstrapping, environment secrets, releases, and rollback instructions belong in
+the team's environment operations runbook and are intentionally not duplicated in this developer guide. Add a direct
+link here when the authoritative runbook location is confirmed.

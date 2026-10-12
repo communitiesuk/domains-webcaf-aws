@@ -1,5 +1,9 @@
 # BDD feature tests
 
+Run these commands from the repository root. They require Make and a recent Docker Compose release with support for the
+`!override` and `!reset` YAML tags used by the feature-test overrides. See the main [developer guide](../README.md) for
+the general setup and unit-test workflow.
+
 Feature tests run in dedicated Docker Compose projects with their own PostgreSQL database, Valkey instance, network
 and volumes. The default One Login suite uses `webcaf-behave`; focused DEX coverage uses `webcaf-behave-dex`. Neither
 project publishes host ports, so the tests can run while the normal development stack is running.
