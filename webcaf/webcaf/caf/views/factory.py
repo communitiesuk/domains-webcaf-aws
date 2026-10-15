@@ -335,6 +335,17 @@ class OutcomeConfirmationView(BaseIndicatorsFormView):
 
     """
 
+    def _outcome_not_answered(self, assessment) -> bool:
+        # View-only roles reach this page without saving their statements, so an
+        # outcome they have not answered has no data and nothing to confirm.
+        return assessment is not None and self.class_id not in assessment.assessments_data
+
+    @assessment_required
+    def get(self, request, *args, **kwargs):
+        if self._outcome_not_answered(SessionUtil.get_current_assessment(self.request)):
+            return redirect(self.get_success_url())
+        return super().get(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
         assessment = SessionUtil.get_current_assessment(self.request)
@@ -358,6 +369,8 @@ class OutcomeConfirmationView(BaseIndicatorsFormView):
         cleaned_data = form.cleaned_data
         outcome = cleaned_data["confirm_outcome"]
         assessment = SessionUtil.get_current_assessment(self.request)
+        if self._outcome_not_answered(assessment):
+            return redirect(self.get_success_url())
 
         if not outcome.startswith("back_to_achieved"):
             #     Validate if the user has provided justification text for changing the outcome
