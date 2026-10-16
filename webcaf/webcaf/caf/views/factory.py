@@ -337,8 +337,9 @@ class OutcomeConfirmationView(BaseIndicatorsFormView):
 
     def _outcome_not_answered(self, assessment) -> bool:
         # View-only roles reach this page without saving their statements, so an
-        # outcome they have not answered has no data and nothing to confirm.
-        return assessment is not None and self.class_id not in assessment.assessments_data
+        # outcome they have not answered has no data and nothing to confirm. An outcome
+        # stored as an empty record ({}) has nothing to confirm either.
+        return assessment is not None and not assessment.assessments_data.get(self.class_id)
 
     @assessment_required
     def get(self, request, *args, **kwargs):

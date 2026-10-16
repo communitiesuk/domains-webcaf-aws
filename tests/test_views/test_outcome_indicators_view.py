@@ -157,6 +157,17 @@ class OutcomeIndicatorsViewTests(BaseViewTest):
         self.assessment.refresh_from_db()
         self.assertEqual(self.assessment.assessments_data, {})
 
+    def test_confirmation_for_an_empty_outcome_record_redirects(self):
+        self.assessment.assessments_data = {"A1.a": {}}
+        self.assessment.save()
+        self.sign_in_as_cyber_advisor()
+
+        response = self.client.get(self.confirmation_url)
+
+        self.assertRedirects(response, reverse("caf32_objective_A"), fetch_redirect_response=False)
+        self.assessment.refresh_from_db()
+        self.assertEqual(self.assessment.assessments_data, {"A1.a": {}})
+
     def test_cyber_advisor_can_view_an_answered_outcome_confirmation(self):
         answered = {"A1.a": {"indicators": {"achieved_A1.a.5": True, "not-achieved_A1.a.1": False}}}
         self.assessment.assessments_data = answered
