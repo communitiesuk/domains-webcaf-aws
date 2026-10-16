@@ -144,6 +144,19 @@ class OutcomeIndicatorsViewTests(BaseViewTest):
         session["draft_assessment"] = {"assessment_id": self.assessment.id}
         session.save()
 
+    def test_invalid_confirmation_for_an_unanswered_outcome_redirects_and_saves_nothing(self):
+        # An invalid form (no confirm_outcome) would otherwise render the page, which
+        # reads the outcome's data and raised the original KeyError.
+        self.assessment.assessments_data = {}
+        self.assessment.save()
+        self.sign_in_as_cyber_advisor()
+
+        response = self.client.post(self.confirmation_url, {})
+
+        self.assertRedirects(response, reverse("caf32_objective_A"), fetch_redirect_response=False)
+        self.assessment.refresh_from_db()
+        self.assertEqual(self.assessment.assessments_data, {})
+
     def test_cyber_advisor_can_view_an_answered_outcome_confirmation(self):
         answered = {"A1.a": {"indicators": {"achieved_A1.a.5": True, "not-achieved_A1.a.1": False}}}
         self.assessment.assessments_data = answered

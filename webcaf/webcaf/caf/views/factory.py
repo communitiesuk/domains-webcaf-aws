@@ -346,6 +346,14 @@ class OutcomeConfirmationView(BaseIndicatorsFormView):
             return redirect(self.get_success_url())
         return super().get(request, *args, **kwargs)
 
+    @assessment_required
+    def post(self, request, *args, **kwargs):
+        # Check before validation: an invalid form would otherwise render this page,
+        # which needs the outcome's data.
+        if self._outcome_not_answered(SessionUtil.get_current_assessment(self.request)):
+            return redirect(self.get_success_url())
+        return super().post(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
         assessment = SessionUtil.get_current_assessment(self.request)
