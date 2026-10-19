@@ -128,6 +128,94 @@ class OutcomeIndicatorsViewTests(BaseViewTest):
         self.assertEqual(self.assessment.assessments_data, original_data)
         self.assertIsNone(self.assessment.last_updated_by)
 
+        # CS-507: the outcome is still unanswered, so following the redirect must not
+        # error. There is nothing to confirm, so the user goes on to the objective page.
+        response = self.client.get(response["Location"])
+
+        self.assertRedirects(response, reverse("caf32_objective_A"), fetch_redirect_response=False)
+        self.assessment.refresh_from_db()
+        self.assertEqual(self.assessment.assessments_data, original_data)
+
+    def sign_in_as_cyber_advisor(self):
+        profile = UserProfile.objects.get(role="cyber_advisor", organisation__name="Big organisation")
+        self.client.force_login(profile.user)
+        session = self.client.session
+        session["current_profile_id"] = profile.id
+        session["draft_assessment"] = {"assessment_id": self.assessment.id}
+        session.save()
+
+    def test_invalid_confirmation_for_an_unanswered_outcome_redirects_and_saves_nothing(self):
+        # An invalid form (no confirm_outcome) would otherwise render the page, which
+        # reads the outcome's data and raised the original KeyError.
+        self.assessment.assessments_data = {}
+        self.assessment.save()
+        self.sign_in_as_cyber_advisor()
+
+        response = self.client.post(self.confirmation_url, {})
+
+        self.assertRedirects(response, reverse("caf32_objective_A"), fetch_redirect_response=False)
+        self.assessment.refresh_from_db()
+        self.assertEqual(self.assessment.assessments_data, {})
+
+    def test_confirmation_for_an_empty_outcome_record_redirects(self):
+        self.assessment.assessments_data = {"A1.a": {}}
+        self.assessment.save()
+        self.sign_in_as_cyber_advisor()
+
+        response = self.client.get(self.confirmation_url)
+
+        self.assertRedirects(response, reverse("caf32_objective_A"), fetch_redirect_response=False)
+        self.assessment.refresh_from_db()
+        self.assertEqual(self.assessment.assessments_data, {"A1.a": {}})
+
+    def test_cyber_advisor_can_view_an_answered_outcome_confirmation(self):
+        answered = {"A1.a": {"indicators": {"achieved_A1.a.5": True, "not-achieved_A1.a.1": False}}}
+        self.assessment.assessments_data = answered
+        self.assessment.save()
+        self.sign_in_as_cyber_advisor()
+
+        response = self.client.get(self.confirmation_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assessment.refresh_from_db()
+        self.assertEqual(self.assessment.assessments_data, answered)
+
+    def test_cyber_advisor_continues_through_an_answered_outcome_without_changing_it(self):
+        answered = {"A1.a": {"indicators": {"achieved_A1.a.5": True, "not-achieved_A1.a.1": False}}}
+        self.assessment.assessments_data = answered
+        self.assessment.last_updated_by = None
+        self.assessment.save()
+        self.sign_in_as_cyber_advisor()
+
+        response = self.client.post(self.url, data={"achieved_A1.a.6": True}, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.redirect_chain, [(self.confirmation_url, 302)])
+        self.assessment.refresh_from_db()
+        self.assertEqual(self.assessment.assessments_data, answered)
+        self.assertIsNone(self.assessment.last_updated_by)
+
+    def test_confirmation_for_an_unanswered_outcome_redirects_to_the_objective(self):
+        self.assessment.assessments_data = {}
+        self.assessment.save()
+
+        response = self.client.get(self.confirmation_url)
+
+        self.assertRedirects(response, reverse("caf32_objective_A"), fetch_redirect_response=False)
+
+    def test_confirming_an_unanswered_outcome_saves_nothing(self):
+        self.assessment.assessments_data = {}
+        self.assessment.save()
+
+        response = self.client.post(
+            self.confirmation_url,
+            data={"confirm_outcome": "confirm", "confirm_outcome_confirm_comment": "Summary"},
+        )
+
+        self.assertRedirects(response, reverse("caf32_objective_A"), fetch_redirect_response=False)
+        self.assessment.refresh_from_db()
+        self.assertEqual(self.assessment.assessments_data, {})
+
     def test_post_confirmation_with_no_summary(self):
         """
         Summary:
