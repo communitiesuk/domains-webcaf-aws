@@ -31,6 +31,9 @@ class Command(BaseCommand):
         except (ImproperlyConfigured, NotifyError) as error:
             raise CommandError(str(error)) from None
 
+        if not responses or not isinstance(responses[0], dict):
+            raise CommandError("GOV.UK Notify accepted the request without returning a notification ID")
+
         notification_id = responses[0].get("id")
         if not notification_id:
             raise CommandError("GOV.UK Notify accepted the request without returning a notification ID")

@@ -230,6 +230,24 @@ class SendNotifyEmailTest(SimpleTestCase):
         mock_sleep.assert_not_called()
 
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
+    def test_reports_empty_successful_response_as_accepted_but_invalid_and_continues(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_client.send_email_notification.side_effect = [None, {"id": "second-id"}]
+
+        with self.assertRaises(NotifyError) as raised:
+            send_notify_email(
+                ["alice@example.com", "second@example.com"],
+                self.personalisation,
+                self.template_id,
+            )
+
+        self.assertEqual(raised.exception.failed_count, 0)
+        self.assertEqual(raised.exception.accepted_without_response_count, 1)
+        self.assertEqual(raised.exception.accepted_count, 1)
+        self.assertEqual(raised.exception.categories, (NotifyFailureCategory.INVALID_RESPONSE,))
+        self.assertEqual(mock_client.send_email_notification.call_count, 2)
+
+    @patch("webcaf.webcaf.notification.NotificationsAPIClient")
     def test_continues_after_recipient_failure_then_raises_safe_aggregate(self, mock_client_cls):
         mock_client = mock_client_cls.return_value
         mock_client.send_email_notification.side_effect = [

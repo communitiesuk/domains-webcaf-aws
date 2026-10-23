@@ -68,7 +68,9 @@ class SendTestNotificationCommandTest(SimpleTestCase):
 
     @patch("webcaf.webcaf.management.commands.send_test_notification.send_notify_email")
     def test_requires_notification_id_in_response(self, send_notify_email):
-        send_notify_email.return_value = [{}]
+        for response in ([], [None], [{}]):
+            with self.subTest(response=response):
+                send_notify_email.return_value = response
 
-        with self.assertRaisesRegex(CommandError, "notification ID"):
-            call_command("send_test_notification", "alice@example.com")
+                with self.assertRaisesRegex(CommandError, "notification ID"):
+                    call_command("send_test_notification", "alice@example.com")

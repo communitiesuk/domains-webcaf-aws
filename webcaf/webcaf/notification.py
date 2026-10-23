@@ -211,6 +211,9 @@ def send_notify_email(
                     template_id=template_id,
                     personalisation=personalisation_data,
                 )
+                if not isinstance(response, dict):
+                    failures.append(NotifyFailure(NotifyFailureCategory.INVALID_RESPONSE, accepted=True))
+                    break
                 responses.append(response)
                 break
             except Exception as error:
