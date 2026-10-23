@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 import base64
+import math
 import os
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -253,6 +254,13 @@ LOGGING = {
             "level": ("WARN" if not DEBUG else "DEBUG"),
             "propagate": False,
         },
+        # The client logs raw Notify response messages. Application logging in
+        # webcaf.webcaf.notification records a redacted error instead.
+        "notifications_python_client": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
     },
 }
 
@@ -282,8 +290,6 @@ if SSO_MODE == "internal-access":
     OIDC_STORE_ACCESS_TOKEN = True
 
     LOGOUT_REDIRECT_URL = env.str("LOGOUT_REDIRECT_URL")
-    NOTIFY_API_KEY = env.str("NOTIFY_API_KEY", "")
-    NOTIFY_OTP_TEMPLATE_ID = env.str("NOTIFY_OTP_TEMPLATE_ID", "")
     ENABLED_2FA = ENVIRONMENT not in ["dev", "test"]
 
 elif SSO_MODE == "external":
@@ -297,8 +303,6 @@ elif SSO_MODE == "external":
     OIDC_STORE_ID_TOKEN = True
     OIDC_STORE_ACCESS_TOKEN = True
     LOGOUT_REDIRECT_URL = env.str("LOGOUT_REDIRECT_URL")
-    NOTIFY_API_KEY = env.str("NOTIFY_API_KEY", "")
-    NOTIFY_OTP_TEMPLATE_ID = env.str("NOTIFY_OTP_TEMPLATE_ID", "")
     # Disable 2FA in dev and test environments, this is needed to enable access for more than
     # 5 users as the Notify service does not allow us to use more than 5 users
     # for the non-live notify service
@@ -335,8 +339,6 @@ elif SSO_MODE == "one-login":
         )
     GOV_UK_ONE_LOGIN_CLIENT_SECRET = configured_client_secret
 
-    NOTIFY_API_KEY = env.str("NOTIFY_API_KEY", "")
-    NOTIFY_OTP_TEMPLATE_ID = env.str("NOTIFY_OTP_TEMPLATE_ID", "")
     ENABLED_2FA = False
 else:
     sso_host = "dex" if SSO_MODE == "dex" else "localhost"
@@ -402,8 +404,18 @@ CONTENT_SECURITY_POLICY = {
 if "TEST_CSP" in os.environ:
     CSP_REPORT_URI = "/csp-report"  # The URI doesn't exist but is intercepted by the test suite
 
-# Confirmation email template ID
-# System will not send a confirmation email if this is not set
+# GOV.UK Notify configuration is independent of the authentication provider.
+NOTIFY_API_KEY = env.str("NOTIFY_API_KEY", "")
+notify_timeout_error = "NOTIFY_API_TIMEOUT_SECONDS must be a finite number greater than 0 and no more than 30"
+try:
+    NOTIFY_API_TIMEOUT_SECONDS = float(env.str("NOTIFY_API_TIMEOUT_SECONDS", "10"))
+except ValueError:
+    raise ImproperlyConfigured(notify_timeout_error) from None
+if not math.isfinite(NOTIFY_API_TIMEOUT_SECONDS) or not 0 < NOTIFY_API_TIMEOUT_SECONDS <= 30:
+    raise ImproperlyConfigured(notify_timeout_error)
+NOTIFY_TEST_TEMPLATE_ID = env.str("NOTIFY_TEST_TEMPLATE_ID", "")
+NOTIFY_OTP_TEMPLATE_ID = env.str("NOTIFY_OTP_TEMPLATE_ID", "")
+# The system will not send a journey email if its template ID is not set.
 NOTIFY_CONFIRMATION_TEMPLATE_ID = env.str("NOTIFY_CONFIRMATION_TEMPLATE_ID", "")
 NOTIFY_ASSESSMENT_READY_TEMPLATE_ID = env.str("NOTIFY_ASSESSOR_EMAIL_TEMPLATE_ID", "")
 # Email

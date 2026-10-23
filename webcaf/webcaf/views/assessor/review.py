@@ -201,7 +201,7 @@ class FinaliseReview(BaseReviewMixin, UpdateView):
                         template_id=template_id,
                     )
             except Exception as ex:  # type: ignore
-                self.logger.exception(mask_email(f"GOV.UK Notify: Failed to send tip email {ex}"))
+                self.logger.exception(mask_email(f"GOV.UK Notify: Issue sending review email: {ex}"))
         else:
             self.logger.info("GOV.UK Notify: No template ID provided for review ready email")
 
