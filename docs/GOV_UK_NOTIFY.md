@@ -12,8 +12,8 @@ Use a separate API key appropriate to each environment:
 - Sandbox uses a team and guest list key. Email is delivered only to recipients approved in the Notify service.
 - Production uses a live key. A production key must not be available in local development or Sandbox.
 
-API keys and template IDs must belong to the same Notify service. Do not commit API keys, pass them as image build
-arguments, or store them in ordinary ECS environment variables.
+API keys and template IDs must belong to the same Notify service. Do not commit API keys or pass them as image build
+arguments. Store the Sandbox key as a GitHub Environment secret so it is masked and access-controlled in GitHub.
 
 ## Configuration
 
@@ -74,15 +74,9 @@ output. With a test API key, Notify accepts the request without delivering an em
 Sandbox uses a team and guest list API key so test emails can be delivered to approved recipients.
 
 1. Add each approved recipient to the team or guest list in the Sandbox Notify service.
-2. Store the team API key in AWS Secrets Manager for Sandbox.
-3. Set the Sandbox GitHub Environment variable `NOTIFY_API_KEY_SECRET_ARN` to that secret's ARN.
-4. Set the Sandbox GitHub Environment variable `NOTIFY_TEST_TEMPLATE_ID` to the Sandbox template ID.
-5. Grant the ECS task execution role `secretsmanager:GetSecretValue` for the secret and `kms:Decrypt` if required.
-6. Deploy a new ECS task so the secret is injected as `NOTIFY_API_KEY`.
-
-The Sandbox workflow checks that `NOTIFY_API_KEY_SECRET_ARN` is non-empty before reading or changing the task
-definition. This gives a clear deployment error, but it does not replace provisioning the secret or granting the ECS
-task execution role access before merging a deployment change.
+2. Set the Sandbox GitHub Environment secret `NOTIFY_API_KEY` to the team API key.
+3. Set the Sandbox GitHub Environment variable `NOTIFY_TEST_TEMPLATE_ID` to the Sandbox template ID.
+4. Deploy a new ECS task so both values are injected into the application environment.
 
 Run the command inside the deployed application container with an approved recipient:
 
@@ -90,14 +84,13 @@ Run the command inside the deployed application container with an approved recip
 python manage.py send_test_notification approved-recipient@example.gov.uk
 ```
 
-The deployment workflow removes any same-named plaintext environment entry before adding the secret reference. Rotate
-the key after migrating an environment that previously stored it as plaintext. ECS injects a secret when a task starts,
-so deploy new tasks after rotating the API key.
+The current Sandbox workflow passes the GitHub secret to the ECS task definition as an environment variable. GitHub
+masks the value in workflow logs, but users who can read ECS task definitions may be able to view it. Restrict access
+accordingly. Deploy a new task after rotating the GitHub secret. Migration to AWS Secrets Manager is planned separately.
 
 This repository currently wires Notify into the Sandbox deployment workflow only. The application settings support
 later environments, but their authoritative infrastructure or deployment configuration must inject separate Notify
-keys and templates before notifications are enabled there. Use separate Secrets Manager secrets and least-privilege ECS
-task execution roles, and never reuse the production key in another environment.
+keys and templates before notifications are enabled there. Never reuse the production key in another environment.
 
 ## Automated tests
 
