@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 import base64
+import math
 import os
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -405,7 +406,13 @@ if "TEST_CSP" in os.environ:
 
 # GOV.UK Notify configuration is independent of the authentication provider.
 NOTIFY_API_KEY = env.str("NOTIFY_API_KEY", "")
-NOTIFY_API_TIMEOUT_SECONDS = env.float("NOTIFY_API_TIMEOUT_SECONDS", 10.0)
+notify_timeout_error = "NOTIFY_API_TIMEOUT_SECONDS must be a finite number greater than 0 and no more than 30"
+try:
+    NOTIFY_API_TIMEOUT_SECONDS = float(env.str("NOTIFY_API_TIMEOUT_SECONDS", "10"))
+except ValueError:
+    raise ImproperlyConfigured(notify_timeout_error) from None
+if not math.isfinite(NOTIFY_API_TIMEOUT_SECONDS) or not 0 < NOTIFY_API_TIMEOUT_SECONDS <= 30:
+    raise ImproperlyConfigured(notify_timeout_error)
 NOTIFY_TEST_TEMPLATE_ID = env.str("NOTIFY_TEST_TEMPLATE_ID", "")
 NOTIFY_OTP_TEMPLATE_ID = env.str("NOTIFY_OTP_TEMPLATE_ID", "")
 # The system will not send a journey email if its template ID is not set.

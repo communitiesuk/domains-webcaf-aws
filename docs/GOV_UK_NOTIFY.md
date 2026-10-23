@@ -21,7 +21,8 @@ The following settings apply to the shared integration:
 
 - `NOTIFY_API_KEY`: API credential. This is secret.
 - `NOTIFY_TEST_TEMPLATE_ID`: personalisation-free template used by the test command.
-- `NOTIFY_API_TIMEOUT_SECONDS`: request timeout in seconds. The default is 10 seconds.
+- `NOTIFY_API_TIMEOUT_SECONDS`: request timeout in seconds. It must be greater than 0 and no more than 30. The default
+  is 10 seconds.
 
 The existing service journeys use these optional template settings:
 
@@ -65,8 +66,8 @@ Alternatively, run it through Docker Compose:
 docker compose run --rm --entrypoint python web manage.py send_test_notification developer@example.com
 ```
 
-The command validates the email address and prints a masked recipient and Notify notification ID. With a test API key,
-Notify accepts the request without delivering an email.
+The command validates the email address and prints the Notify notification ID. It does not include the recipient in its
+output. With a test API key, Notify accepts the request without delivering an email.
 
 ## Sandbox setup
 
@@ -89,8 +90,10 @@ The deployment workflow removes any same-named plaintext environment entry befor
 the key after migrating an environment that previously stored it as plaintext. ECS injects a secret when a task starts,
 so deploy new tasks after rotating the API key.
 
-Later environments use the same application settings with separate Notify keys, templates, Secrets Manager secrets,
-and least-privilege ECS task execution roles. Never reuse the production key in another environment.
+This repository currently wires Notify into the Sandbox deployment workflow only. The application settings support
+later environments, but their authoritative infrastructure or deployment configuration must inject separate Notify
+keys and templates before notifications are enabled there. Use separate Secrets Manager secrets and least-privilege ECS
+task execution roles, and never reuse the production key in another environment.
 
 ## Automated tests
 

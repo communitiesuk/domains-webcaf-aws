@@ -25,9 +25,10 @@ class SendTestNotificationCommandTest(SimpleTestCase):
             personalisation_data={},
             template_id="test-template-id",
         )
-        self.assertIn("al***@example.com", stdout.getvalue())
         self.assertIn("notification-id", stdout.getvalue())
         self.assertNotIn("alice@example.com", stdout.getvalue())
+        self.assertNotIn("al***@example.com", stdout.getvalue())
+        self.assertNotIn("@", stdout.getvalue())
 
     @patch("webcaf.webcaf.management.commands.send_test_notification.send_notify_email")
     def test_rejects_invalid_email_address(self, send_notify_email):

@@ -4,7 +4,6 @@ from django.core.management.base import BaseCommand, CommandError
 from django.core.validators import validate_email
 
 from webcaf.webcaf.notification import NotifyError, send_notify_email
-from webcaf.webcaf.utils import mask_email
 
 
 class Command(BaseCommand):
@@ -38,8 +37,4 @@ class Command(BaseCommand):
         if not notification_id:
             raise CommandError("GOV.UK Notify accepted the request without returning a notification ID")
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Test notification accepted for {mask_email(email_address)} (notification ID: {notification_id})"
-            )
-        )
+        self.stdout.write(self.style.SUCCESS(f"Test notification accepted (notification ID: {notification_id})"))
