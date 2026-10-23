@@ -130,7 +130,8 @@ daily-limit `TooManyRequestsError` responses, or invalid responses after a succe
 
 Recipient addresses are de-duplicated without regard to case. If one recipient is rejected, WebCAF continues with the
 remaining recipients and then raises one aggregate error. A successful HTTP response with unreadable content is
-reported as accepted with an invalid response, not as a failed status 201 request.
+reported as accepted with an invalid response, not as a failed status 201 request. Empty responses and responses without
+a non-empty string notification ID are handled the same way.
 
 Application logs use safe categories based on Notify's documented stable error types, such as authentication,
 validation, bad request, rate limit, and daily limit. Logs do not include API credentials, personalisation data, raw

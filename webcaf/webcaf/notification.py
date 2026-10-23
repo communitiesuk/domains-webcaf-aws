@@ -211,7 +211,8 @@ def send_notify_email(
                     template_id=template_id,
                     personalisation=personalisation_data,
                 )
-                if not isinstance(response, dict):
+                notification_id = response.get("id") if isinstance(response, dict) else None
+                if not isinstance(notification_id, str) or not notification_id:
                     failures.append(NotifyFailure(NotifyFailureCategory.INVALID_RESPONSE, accepted=True))
                     break
                 responses.append(response)
