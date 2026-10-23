@@ -100,6 +100,12 @@ jobs:
             --task-definition default-webcaf-sandbox \
             --query taskDefinition > task-def.json
 
+      - name: Remove any plaintext Notify API key
+        run: |
+          jq '(.containerDefinitions[] | select(.name == "Main") | .environment) |= ((. // []) | map(select(.name != "NOTIFY_API_KEY")))' \
+            task-def.json > task-def-without-notify-key.json
+          mv task-def-without-notify-key.json task-def.json
+
       - name: Fill in the new image ID in the Amazon ECS task definition
         id: render-task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -116,9 +122,13 @@ jobs:
             GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH=${{ vars.GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH }}
             GOV_UK_ONE_LOGIN_SCOPE=${{ vars.GOV_UK_ONE_LOGIN_SCOPE }}
             SSO_MODE=${{ vars.SSO_MODE }}
+            NOTIFY_TEST_TEMPLATE_ID=${{ vars.NOTIFY_TEST_TEMPLATE_ID }}
             GOV_UK_ONE_LOGIN_CLIENT_ID=${{ secrets.GOV_UK_ONE_LOGIN_CLIENT_ID }}
             SECRET_KEY=${{ secrets.SECRET_KEY }}
             DATABASE_HOST=${{ secrets.DATABASE_URL }}
+          # The GitHub variable contains a Secrets Manager ARN, not the API key.
+          secrets: |
+            NOTIFY_API_KEY=${{ vars.NOTIFY_API_KEY_SECRET_ARN }}
 
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2

@@ -205,6 +205,11 @@ make behave_dex  # focused DEX login and logout scenarios
 The Behave targets use disposable Compose projects and clean up after success or failure. See
 [BDD feature tests](features/README.md) for focused runs, reports, failure artifacts, and cleanup commands.
 
+## GOV.UK Notify
+
+WebCAF uses GOV.UK Notify for email notifications. See [GOV.UK Notify setup](docs/GOV_UK_NOTIFY.md) for local and
+deployed configuration, secret management, test notifications, and opt-in integration testing.
+
 ## Development conventions
 
 ### Logging user information
