@@ -226,10 +226,11 @@ class SectionConfirmationView(UserRoleCheckMixin, FormView):
                 data,
                 template_id,
             )
-        except Exception:  # type: ignore
+        except Exception as error:  # type: ignore
             self.logger.exception(
                 mask_email(
-                    f"GOV.UK Notify: Failed to send {email_type} email for {assessment.id} user {self.request.user.pk}"
+                    f"GOV.UK Notify: Issue sending {email_type} email for {assessment.id} "
+                    f"user {self.request.user.pk}: {error}"
                 )
             )
 

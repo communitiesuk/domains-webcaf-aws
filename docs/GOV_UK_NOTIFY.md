@@ -80,6 +80,10 @@ Sandbox uses a team and guest list API key so test emails can be delivered to ap
 5. Grant the ECS task execution role `secretsmanager:GetSecretValue` for the secret and `kms:Decrypt` if required.
 6. Deploy a new ECS task so the secret is injected as `NOTIFY_API_KEY`.
 
+The Sandbox workflow checks that `NOTIFY_API_KEY_SECRET_ARN` is non-empty before reading or changing the task
+definition. This gives a clear deployment error, but it does not replace provisioning the secret or granting the ECS
+task execution role access before merging a deployment change.
+
 Run the command inside the deployed application container with an approved recipient:
 
 ```shell
@@ -121,20 +125,31 @@ docker compose run --rm -e RUN_GOVUK_NOTIFY_INTEGRATION_TESTS=true \
   --entrypoint pytest web tests/test_notify_integration.py
 ```
 
-The integration test uses a synthetic recipient and must only be run with a Notify test key.
+The integration test uses Notify's `simulate-delivered@notifications.service.gov.uk` smoke-test recipient and must only
+be run with a Notify test key. Notify validates the request but does not deliver or persist an email for this recipient.
 
 ## Error handling
 
-WebCAF retries explicit rate-limit and server-error responses with bounded backoff. It does not retry connection
-timeouts or invalid responses because Notify may already have accepted the request. Authentication, recipient,
-template, and personalisation errors fail immediately. Application logs include the status but do not include API
-credentials, personalisation data, email addresses, or raw Notify responses.
+WebCAF retries failures that are known to happen while establishing a connection, before the request reaches Notify.
+It also retries Notify's documented `RateLimitError`, HTTP 500 responses, and explicit HTTP 503 responses with bounded
+exponential backoff. It does not retry read timeouts, response-less ambiguous transport errors, HTTP 502 or 504,
+daily-limit `TooManyRequestsError` responses, or invalid responses after a successful request.
+
+Recipient addresses are de-duplicated without regard to case. If one recipient is rejected, WebCAF continues with the
+remaining recipients and then raises one aggregate error. A successful HTTP response with unreadable content is
+reported as accepted with an invalid response, not as a failed status 201 request.
+
+Application logs use safe categories based on Notify's documented stable error types, such as authentication,
+validation, bad request, rate limit, and daily limit. Logs do not include API credentials, personalisation data, raw
+email addresses, raw Notify messages, or synthetic HTTP statuses for failures where no response was received.
 
 Common failures are:
 
 - Status 400: check the recipient, template ID, and required template personalisation.
 - Status 401 or 403: check that the API key is valid and belongs to the expected Notify service.
-- Status 429: wait for the Notify rate limit to reset.
-- Status 500 or 503: check the Notify service status and retry later.
+- `RateLimitError` with status 429: WebCAF retries with bounded backoff.
+- `TooManyRequestsError` with status 429: the daily allowance is exhausted and resets at midnight UTC.
+- Status 500 or explicit status 503: WebCAF retries with bounded backoff; check Notify's service status if retries fail.
+- Transport failure without a response: delivery may be ambiguous and WebCAF does not report a synthetic status 503.
 
 The management command exits unsuccessfully when Notify rejects the request or remains unavailable.

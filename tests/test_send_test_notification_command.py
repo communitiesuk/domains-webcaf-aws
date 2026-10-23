@@ -1,11 +1,12 @@
 from io import StringIO
 from unittest.mock import patch
 
+from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, override_settings
 
-from webcaf.webcaf.notification import NotifyError
+from webcaf.webcaf.notification import NotifyError, NotifyFailure, NotifyFailureCategory
 
 
 @override_settings(
@@ -37,13 +38,14 @@ class SendTestNotificationCommandTest(SimpleTestCase):
 
         send_notify_email.assert_not_called()
 
-    @override_settings(NOTIFY_API_KEY="")
     @patch("webcaf.webcaf.management.commands.send_test_notification.send_notify_email")
-    def test_requires_api_key(self, send_notify_email):
+    def test_reports_missing_api_key_from_shared_sender(self, send_notify_email):
+        send_notify_email.side_effect = ImproperlyConfigured("NOTIFY_API_KEY is required to send notifications")
+
         with self.assertRaisesRegex(CommandError, "NOTIFY_API_KEY"):
             call_command("send_test_notification", "alice@example.com")
 
-        send_notify_email.assert_not_called()
+        send_notify_email.assert_called_once()
 
     @override_settings(NOTIFY_TEST_TEMPLATE_ID="")
     @patch("webcaf.webcaf.management.commands.send_test_notification.send_notify_email")
@@ -55,9 +57,11 @@ class SendTestNotificationCommandTest(SimpleTestCase):
 
     @patch("webcaf.webcaf.management.commands.send_test_notification.send_notify_email")
     def test_reports_safe_notify_failure(self, send_notify_email):
-        send_notify_email.side_effect = NotifyError(403)
+        send_notify_email.side_effect = NotifyError(
+            [NotifyFailure(NotifyFailureCategory.AUTHENTICATION, status_code=403)]
+        )
 
-        with self.assertRaisesRegex(CommandError, "status 403") as raised:
+        with self.assertRaisesRegex(CommandError, "statuses: 403") as raised:
             call_command("send_test_notification", "alice@example.com")
 
         self.assertNotIn("alice@example.com", str(raised.exception))

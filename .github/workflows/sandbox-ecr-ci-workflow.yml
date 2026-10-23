@@ -88,6 +88,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Validate Notify deployment configuration
+        env:
+          NOTIFY_API_KEY_SECRET_ARN: ${{ vars.NOTIFY_API_KEY_SECRET_ARN }}
+        run: |
+          if [[ -z "$NOTIFY_API_KEY_SECRET_ARN" ]]; then
+            echo "::error::Sandbox variable NOTIFY_API_KEY_SECRET_ARN must be configured before deployment"
+            exit 1
+          fi
+
       - name: Configure AWS credentials (Sandbox)
         uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838
         with:

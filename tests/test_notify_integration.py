@@ -22,7 +22,7 @@ class GovUkNotifyIntegrationTest(SimpleTestCase):
             NOTIFY_API_TIMEOUT_SECONDS=10,
         ):
             responses = send_notify_email(
-                email_addresses=["webcaf-notify-integration@example.com"],
+                email_addresses=["simulate-delivered@notifications.service.gov.uk"],
                 personalisation_data={},
                 template_id=template_id,
                 max_retries=0,

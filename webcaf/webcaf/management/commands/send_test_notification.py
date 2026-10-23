@@ -19,8 +19,6 @@ class Command(BaseCommand):
         except ValidationError:
             raise CommandError("Enter a valid email address") from None
 
-        if not settings.NOTIFY_API_KEY:
-            raise CommandError("NOTIFY_API_KEY is not configured")
         if not settings.NOTIFY_TEST_TEMPLATE_ID:
             raise CommandError("NOTIFY_TEST_TEMPLATE_ID is not configured")
 
