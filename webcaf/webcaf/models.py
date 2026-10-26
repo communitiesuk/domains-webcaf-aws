@@ -556,6 +556,10 @@ class GovNotifyEmailDevice(EmailDevice):
             logger.debug("SSO_MODE is not 'external'. Using default send_mail.")
             return super().send_mail(token, **kwargs)
 
+        if not settings.NOTIFY_OTP_TEMPLATE_ID:
+            logger.info("GOV.UK Notify: OTP notification is disabled because no template is configured")
+            return
+
         try:
             personalisation_data = {
                 "token": token,
