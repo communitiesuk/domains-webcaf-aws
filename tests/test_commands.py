@@ -68,11 +68,9 @@ class TestAddLocalUsers(TestCase):
         self.assertTrue(superuser.is_superuser)
         self.assertTrue(superuser.is_staff)
 
-    def test_command_gives_admin_user_a_profile_with_an_organisation(self):
+    def test_command_does_not_give_admin_user_a_profile(self):
         call_command("add_local_seed_data")
-        profile = UserProfile.objects.get(user__username="admin")
-        self.assertEqual(profile.organisation, Organisation.objects.get(name="TestOrg"))
-        self.assertEqual(profile.role, "cyber_advisor")
+        self.assertFalse(UserProfile.objects.filter(user__username="admin").exists())
 
     def test_command_does_not_create_admin_user_if_it_exists(self):
         User.objects.create_superuser(
