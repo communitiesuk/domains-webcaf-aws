@@ -401,7 +401,10 @@ class UserProfile(models.Model):
         return None
 
     def __str__(self):
-        return f"{self.user.email} - {self.organisation.name} - ({self.get_role_display()})"
+        # organisation is optional on this model, so a profile without one
+        # must still have a string form: the admin list calls str() on every row.
+        organisation_name = self.organisation.name if self.organisation else "No organisation"
+        return f"{self.user.email} - {organisation_name} - ({self.get_role_display()})"
 
 
 class AllowedEmailDomain(models.Model):
