@@ -2,6 +2,8 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 
 def run_settings(env_overrides):
     env = os.environ.copy()
@@ -72,15 +74,16 @@ def test_internal_access_settings():
         "True",
         "True",
         "http://localhost:8010/",
-        "True",
+        "False",
     ]
 
 
-def test_internal_access_disables_2fa_in_test_environment():
+@pytest.mark.parametrize("environment", ["dev", "test", "staging", "prod"])
+def test_internal_access_disables_2fa_in_all_environments(environment):
     settings = run_settings(
         {
             "SSO_MODE": "internal-access",
-            "ENVIRONMENT": "test",
+            "ENVIRONMENT": environment,
             "INTERNAL_ACCESS_CLIENT_ID": "test-client-id",
             "INTERNAL_ACCESS_CLIENT_SECRET": "test-client-secret",  # pragma: allowlist secret
             "INTERNAL_ACCESS_AUTHORIZATION_ENDPOINT": "https://example.test/authorize",
