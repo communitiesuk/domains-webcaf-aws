@@ -63,7 +63,7 @@ class SendNotifyEmailTest(SimpleTestCase):
             ["alice@example.com"],
             self.personalisation,
             self.template_id,
-            max_retries=3,
+            max_retries=2,
             retry_delay=1.5,
         )
 
@@ -71,14 +71,26 @@ class SendNotifyEmailTest(SimpleTestCase):
         scheme, adapter = mock_client.request_session.mount.call_args.args
         retry_policy = adapter.max_retries
         self.assertEqual(scheme, "https://")
-        self.assertEqual(retry_policy.total, 3)
-        self.assertEqual(retry_policy.connect, 3)
+        self.assertEqual(retry_policy.total, 2)
+        self.assertEqual(retry_policy.connect, 2)
         self.assertEqual(retry_policy.read, 0)
         self.assertEqual(retry_policy.status, 0)
         self.assertEqual(retry_policy.other, 0)
         self.assertIsNone(retry_policy.allowed_methods)
         self.assertEqual(retry_policy.backoff_factor, 1.5)
-        self.assertEqual(retry_policy.backoff_max, 60.0)
+        self.assertEqual(retry_policy.backoff_max, 5.0)
+
+    @patch("webcaf.webcaf.notification.NotificationsAPIClient")
+    def test_rejects_retry_count_above_synchronous_budget(self, mock_client_cls):
+        with self.assertRaisesRegex(ValueError, "max_retries must be between 0 and 2"):
+            send_notify_email(
+                ["alice@example.com"],
+                self.personalisation,
+                self.template_id,
+                max_retries=3,
+            )
+
+        mock_client_cls.assert_not_called()
 
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
     def test_sends_to_case_insensitively_unique_addresses_in_input_order(self, mock_client_cls):
@@ -156,7 +168,33 @@ class SendNotifyEmailTest(SimpleTestCase):
 
         send_notify_email(["alice@example.com"], self.personalisation, self.template_id)
 
-        mock_sleep.assert_called_once_with(60.0)
+        mock_sleep.assert_called_once_with(5.0)
+
+    @patch("webcaf.webcaf.notification.time.sleep")
+    @patch("webcaf.webcaf.notification.NotificationsAPIClient")
+    def test_shares_retry_budget_across_recipient_batch(self, mock_client_cls, mock_sleep):
+        mock_client = mock_client_cls.return_value
+        mock_client.send_email_notification.side_effect = [
+            api_error(500),
+            api_error(500),
+            api_error(500),
+            {"id": "second-id"},
+        ]
+
+        with self.assertRaises(NotifyError) as raised:
+            send_notify_email(
+                ["alice@example.com", "second@example.com"],
+                self.personalisation,
+                self.template_id,
+            )
+
+        self.assertEqual(
+            [item.kwargs["email_address"] for item in mock_client.send_email_notification.call_args_list],
+            ["alice@example.com", "alice@example.com", "alice@example.com", "second@example.com"],
+        )
+        self.assertEqual(mock_sleep.call_args_list, [call(1.0), call(2.0)])
+        self.assertEqual(raised.exception.failed_count, 1)
+        self.assertEqual(raised.exception.accepted_count, 1)
 
     @patch("webcaf.webcaf.notification.time.sleep")
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")

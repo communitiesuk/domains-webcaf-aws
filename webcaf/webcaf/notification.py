@@ -13,7 +13,8 @@ from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRY_DELAY_SECONDS = 60.0
+MAX_RETRIES = 2
+MAX_RETRY_DELAY_SECONDS = 5.0
 
 
 class NotifyFailureCategory(StrEnum):
@@ -190,6 +191,8 @@ def send_notify_email(
     """
     if not email_addresses:
         return []
+    if not 0 <= max_retries <= MAX_RETRIES:
+        raise ValueError(f"max_retries must be between 0 and {MAX_RETRIES}")
     if not settings.NOTIFY_API_KEY:
         raise ImproperlyConfigured("NOTIFY_API_KEY is required to send notifications")
     if not template_id:
@@ -206,6 +209,7 @@ def send_notify_email(
 
     responses = []
     failures = []
+    retries_remaining = max_retries
     for email_address in _unique_email_addresses(email_addresses):
         retry_count = 0
         while True:
@@ -222,8 +226,9 @@ def send_notify_email(
                 responses.append(response)
                 break
             except Exception as error:
-                if isinstance(error, APIError) and _is_retryable(error) and retry_count < max_retries:
+                if isinstance(error, APIError) and _is_retryable(error) and retries_remaining:
                     retry_count += 1
+                    retries_remaining -= 1
                     delay_seconds = _retry_delay_seconds(error, retry_count, retry_delay)
                     failure = _classify_failure(error)
                     logger.warning(

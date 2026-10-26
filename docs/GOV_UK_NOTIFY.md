@@ -127,6 +127,8 @@ WebCAF retries failures that are known to happen while establishing a connection
 It also retries Notify's documented `RateLimitError`, HTTP 500 responses, and explicit HTTP 503 responses with bounded
 exponential backoff. It does not retry read timeouts, response-less ambiguous transport errors, HTTP 502 or 504,
 daily-limit `TooManyRequestsError` responses, or invalid responses after a successful request.
+Retry delays are capped at five seconds, and at most two retries are shared across a recipient batch so synchronous
+retry overhead cannot multiply with the recipient count or consume the full application request-time budget.
 
 Recipient addresses are de-duplicated without regard to case. If one recipient is rejected, WebCAF continues with the
 remaining recipients and then raises one aggregate error. A successful HTTP response with unreadable content is
