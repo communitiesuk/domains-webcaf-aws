@@ -284,7 +284,8 @@ if SSO_MODE == "internal-access":
     LOGOUT_REDIRECT_URL = env.str("LOGOUT_REDIRECT_URL")
     NOTIFY_API_KEY = env.str("NOTIFY_API_KEY", "")
     NOTIFY_OTP_TEMPLATE_ID = env.str("NOTIFY_OTP_TEMPLATE_ID", "")
-    ENABLED_2FA = ENVIRONMENT not in ["dev", "test"]
+    # Internal Access handles authentication; no additional WebCAF email OTP is required.
+    ENABLED_2FA = False
 
 elif SSO_MODE == "external":
     OIDC_RP_CLIENT_ID = env.str("OIDC_RP_CLIENT_ID")
