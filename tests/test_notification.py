@@ -5,6 +5,10 @@ from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, override_settings
 from notifications_python_client.errors import HTTPError, InvalidResponse
 from requests import Response
+from requests.exceptions import ConnectionError, ConnectTimeout, ReadTimeout
+from urllib3.connection import HTTPSConnection
+from urllib3.connectionpool import HTTPSConnectionPool
+from urllib3.exceptions import MaxRetryError, NewConnectionError
 
 from webcaf.webcaf.notification import NotifyError, NotifyFailureCategory, send_notify_email
 
@@ -33,6 +37,18 @@ def invalid_response(status_code: int = 201) -> InvalidResponse:
     return InvalidResponse(response, message="No JSON response object could be decoded")
 
 
+def transport_error(cause: Exception) -> HTTPError:
+    error = HTTPError()
+    error.__cause__ = cause
+    return error
+
+
+def new_connection_error() -> HTTPError:
+    connection_error = NewConnectionError(HTTPSConnection("example.com"), "connection failed")
+    retry_error = MaxRetryError(HTTPSConnectionPool("example.com"), "/", reason=connection_error)
+    return transport_error(ConnectionError(retry_error))
+
+
 @override_settings(NOTIFY_API_KEY="test-api-key", NOTIFY_API_TIMEOUT_SECONDS=7.5)  # pragma: allowlist secret
 class SendNotifyEmailTest(SimpleTestCase):
     def setUp(self):
@@ -55,7 +71,7 @@ class SendNotifyEmailTest(SimpleTestCase):
         self.assertEqual(responses, [{"id": "notification-id"}])
 
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
-    def test_configures_connection_only_retries(self, mock_client_cls):
+    def test_disables_adapter_retries_for_batch_wide_budget(self, mock_client_cls):
         mock_client = mock_client_cls.return_value
         mock_client.send_email_notification.return_value = {"id": "notification-id"}
 
@@ -71,13 +87,13 @@ class SendNotifyEmailTest(SimpleTestCase):
         scheme, adapter = mock_client.request_session.mount.call_args.args
         retry_policy = adapter.max_retries
         self.assertEqual(scheme, "https://")
-        self.assertEqual(retry_policy.total, 2)
-        self.assertEqual(retry_policy.connect, 2)
+        self.assertEqual(retry_policy.total, 0)
+        self.assertEqual(retry_policy.connect, 0)
         self.assertEqual(retry_policy.read, 0)
         self.assertEqual(retry_policy.status, 0)
         self.assertEqual(retry_policy.other, 0)
         self.assertIsNone(retry_policy.allowed_methods)
-        self.assertEqual(retry_policy.backoff_factor, 1.5)
+        self.assertEqual(retry_policy.backoff_factor, 0)
         self.assertEqual(retry_policy.backoff_max, 5.0)
 
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
@@ -159,6 +175,22 @@ class SendNotifyEmailTest(SimpleTestCase):
 
     @patch("webcaf.webcaf.notification.time.sleep")
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
+    def test_retries_safe_connection_establishment_failures(self, mock_client_cls, mock_sleep):
+        mock_client = mock_client_cls.return_value
+        mock_client.send_email_notification.side_effect = [
+            transport_error(ConnectTimeout()),
+            new_connection_error(),
+            {"id": "notification-id"},
+        ]
+
+        responses = send_notify_email(["alice@example.com"], self.personalisation, self.template_id)
+
+        self.assertEqual(responses, [{"id": "notification-id"}])
+        self.assertEqual(mock_client.send_email_notification.call_count, 3)
+        self.assertEqual(mock_sleep.call_args_list, [call(1.0), call(2.0)])
+
+    @patch("webcaf.webcaf.notification.time.sleep")
+    @patch("webcaf.webcaf.notification.NotificationsAPIClient")
     def test_honours_bounded_retry_after_header(self, mock_client_cls, mock_sleep):
         mock_client = mock_client_cls.return_value
         mock_client.send_email_notification.side_effect = [
@@ -175,9 +207,9 @@ class SendNotifyEmailTest(SimpleTestCase):
     def test_shares_retry_budget_across_recipient_batch(self, mock_client_cls, mock_sleep):
         mock_client = mock_client_cls.return_value
         mock_client.send_email_notification.side_effect = [
-            api_error(500),
-            api_error(500),
-            api_error(500),
+            new_connection_error(),
+            new_connection_error(),
+            new_connection_error(),
             {"id": "second-id"},
         ]
 
@@ -249,6 +281,23 @@ class SendNotifyEmailTest(SimpleTestCase):
         self.assertEqual(raised.exception.status_codes, ())
         self.assertNotIn("503", str(raised.exception))
         self.assertEqual(mock_client.send_email_notification.call_count, 1)
+        mock_sleep.assert_not_called()
+
+    @patch("webcaf.webcaf.notification.time.sleep")
+    @patch("webcaf.webcaf.notification.NotificationsAPIClient")
+    def test_does_not_retry_ambiguous_transport_failures(self, mock_client_cls, mock_sleep):
+        mock_client = mock_client_cls.return_value
+
+        for cause in (ReadTimeout(), ConnectionError("connection reset")):
+            with self.subTest(cause=cause):
+                mock_client.reset_mock()
+                mock_client.send_email_notification.side_effect = transport_error(cause)
+
+                with self.assertRaises(NotifyError) as raised:
+                    send_notify_email(["alice@example.com"], self.personalisation, self.template_id)
+
+                self.assertEqual(raised.exception.categories, (NotifyFailureCategory.TRANSPORT,))
+                self.assertEqual(mock_client.send_email_notification.call_count, 1)
         mock_sleep.assert_not_called()
 
     @patch("webcaf.webcaf.notification.time.sleep")

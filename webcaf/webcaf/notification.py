@@ -8,7 +8,10 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from notifications_python_client import NotificationsAPIClient
 from notifications_python_client.errors import APIError, InvalidResponse, TokenError
+from requests import ConnectTimeout
 from requests.adapters import HTTPAdapter
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from urllib3.exceptions import MaxRetryError, NewConnectionError
 from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
@@ -125,9 +128,22 @@ def _classify_failure(error: Exception) -> NotifyFailure:
     return NotifyFailure(category, status_code=status_code)
 
 
-def _is_retryable(error: Exception) -> bool:
-    if not isinstance(error, APIError) or error.response is None or isinstance(error, InvalidResponse):
+def _is_safe_connection_failure(error: APIError) -> bool:
+    """Return whether the client wrapped a failure known to precede request delivery."""
+    request_error = error.__cause__
+    if isinstance(request_error, ConnectTimeout):
+        return True
+    if not isinstance(request_error, RequestsConnectionError) or not request_error.args:
         return False
+    retry_error = request_error.args[0]
+    return isinstance(retry_error, MaxRetryError) and isinstance(retry_error.reason, NewConnectionError)
+
+
+def _is_retryable(error: Exception) -> bool:
+    if not isinstance(error, APIError) or isinstance(error, InvalidResponse):
+        return False
+    if error.response is None:
+        return _is_safe_connection_failure(error)
     error_types = set(_notify_error_types(error))
     if "TooManyRequestsError" in error_types:
         return False
@@ -148,17 +164,17 @@ def _retry_delay_seconds(error: APIError, retry_count: int, retry_delay: float) 
     return min(delay, MAX_RETRY_DELAY_SECONDS)
 
 
-def _configure_connection_retries(notify_client: NotificationsAPIClient, max_retries: int, retry_delay: float) -> None:
-    """Retry only failures that urllib3 knows happened before a request reached Notify."""
+def _disable_adapter_retries(notify_client: NotificationsAPIClient) -> None:
+    """Keep all retries in the batch-aware application loop."""
     retry_policy = Retry(
-        total=max_retries,
-        connect=max_retries,
+        total=0,
+        connect=0,
         read=0,
         redirect=0,
         status=0,
         other=0,
         allowed_methods=None,
-        backoff_factor=retry_delay,
+        backoff_factor=0,
         backoff_max=MAX_RETRY_DELAY_SECONDS,
     )
     notify_client.request_session.mount("https://", HTTPAdapter(max_retries=retry_policy))
@@ -203,7 +219,7 @@ def send_notify_email(
             settings.NOTIFY_API_KEY,
             timeout=settings.NOTIFY_API_TIMEOUT_SECONDS,
         )
-        _configure_connection_retries(notify_client, max_retries, retry_delay)
+        _disable_adapter_retries(notify_client)
     except Exception:
         raise NotifyError([NotifyFailure(NotifyFailureCategory.CLIENT_INITIALISATION)]) from None
 
@@ -211,7 +227,6 @@ def send_notify_email(
     failures = []
     retries_remaining = max_retries
     for email_address in _unique_email_addresses(email_addresses):
-        retry_count = 0
         while True:
             try:
                 response = notify_client.send_email_notification(
@@ -227,15 +242,15 @@ def send_notify_email(
                 break
             except Exception as error:
                 if isinstance(error, APIError) and _is_retryable(error) and retries_remaining:
-                    retry_count += 1
+                    retry_number = max_retries - retries_remaining + 1
                     retries_remaining -= 1
-                    delay_seconds = _retry_delay_seconds(error, retry_count, retry_delay)
+                    delay_seconds = _retry_delay_seconds(error, retry_number, retry_delay)
                     failure = _classify_failure(error)
                     logger.warning(
                         "GOV.UK Notify request failed transiently (%s); retrying in %s seconds (attempt %s of %s)",
                         failure.category,
                         delay_seconds,
-                        retry_count,
+                        retry_number,
                         max_retries,
                     )
                     time.sleep(delay_seconds)
