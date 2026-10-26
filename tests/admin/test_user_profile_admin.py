@@ -23,4 +23,5 @@ class UserProfileAdminListTest(TestCase):
         response = self.client.get(reverse("admin:webcaf_userprofile_changelist"))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No organisation")
         self.assertContains(response, "orphan@example.gov.uk")
