@@ -88,11 +88,15 @@ def _notify_error_types(error: APIError) -> tuple[str, ...]:
         return ()
     if not isinstance(errors, list):
         return ()
-    return tuple(
-        error_data["error"]
-        for error_data in errors
-        if isinstance(error_data, dict) and error_data.get("error") in _ERROR_TYPE_CATEGORIES
-    )
+
+    error_types = []
+    for error_data in errors:
+        if not isinstance(error_data, dict):
+            continue
+        error_type = error_data.get("error")
+        if isinstance(error_type, str) and error_type in _ERROR_TYPE_CATEGORIES:
+            error_types.append(error_type)
+    return tuple(error_types)
 
 
 def _classify_failure(error: Exception) -> NotifyFailure:
