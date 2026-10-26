@@ -568,9 +568,8 @@ class GovNotifyEmailDevice(EmailDevice):
             }
             send_notify_email([self.email], personalisation_data, settings.NOTIFY_OTP_TEMPLATE_ID)
             logger.info(mask_email(f"GOV.UK Notify: Successfully sent OTP to {self.email}"))
-        except Exception as e:
-            logger.exception(mask_email(f"GOV.UK Notify: Issue sending OTP to {self.email}: {e}"))
-            pass
+        except Exception:
+            logger.error(mask_email(f"GOV.UK Notify: Issue sending OTP to {self.email}"))
 
     class Meta:
         """
@@ -1761,8 +1760,8 @@ class Tip(ReferenceGeneratorMixin, models.Model):
                         },
                         template_id=template_id,
                     )
-            except Exception as ex:  # type: ignore
-                self.LOGGER.exception(mask_email(f"GOV.UK Notify: Issue sending tip email: {ex}"))
+            except Exception:  # type: ignore
+                self.LOGGER.error("GOV.UK Notify: Issue sending tip email")
         else:
             self.LOGGER.error(f"Template not available for sending tip email {mode}")
 
