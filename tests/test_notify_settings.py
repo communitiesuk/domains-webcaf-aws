@@ -1,6 +1,9 @@
+import logging
 import os
 import subprocess
 import sys
+
+from django.conf import settings
 
 
 def run_settings(timeout="4.5"):
@@ -49,3 +52,19 @@ def test_notify_timeout_must_be_finite_positive_and_bounded():
 
         assert result.returncode != 0
         assert "NOTIFY_API_TIMEOUT_SECONDS must be a finite number greater than 0 and no more than 30" in result.stderr
+
+
+def test_notify_client_logging_is_discarded():
+    logger_config = settings.LOGGING["loggers"]["notifications_python_client"]
+
+    assert settings.LOGGING["handlers"]["discard"]["class"] == "logging.NullHandler"
+    assert logger_config == {
+        "handlers": ["discard"],
+        "level": "DEBUG",
+        "propagate": False,
+    }
+
+    provider_logger = logging.getLogger("notifications_python_client")
+    assert provider_logger.propagate is False
+    assert provider_logger.getEffectiveLevel() == logging.DEBUG
+    assert any(type(handler) is logging.NullHandler for handler in provider_logger.handlers)

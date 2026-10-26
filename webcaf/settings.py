@@ -241,6 +241,9 @@ LOGGING = {
             "formatter": "verbose",
             "filters": ["request_context"],
         },
+        "discard": {
+            "class": "logging.NullHandler",
+        },
     },
     "loggers": {
         "": {
@@ -257,8 +260,8 @@ LOGGING = {
         # The client logs raw Notify response messages. Application logging in
         # webcaf.webcaf.notification records a redacted error instead.
         "notifications_python_client": {
-            "handlers": ["console"],
-            "level": "ERROR",
+            "handlers": ["discard"],
+            "level": "DEBUG",
             "propagate": False,
         },
     },
