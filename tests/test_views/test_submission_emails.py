@@ -212,3 +212,16 @@ class TestSubmissionEmails(BaseViewTest):
             self._submit()
 
         mock_send.assert_not_called()
+
+    @patch("webcaf.webcaf.views.sections.send_notify_email")
+    def test_notify_exception_details_are_not_logged(self, mock_send):
+        mock_send.side_effect = RuntimeError("sensitive provider response")
+
+        with (
+            patch.object(Assessment, "is_complete", return_value=True),
+            self.assertLogs("ObjectiveConfirmationView", level="ERROR") as logs,
+        ):
+            self._submit()
+
+        self.assertNotIn("sensitive provider response", "\n".join(logs.output))
+        self.assertTrue(all(record.exc_info is None for record in logs.records))

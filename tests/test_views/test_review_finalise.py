@@ -144,8 +144,9 @@ class FinaliseReviewTests(BaseViewTest):
         with (
             patch("webcaf.settings.NOTIFY_REVIEW_FINALISED_TEMPLATE_ID", "test-template-id"),
             patch("webcaf.webcaf.views.assessor.review.send_notify_email") as mock_send_email,
+            self.assertLogs("FinaliseReview", level="ERROR") as logs,
         ):
-            mock_send_email.side_effect = Exception("Email service unavailable")
+            mock_send_email.side_effect = Exception("sensitive provider response")
             self._create_user_with_role("organisation_lead", self.org, username="lead1")
             review = Review.objects.create(
                 assessment=self.assessment_ok,
@@ -162,6 +163,8 @@ class FinaliseReviewTests(BaseViewTest):
             review.refresh_from_db()
             self.assertEqual(response.status_code, 200)
             self.assertTrue(review.is_review_finalised())
+            self.assertNotIn("sensitive provider response", "\n".join(logs.output))
+            self.assertTrue(all(record.exc_info is None for record in logs.records))
 
     def test_form_valid_logger_message(self):
         """Test that the logger outputs the correct message during finalisation."""

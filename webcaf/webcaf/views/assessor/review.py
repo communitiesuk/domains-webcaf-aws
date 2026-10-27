@@ -16,7 +16,6 @@ from webcaf import settings
 from webcaf.webcaf.models import Configuration, Review, Settings, System, UserProfile
 from webcaf.webcaf.notification import send_notify_email
 from webcaf.webcaf.pdf import StaticFileURLFetcher
-from webcaf.webcaf.utils import mask_email
 from webcaf.webcaf.utils.session import SessionUtil
 from webcaf.webcaf.utils.to_spreadsheet import review_to_excel
 from webcaf.webcaf.views.assessor.util import BaseReviewMixin
@@ -200,8 +199,8 @@ class FinaliseReview(BaseReviewMixin, UpdateView):
                         },
                         template_id=template_id,
                     )
-            except Exception as ex:  # type: ignore
-                self.logger.exception(mask_email(f"GOV.UK Notify: Failed to send tip email {ex}"))
+            except Exception:  # type: ignore
+                self.logger.error("GOV.UK Notify: Issue sending review email")
         else:
             self.logger.info("GOV.UK Notify: No template ID provided for review ready email")
 
