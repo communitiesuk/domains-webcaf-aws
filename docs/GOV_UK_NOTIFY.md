@@ -136,9 +136,10 @@ remaining recipients and then raises one aggregate error. A successful HTTP resp
 reported as accepted with an invalid response, not as a failed status 201 request. Empty responses and responses without
 a non-empty string notification ID are handled the same way.
 
-Application logs use safe categories based on Notify's documented stable error types, such as authentication,
-validation, bad request, rate limit, and daily limit. Logs do not include API credentials, personalisation data, raw
-email addresses, raw Notify messages, or synthetic HTTP statuses for failures where no response was received.
+The shared integration logs one aggregate error with batch outcomes, HTTP statuses, and safe categories based on
+Notify's documented stable error types, such as authentication, validation, bad request, rate limit, and daily limit.
+Logs do not include API credentials, personalisation data, raw email addresses, raw Notify messages, exception
+tracebacks, or synthetic HTTP statuses for failures where no response was received.
 
 Common failures are:
 

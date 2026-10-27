@@ -144,12 +144,18 @@ class SendNotifyEmailTest(SimpleTestCase):
 
     @patch("webcaf.webcaf.notification.NotificationsAPIClient", side_effect=AssertionError("invalid key"))
     def test_wraps_client_initialisation_error(self, mock_client_cls):
-        with self.assertRaises(NotifyError) as raised:
+        with (
+            self.assertLogs("webcaf.webcaf.notification", level="ERROR") as logs,
+            self.assertRaises(NotifyError) as raised,
+        ):
             send_notify_email(["alice@example.com"], self.personalisation, self.template_id)
 
         mock_client_cls.assert_called_once_with("test-api-key", timeout=7.5)
         self.assertEqual(raised.exception.categories, (NotifyFailureCategory.CLIENT_INITIALISATION,))
         self.assertNotIn("invalid key", str(raised.exception))
+        self.assertIn("categories: client_initialisation", logs.output[0])
+        self.assertNotIn("invalid key", logs.output[0])
+        self.assertIsNone(logs.records[0].exc_info)
 
     @patch("webcaf.webcaf.notification.time.sleep")
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
@@ -354,29 +360,38 @@ class SendNotifyEmailTest(SimpleTestCase):
         self.assertNotIn("guest list", str(raised.exception))
 
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
-    def test_exposes_safe_notify_error_types_without_provider_messages(self, mock_client_cls):
+    def test_logs_distinct_safe_failure_categories_without_provider_messages(self, mock_client_cls):
         mock_client = mock_client_cls.return_value
         cases = (
-            ("ValidationError", NotifyFailureCategory.VALIDATION),
-            ("AuthError", NotifyFailureCategory.AUTHENTICATION),
-            ("RateLimitError", NotifyFailureCategory.RATE_LIMIT),
+            (400, "ValidationError", NotifyFailureCategory.VALIDATION),
+            (403, "AuthError", NotifyFailureCategory.AUTHENTICATION),
+            (429, "RateLimitError", NotifyFailureCategory.RATE_LIMIT),
+            (500, None, NotifyFailureCategory.SERVER_ERROR),
         )
 
-        for error_type, expected_category in cases:
-            with self.subTest(error_type=error_type):
+        for status_code, error_type, expected_category in cases:
+            with self.subTest(status_code=status_code, error_type=error_type):
                 mock_client.reset_mock()
                 mock_client.send_email_notification.side_effect = api_error(
-                    400,
+                    status_code,
                     error_type,
                     "alice@example.com bad-secret-value",  # pragma: allowlist secret
                 )
 
-                with self.assertRaises(NotifyError) as raised:
+                with (
+                    self.assertLogs("webcaf.webcaf.notification", level="ERROR") as logs,
+                    self.assertRaises(NotifyError) as raised,
+                ):
                     send_notify_email(["alice@example.com"], self.personalisation, self.template_id, max_retries=0)
 
                 self.assertEqual(raised.exception.categories, (expected_category,))
+                self.assertIn(f"categories: {expected_category}", logs.output[0])
+                self.assertIn(f"statuses: {status_code}", logs.output[0])
                 self.assertNotIn("alice@example.com", str(raised.exception))
                 self.assertNotIn("bad-secret-value", str(raised.exception))
+                self.assertNotIn("alice@example.com", logs.output[0])
+                self.assertNotIn("bad-secret-value", logs.output[0])
+                self.assertIsNone(logs.records[0].exc_info)
 
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
     def test_malformed_provider_error_type_uses_safe_status_classification(self, mock_client_cls):
@@ -420,21 +435,43 @@ class SendNotifyEmailTest(SimpleTestCase):
         mock_sleep.assert_not_called()
 
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
-    def test_helper_does_not_log_terminal_failures(self, mock_client_cls):
+    def test_helper_logs_safe_aggregate_without_provider_details_or_traceback(self, mock_client_cls):
         mock_client = mock_client_cls.return_value
-        mock_client.send_email_notification.side_effect = api_error(400, "BadRequestError")
+        mock_client.send_email_notification.side_effect = api_error(
+            400,
+            "BadRequestError",
+            "alice@example.com bad-secret-value",  # pragma: allowlist secret
+        )
 
-        with self.assertNoLogs("webcaf.webcaf.notification", level="ERROR"):
-            with self.assertRaises(NotifyError):
-                send_notify_email(["alice@example.com"], self.personalisation, self.template_id)
+        with (
+            self.assertLogs("webcaf.webcaf.notification", level="ERROR") as logs,
+            self.assertRaises(NotifyError),
+        ):
+            send_notify_email(["alice@example.com"], self.personalisation, self.template_id)
+
+        self.assertEqual(
+            logs.output,
+            [
+                "ERROR:webcaf.webcaf.notification:GOV.UK Notify batch completed with 1 request(s) failed; "
+                "categories: bad_request; statuses: 400"
+            ],
+        )
+        self.assertNotIn("alice@example.com", logs.output[0])
+        self.assertNotIn("bad-secret-value", logs.output[0])
+        self.assertIsNone(logs.records[0].exc_info)
 
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
     def test_wraps_unexpected_error_without_exposing_its_message(self, mock_client_cls):
         mock_client = mock_client_cls.return_value
         mock_client.send_email_notification.side_effect = RuntimeError("sensitive data")
 
-        with self.assertRaises(NotifyError) as raised:
+        with (
+            self.assertLogs("webcaf.webcaf.notification", level="ERROR") as logs,
+            self.assertRaises(NotifyError) as raised,
+        ):
             send_notify_email(["alice@example.com"], self.personalisation, self.template_id)
 
         self.assertEqual(raised.exception.categories, (NotifyFailureCategory.UNEXPECTED,))
         self.assertNotIn("sensitive data", str(raised.exception))
+        self.assertNotIn("sensitive data", logs.output[0])
+        self.assertIsNone(logs.records[0].exc_info)

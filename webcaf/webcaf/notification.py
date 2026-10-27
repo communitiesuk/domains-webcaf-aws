@@ -73,6 +73,13 @@ class NotifyError(Exception):
         super().__init__(message)
 
 
+def _raise_notify_error(failures: list[NotifyFailure], accepted_count: int = 0) -> None:
+    """Log and raise a safe aggregate without provider details or traceback metadata."""
+    error = NotifyError(failures, accepted_count=accepted_count)
+    logger.error("%s", error)
+    raise error from None
+
+
 _ERROR_TYPE_CATEGORIES = {
     "AuthError": NotifyFailureCategory.AUTHENTICATION,
     "BadRequestError": NotifyFailureCategory.BAD_REQUEST,
@@ -220,7 +227,7 @@ def send_notify_email(
         )
         _disable_adapter_retries(notify_client)
     except Exception:
-        raise NotifyError([NotifyFailure(NotifyFailureCategory.CLIENT_INITIALISATION)]) from None
+        _raise_notify_error([NotifyFailure(NotifyFailureCategory.CLIENT_INITIALISATION)])
 
     responses = []
     failures = []
@@ -258,5 +265,5 @@ def send_notify_email(
                 break
 
     if failures:
-        raise NotifyError(failures, accepted_count=len(responses)) from None
+        _raise_notify_error(failures, accepted_count=len(responses))
     return responses
