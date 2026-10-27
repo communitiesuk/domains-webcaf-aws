@@ -22,11 +22,12 @@ class Command(BaseCommand):
             sys.exit(1)
 
         if not User.objects.filter(username=SUPERUSER_NAME).exists():
-            superuser = User.objects.create_superuser(
+            User.objects.create_superuser(
                 username=SUPERUSER_NAME, email=f"{SUPERUSER_NAME}@admin.org", password=SUPERUSER_PASSWORD
             )
 
-            UserProfile.objects.create(user=superuser)
+            # The superuser signs in to /admin/ only, which does not need a UserProfile.
+            # Its access to organisations is not decided by seed data.
             self.stdout.write(self.style.SUCCESS(f"Superuser '{SUPERUSER_NAME}' created"))
         else:
             self.stdout.write(self.style.WARNING(f"Superuser '{SUPERUSER_NAME}' already exists"))
