@@ -124,9 +124,10 @@ be run with a Notify test key. Notify validates the request but does not deliver
 ## Error handling
 
 WebCAF retries failures that are known to happen while establishing a connection, before the request reaches Notify.
-It also retries Notify's documented `RateLimitError`, HTTP 500 responses, and explicit HTTP 503 responses with bounded
-exponential backoff. It does not retry read timeouts, response-less ambiguous transport errors, HTTP 502 or 504,
-daily-limit `TooManyRequestsError` responses, or invalid responses after a successful request.
+It also retries Notify's documented `RateLimitError` with bounded exponential backoff. It does not retry read timeouts,
+response-less ambiguous transport errors, HTTP server-error responses, daily-limit `TooManyRequestsError` responses, or
+invalid responses after a successful request. A server-error response is not retried because Notify may have already
+accepted the request, and retrying could send a duplicate email.
 Retry delays are capped at five seconds, and at most two retries are shared across a recipient batch so synchronous
 retry overhead cannot multiply with the recipient count or consume the full application request-time budget.
 
@@ -145,7 +146,8 @@ Common failures are:
 - Status 401 or 403: check that the API key is valid and belongs to the expected Notify service.
 - `RateLimitError` with status 429: WebCAF retries with bounded backoff.
 - `TooManyRequestsError` with status 429: the daily allowance is exhausted and resets at midnight UTC.
-- Status 500 or explicit status 503: WebCAF retries with bounded backoff; check Notify's service status if retries fail.
+- Status 500 or another server error: WebCAF does not retry because delivery may have occurred; check Notify's service
+  status before deciding whether to send another notification.
 - Transport failure without a response: delivery may be ambiguous and WebCAF does not report a synthetic status 503.
 
 The management command exits unsuccessfully when Notify rejects the request or remains unavailable.

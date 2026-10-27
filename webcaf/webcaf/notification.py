@@ -8,9 +8,9 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from notifications_python_client import NotificationsAPIClient
 from notifications_python_client.errors import APIError, InvalidResponse, TokenError
-from requests import ConnectTimeout
 from requests.adapters import HTTPAdapter
 from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import ConnectTimeout
 from urllib3.exceptions import MaxRetryError, NewConnectionError
 from urllib3.util.retry import Retry
 
@@ -116,13 +116,13 @@ def _classify_failure(error: Exception) -> NotifyFailure:
         return NotifyFailure(NotifyFailureCategory.TRANSPORT)
 
     status_code = error.status_code
+    if status_code >= 500:
+        return NotifyFailure(NotifyFailureCategory.SERVER_ERROR, status_code=status_code)
     error_types = _notify_error_types(error)
     if error_types:
         return NotifyFailure(_ERROR_TYPE_CATEGORIES[error_types[0]], status_code=status_code)
     if status_code in {401, 403}:
         category = NotifyFailureCategory.AUTHENTICATION
-    elif status_code >= 500:
-        category = NotifyFailureCategory.SERVER_ERROR
     else:
         category = NotifyFailureCategory.BAD_REQUEST
     return NotifyFailure(category, status_code=status_code)
@@ -147,9 +147,7 @@ def _is_retryable(error: Exception) -> bool:
     error_types = set(_notify_error_types(error))
     if "TooManyRequestsError" in error_types:
         return False
-    if "RateLimitError" in error_types:
-        return True
-    return error.status_code in {500, 503}
+    return error.status_code == 429 and "RateLimitError" in error_types
 
 
 def _retry_delay_seconds(error: APIError, retry_count: int, retry_delay: float) -> float:
@@ -200,10 +198,11 @@ def send_notify_email(
 ) -> list[dict[str, Any]]:
     """Send one email per unique recipient and return Notify's accepted responses.
 
-    Connection-establishment failures and documented transient responses are
-    retried with bounded backoff. Every recipient is attempted. If any request
-    fails, or Notify accepts one but returns an invalid response, a safe
-    aggregate ``NotifyError`` is raised after the batch completes.
+    Connection-establishment failures and documented rate-limit responses are
+    retried with bounded backoff. Server responses are not retried because
+    delivery may already have occurred. Every recipient is attempted. If any
+    request fails, or Notify accepts one but returns an invalid response, a
+    safe aggregate ``NotifyError`` is raised after the batch completes.
     """
     if not email_addresses:
         return []

@@ -153,11 +153,10 @@ class SendNotifyEmailTest(SimpleTestCase):
 
     @patch("webcaf.webcaf.notification.time.sleep")
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
-    def test_retries_documented_transient_failures_with_exponential_backoff(self, mock_client_cls, mock_sleep):
+    def test_retries_rate_limit_with_exponential_backoff(self, mock_client_cls, mock_sleep):
         mock_client = mock_client_cls.return_value
         mock_client.send_email_notification.side_effect = [
             api_error(429, "RateLimitError"),
-            api_error(500, "Exception"),
             {"id": "notification-id"},
         ]
 
@@ -170,8 +169,8 @@ class SendNotifyEmailTest(SimpleTestCase):
         )
 
         self.assertEqual(responses, [{"id": "notification-id"}])
-        self.assertEqual(mock_client.send_email_notification.call_count, 3)
-        self.assertEqual(mock_sleep.call_args_list, [call(1.0), call(2.0)])
+        self.assertEqual(mock_client.send_email_notification.call_count, 2)
+        self.assertEqual(mock_sleep.call_args_list, [call(1.0)])
 
     @patch("webcaf.webcaf.notification.time.sleep")
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
@@ -243,30 +242,21 @@ class SendNotifyEmailTest(SimpleTestCase):
 
     @patch("webcaf.webcaf.notification.time.sleep")
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
-    def test_does_not_retry_ambiguous_gateway_failures(self, mock_client_cls, mock_sleep):
+    def test_does_not_retry_server_responses(self, mock_client_cls, mock_sleep):
         mock_client = mock_client_cls.return_value
 
-        for status_code in (502, 504):
-            with self.subTest(status_code=status_code):
+        for status_code, error_type in ((500, None), (500, "RateLimitError"), (502, None), (503, None), (504, None)):
+            with self.subTest(status_code=status_code, error_type=error_type):
                 mock_client.reset_mock()
-                mock_client.send_email_notification.side_effect = api_error(status_code)
+                mock_client.send_email_notification.side_effect = api_error(status_code, error_type)
 
-                with self.assertRaises(NotifyError):
+                with self.assertRaises(NotifyError) as raised:
                     send_notify_email(["alice@example.com"], self.personalisation, self.template_id)
 
+                self.assertEqual(raised.exception.categories, (NotifyFailureCategory.SERVER_ERROR,))
+                self.assertEqual(raised.exception.status_codes, (status_code,))
                 self.assertEqual(mock_client.send_email_notification.call_count, 1)
         mock_sleep.assert_not_called()
-
-    @patch("webcaf.webcaf.notification.time.sleep")
-    @patch("webcaf.webcaf.notification.NotificationsAPIClient")
-    def test_retries_explicit_503_response(self, mock_client_cls, mock_sleep):
-        mock_client = mock_client_cls.return_value
-        mock_client.send_email_notification.side_effect = [api_error(503), {"id": "notification-id"}]
-
-        responses = send_notify_email(["alice@example.com"], self.personalisation, self.template_id)
-
-        self.assertEqual(responses, [{"id": "notification-id"}])
-        mock_sleep.assert_called_once_with(1.0)
 
     @patch("webcaf.webcaf.notification.time.sleep")
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
@@ -410,7 +400,7 @@ class SendNotifyEmailTest(SimpleTestCase):
 
     @patch("webcaf.webcaf.notification.time.sleep")
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
-    def test_malformed_provider_error_type_still_retries_by_status(self, mock_client_cls, mock_sleep):
+    def test_malformed_provider_error_type_does_not_retry_server_response(self, mock_client_cls, mock_sleep):
         mock_client = mock_client_cls.return_value
 
         for malformed_error_type in (["Exception"], {"type": "Exception"}):
@@ -420,18 +410,14 @@ class SendNotifyEmailTest(SimpleTestCase):
                 error.response._content = json.dumps(
                     {"errors": [{"error": malformed_error_type, "message": "sensitive data"}]}
                 ).encode()
-                mock_client.send_email_notification.side_effect = [error, {"id": "notification-id"}]
+                mock_client.send_email_notification.side_effect = error
 
-                responses = send_notify_email(
-                    ["alice@example.com"],
-                    self.personalisation,
-                    self.template_id,
-                    max_retries=1,
-                )
+                with self.assertRaises(NotifyError) as raised:
+                    send_notify_email(["alice@example.com"], self.personalisation, self.template_id)
 
-                self.assertEqual(responses, [{"id": "notification-id"}])
-                self.assertEqual(mock_client.send_email_notification.call_count, 2)
-        self.assertEqual(mock_sleep.call_args_list, [call(1.0), call(1.0)])
+                self.assertEqual(raised.exception.categories, (NotifyFailureCategory.SERVER_ERROR,))
+                self.assertEqual(mock_client.send_email_notification.call_count, 1)
+        mock_sleep.assert_not_called()
 
     @patch("webcaf.webcaf.notification.NotificationsAPIClient")
     def test_helper_does_not_log_terminal_failures(self, mock_client_cls):
