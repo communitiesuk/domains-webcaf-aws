@@ -55,6 +55,31 @@ class LogoutViewTest(TestCase):
         self.assertRedirects(response, "https://example.com/logout", fetch_redirect_response=False)
 
     @override_settings(
+        SSO_MODE="internal-access",
+        OIDC_OP_LOGOUT_ENDPOINT="https://example.test/sign-out",
+        OIDC_RP_CLIENT_ID="internal-access-client",
+        LOGOUT_REDIRECT_URL="https://webcaf.example.test/",
+    )
+    def test_internal_access_logout_clears_session_and_redirects_to_provider(self):
+        session = self.client.session
+        session["oidc_id_token"] = "test-id-token"
+        session.save()
+
+        response = self.client.post(reverse("logout"))
+
+        self.assertEqual(urlparse(response.url).path, "/sign-out")
+        self.assertEqual(
+            parse_qs(urlparse(response.url).query),
+            {
+                "id_token_hint": ["test-id-token"],
+                "client_id": ["internal-access-client"],
+                "redirect_uri": ["https://webcaf.example.test/"],
+            },
+        )
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertNotIn("oidc_id_token", self.client.session)
+
+    @override_settings(
         SSO_MODE="local",
         OIDC_OP_LOGOUT_ENDPOINT="http://localhost:5556/auth/logout",
         OIDC_RP_CLIENT_ID="my-django-app",

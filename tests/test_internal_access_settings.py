@@ -5,15 +5,20 @@ import sys
 import pytest
 
 
-def run_settings(env_overrides):
+def run_settings(env_overrides, *, use_default=False):
     env = os.environ.copy()
     env.update(env_overrides)
+    if use_default:
+        env.pop("SSO_MODE", None)
 
     result = subprocess.run(
         [
             sys.executable,
             "-c",
             (
+                "from unittest.mock import patch; "
+                "patch('environ.Env.read_env').start(); "
+                "patch('dotenv.load_dotenv').start(); "
                 "import webcaf.settings as s; "
                 "print('|'.join(str(x) for x in ["
                 "s.SSO_MODE,"
@@ -28,7 +33,8 @@ def run_settings(env_overrides):
                 "s.OIDC_STORE_ID_TOKEN,"
                 "s.OIDC_STORE_ACCESS_TOKEN,"
                 "s.LOGOUT_REDIRECT_URL,"
-                "s.ENABLED_2FA"
+                "s.ENABLED_2FA,"
+                "s.OIDC_CALLBACK_CLASS"
                 "]))"
             ),
         ],
@@ -41,7 +47,8 @@ def run_settings(env_overrides):
     return result.stdout.strip().split("|")
 
 
-def test_internal_access_settings():
+@pytest.mark.parametrize("use_default", [False, True])
+def test_internal_access_settings(use_default):
     settings = run_settings(
         {
             "SSO_MODE": "internal-access",
@@ -54,7 +61,8 @@ def test_internal_access_settings():
             "INTERNAL_ACCESS_JWKS_ENDPOINT": "https://example.test/jwks",
             "INTERNAL_ACCESS_LOGOUT_ENDPOINT": "https://example.test/logout",
             "LOGOUT_REDIRECT_URL": "http://localhost:8010/",
-        }
+        },
+        use_default=use_default,
     )
 
     assert settings == [
@@ -75,6 +83,7 @@ def test_internal_access_settings():
         "True",
         "http://localhost:8010/",
         "False",
+        "webcaf.webcaf.views.internal_access.InternalAccessCallbackView",
     ]
 
 
@@ -95,4 +104,4 @@ def test_internal_access_disables_2fa_in_all_environments(environment):
         }
     )
 
-    assert settings[-1] == "False"
+    assert settings[-2] == "False"

@@ -267,7 +267,7 @@ LOGGING = {
     },
 }
 
-SSO_MODE = env.str("SSO_MODE", "one-login").lower()
+SSO_MODE = env.str("SSO_MODE", "internal-access").lower()
 if SSO_MODE not in {
     "external",
     "internal-access",
@@ -280,6 +280,7 @@ if SSO_MODE not in {
     raise ImproperlyConfigured(f"Unsupported SSO_MODE: {SSO_MODE}")
 
 if SSO_MODE == "internal-access":
+    OIDC_CALLBACK_CLASS = "webcaf.webcaf.views.internal_access.InternalAccessCallbackView"
     OIDC_RP_CLIENT_ID = env.str("INTERNAL_ACCESS_CLIENT_ID")
     OIDC_RP_CLIENT_SECRET = env.str("INTERNAL_ACCESS_CLIENT_SECRET")  # pragma: allowlist secret
 
