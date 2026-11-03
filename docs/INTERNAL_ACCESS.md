@@ -35,7 +35,8 @@ not implemented.
 
 Copy `webcaf/.env.example` to the ignored `webcaf/.env`. Obtain a registered local
 client ID and secret through the agreed secure channel and fill in the empty values.
-Register `http://localhost:8010/oidc/callback/` and the agreed logout return URL with IA.
+Register `http://localhost:8010/oidc/callback/` with IA and configure the client's
+`app_url` as the intended local return URL after logout.
 Use the provider endpoints confirmed for that client; the example lists the current
 integration endpoint configuration. Do not use sandbox credentials without agreement.
 
@@ -65,15 +66,14 @@ INTERNAL_ACCESS_TOKEN_ENDPOINT=<registered provider token endpoint>
 INTERNAL_ACCESS_USERINFO_ENDPOINT=<registered provider UserInfo endpoint>
 INTERNAL_ACCESS_JWKS_ENDPOINT=<registered provider JWKS endpoint>
 INTERNAL_ACCESS_LOGOUT_ENDPOINT=<registered provider logout endpoint>
-LOGOUT_REDIRECT_URL=https://<sandbox-host>/
 ```
 
 Inject `INTERNAL_ACCESS_CLIENT_SECRET` using ECS Secrets Manager references rather
 than ordinary task-definition environment values, build arguments or image files.
 The task execution role needs permission to read the secret and decrypt its KMS key
 where applicable. Register the exact sandbox callback URI
-`https://<sandbox-host>/oidc/callback/` with Internal Access and agree the logout
-return URI and supported logout parameters with the IA team.
+`https://<sandbox-host>/oidc/callback/` with Internal Access and configure the
+client's `app_url` as the intended sandbox return URL after logout.
 
 The trusted load balancer must preserve the public host and set
 `X-Forwarded-Proto=https`; callback URLs are built from the incoming request.
@@ -101,10 +101,17 @@ An IA-hosted “No access” page is controlled by Internal Access and may preve
 browser from reaching WebCAF's callback. Its wording and support contact cannot be
 changed in WebCAF templates. Test this separately from a denial returned to WebCAF.
 
-Logout is a POST to `/logout/`. It clears the Django session and, when an ID token
-is available, redirects to the configured provider logout endpoint with
-`id_token_hint`, `client_id` and `redirect_uri`. Automated tests verify the generated
-request; the actual IA logout and return behaviour must be verified in sandbox.
+Logout is a POST to WebCAF's `/logout/`. It clears the Django session and redirects
+to IA's configured `/sign-out` endpoint with `to_client=<client ID>`, even when no
+ID token remains locally. In the reviewed IA implementation, this endpoint clears
+the IA session and returns to the client's registered `app_url`. It does not use
+`id_token_hint`, `client_id` or `redirect_uri` for this flow. `LOGOUT_REDIRECT_URL`
+does not control IA's return URL; it remains available for generic OIDC providers.
+IA's `from_app` parameter displays a confirmation page rather than immediately
+clearing the session, so WebCAF does not use it for this redirect.
+
+Automated tests verify the generated request. Confirm the deployed IA service's
+logout behaviour and registered `app_url` during local and sandbox verification.
 
 ## Retaining and re-enabling One Login
 

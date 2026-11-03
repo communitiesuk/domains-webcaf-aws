@@ -293,7 +293,8 @@ if SSO_MODE == "internal-access":
     OIDC_STORE_ID_TOKEN = True
     OIDC_STORE_ACCESS_TOKEN = True
 
-    LOGOUT_REDIRECT_URL = env.str("LOGOUT_REDIRECT_URL")
+    # IA uses its registered client app_url; retain this setting for OIDC compatibility.
+    LOGOUT_REDIRECT_URL = env.str("LOGOUT_REDIRECT_URL", "/")
     # Internal Access handles authentication; no additional WebCAF email OTP is required.
     ENABLED_2FA = False
 

@@ -70,14 +70,23 @@ class LogoutViewTest(TestCase):
         self.assertEqual(urlparse(response.url).path, "/sign-out")
         self.assertEqual(
             parse_qs(urlparse(response.url).query),
-            {
-                "id_token_hint": ["test-id-token"],
-                "client_id": ["internal-access-client"],
-                "redirect_uri": ["https://webcaf.example.test/"],
-            },
+            {"to_client": ["internal-access-client"]},
         )
         self.assertNotIn("_auth_user_id", self.client.session)
         self.assertNotIn("oidc_id_token", self.client.session)
+
+    @override_settings(
+        SSO_MODE="internal-access",
+        OIDC_OP_LOGOUT_ENDPOINT="https://example.test/sign-out",
+        OIDC_RP_CLIENT_ID="client/with spaces",
+    )
+    def test_internal_access_logout_without_id_token_still_signs_out_at_provider(self):
+        response = self.client.post(reverse("logout"))
+
+        parsed = urlparse(response.url)
+        self.assertEqual((parsed.scheme, parsed.netloc, parsed.path), ("https", "example.test", "/sign-out"))
+        self.assertEqual(parse_qs(parsed.query), {"to_client": ["client/with spaces"]})
+        self.assertNotIn("_auth_user_id", self.client.session)
 
     @override_settings(
         SSO_MODE="local",
