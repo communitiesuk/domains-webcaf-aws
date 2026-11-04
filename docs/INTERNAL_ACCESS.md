@@ -68,10 +68,31 @@ INTERNAL_ACCESS_JWKS_ENDPOINT=<registered provider JWKS endpoint>
 INTERNAL_ACCESS_LOGOUT_ENDPOINT=<registered provider logout endpoint>
 ```
 
-Inject `INTERNAL_ACCESS_CLIENT_SECRET` using ECS Secrets Manager references rather
-than ordinary task-definition environment values, build arguments or image files.
-The task execution role needs permission to read the secret and decrypt its KMS key
-where applicable. Register the exact sandbox callback URI
+Pass `INTERNAL_ACCESS_SECRET_ARN` from the Sandbox GitHub environment into the ECS
+container environment. WebCAF retrieves the secret directly using the ECS task role
+and extracts `INTERNAL_ACCESS_CLIENT_SECRET` from its JSON `SecretString`:
+
+```json
+{"INTERNAL_ACCESS_CLIENT_SECRET": "<client secret>"}
+```
+
+The task role (not only the execution role) needs `secretsmanager:GetSecretValue`
+permission for that secret and KMS decryption permission where applicable. No AWS
+access keys are configured in the application. The SDK uses workload credentials.
+`AWS_REGION` selects the region, falling back to `AWS_DEFAULT_REGION` and then
+`eu-west-2`. The secret is read when each application process loads its settings,
+not on each request. Redeploy after rotating the secret or changing its ARN.
+
+When an ARN is configured, retrieval or JSON validation failure stops startup; the
+application does not silently fall back to an environment secret. Error messages
+exclude secret values and provider response details. Without an ARN, local development
+continues to read `INTERNAL_ACCESS_CLIENT_SECRET` from the ignored `.env`.
+
+Changing to a replacement secret requires changing the configured ARN and redeploying,
+with the same JSON key and appropriate task-role access. Never put secret values in
+ordinary deployment variables, build arguments or images.
+
+Register the exact sandbox callback URI
 `https://<sandbox-host>/oidc/callback/` with Internal Access and configure the
 client's `app_url` as the intended sandbox return URL after logout.
 
@@ -80,8 +101,8 @@ The trusted load balancer must preserve the public host and set
 Keep the application inaccessible through routes that bypass this trusted proxy.
 
 The sandbox deployment workflow currently reuses the existing ECS task definition.
-The IA variables and secret references must be present in the rendered definition
-before deployment. Repository changes alone do not register the client, provision
+The IA variables, including `INTERNAL_ACCESS_SECRET_ARN`, must be present in the
+rendered definition before deployment. Repository changes alone do not register the client, provision
 secrets or verify the deployed configuration.
 
 ## Failure handling and logging

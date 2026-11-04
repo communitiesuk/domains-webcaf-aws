@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import sys
@@ -5,12 +6,19 @@ import sys
 import pytest
 
 
-def run_settings(env_overrides, *, use_default=False):
+def run_settings(env_overrides, *, use_default=False, secret_values=None):
     env = os.environ.copy()
+    env["INTERNAL_ACCESS_SECRET_ARN"] = ""
     env.update(env_overrides)
     if use_default:
         env.pop("SSO_MODE", None)
 
+    aws_mock = (
+        "patch('boto3.client', side_effect=AssertionError('Unexpected AWS call')).start(); "
+        if secret_values is None
+        else "aws_client = patch('boto3.client').start(); "
+        f"aws_client.return_value.get_secret_value.return_value = {{'SecretString': {json.dumps(secret_values)!r}}}; "
+    )
     result = subprocess.run(
         [
             sys.executable,
@@ -18,8 +26,7 @@ def run_settings(env_overrides, *, use_default=False):
             (
                 "from unittest.mock import patch; "
                 "patch('environ.Env.read_env').start(); "
-                "patch('dotenv.load_dotenv').start(); "
-                "import webcaf.settings as s; "
+                "patch('dotenv.load_dotenv').start(); " + aws_mock + "import webcaf.settings as s; "
                 "import django; django.setup(); "
                 "from django.urls import resolve; "
                 "from webcaf.webcaf.views.internal_access import InternalAccessCallbackView; "
@@ -111,3 +118,22 @@ def test_internal_access_disables_2fa_in_all_environments(environment):
     )
 
     assert settings[-2] == "False"
+
+
+def test_internal_access_settings_prefers_configured_secret_arn():
+    settings = run_settings(
+        {
+            "SSO_MODE": "internal-access",
+            "ENVIRONMENT": "local",
+            "INTERNAL_ACCESS_CLIENT_ID": "test-client-id",
+            "INTERNAL_ACCESS_CLIENT_SECRET": "unused-local-secret",  # pragma: allowlist secret
+            "INTERNAL_ACCESS_SECRET_ARN": "arn:aws:secretsmanager:eu-west-2:123456789012:secret:ia-test",
+            "INTERNAL_ACCESS_AUTHORIZATION_ENDPOINT": "https://example.test/authorize",
+            "INTERNAL_ACCESS_TOKEN_ENDPOINT": "https://example.test/token",
+            "INTERNAL_ACCESS_USERINFO_ENDPOINT": "https://example.test/userinfo",
+            "INTERNAL_ACCESS_JWKS_ENDPOINT": "https://example.test/jwks",
+            "INTERNAL_ACCESS_LOGOUT_ENDPOINT": "https://example.test/logout",
+        },
+        secret_values={"INTERNAL_ACCESS_CLIENT_SECRET": "dummy-aws-secret"},
+    )
+    assert settings[3] == "dummy-aws-secret"

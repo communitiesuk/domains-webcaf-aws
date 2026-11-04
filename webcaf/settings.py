@@ -282,7 +282,16 @@ if SSO_MODE not in {
 if SSO_MODE == "internal-access":
     OIDC_CALLBACK_CLASS = "webcaf.webcaf.views.internal_access.InternalAccessCallbackView"
     OIDC_RP_CLIENT_ID = env.str("INTERNAL_ACCESS_CLIENT_ID")
-    OIDC_RP_CLIENT_SECRET = env.str("INTERNAL_ACCESS_CLIENT_SECRET")  # pragma: allowlist secret
+    INTERNAL_ACCESS_SECRET_ARN = env.str("INTERNAL_ACCESS_SECRET_ARN", "").strip()
+    if INTERNAL_ACCESS_SECRET_ARN:
+        from webcaf.secret_config import get_internal_access_client_secret
+
+        OIDC_RP_CLIENT_SECRET = get_internal_access_client_secret(
+            INTERNAL_ACCESS_SECRET_ARN,
+            env.str("AWS_REGION", env.str("AWS_DEFAULT_REGION", "eu-west-2")),
+        )
+    else:
+        OIDC_RP_CLIENT_SECRET = env.str("INTERNAL_ACCESS_CLIENT_SECRET")  # pragma: allowlist secret
 
     OIDC_OP_AUTHORIZATION_ENDPOINT = env.str("INTERNAL_ACCESS_AUTHORIZATION_ENDPOINT")
     OIDC_OP_TOKEN_ENDPOINT = env.str("INTERNAL_ACCESS_TOKEN_ENDPOINT")
