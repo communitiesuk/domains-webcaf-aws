@@ -7,7 +7,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 from webcaf.secret_config import get_internal_access_client_secret
 
-SECRET_ARN = "arn:aws:secretsmanager:eu-west-2:123456789012:secret:internalAccess-test"
+SECRET_ARN = "arn:aws:secretsmanager:eu-west-2:123456789012:secret:internalAccess-test"  # pragma: allowlist secret
 
 
 @patch("webcaf.secret_config.boto3.client")
@@ -28,7 +28,7 @@ def test_fetches_internal_access_json_secret_using_workload_credentials(create_c
     "response",
     [
         {"SecretBinary": b"unsupported"},
-        {"SecretString": "not-json-sensitive-value"},
+        {"SecretString": "not-json-sensitive-value"},  # pragma: allowlist secret
         {"SecretString": "[]"},
         {"SecretString": "{}"},
         {"SecretString": '{"INTERNAL_ACCESS_CLIENT_SECRET": null}'},

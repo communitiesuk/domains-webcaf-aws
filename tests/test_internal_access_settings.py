@@ -127,13 +127,13 @@ def test_internal_access_settings_prefers_configured_secret_arn():
             "ENVIRONMENT": "local",
             "INTERNAL_ACCESS_CLIENT_ID": "test-client-id",
             "INTERNAL_ACCESS_CLIENT_SECRET": "unused-local-secret",  # pragma: allowlist secret
-            "INTERNAL_ACCESS_SECRET_ARN": "arn:aws:secretsmanager:eu-west-2:123456789012:secret:ia-test",
+            "INTERNAL_ACCESS_SECRET_ARN": "arn:aws:secretsmanager:eu-west-2:123456789012:secret:ia-test",  # pragma: allowlist secret
             "INTERNAL_ACCESS_AUTHORIZATION_ENDPOINT": "https://example.test/authorize",
             "INTERNAL_ACCESS_TOKEN_ENDPOINT": "https://example.test/token",
             "INTERNAL_ACCESS_USERINFO_ENDPOINT": "https://example.test/userinfo",
             "INTERNAL_ACCESS_JWKS_ENDPOINT": "https://example.test/jwks",
             "INTERNAL_ACCESS_LOGOUT_ENDPOINT": "https://example.test/logout",
         },
-        secret_values={"INTERNAL_ACCESS_CLIENT_SECRET": "dummy-aws-secret"},
+        secret_values={"INTERNAL_ACCESS_CLIENT_SECRET": "dummy-aws-secret"},  # pragma: allowlist secret
     )
     assert settings[3] == "dummy-aws-secret"
