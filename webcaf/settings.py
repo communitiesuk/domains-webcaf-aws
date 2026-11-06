@@ -181,6 +181,42 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 MEDIA_URL = "/media/"
 AWS_STORAGE_BUCKET_NAME = env.str("S3_DATA_BUCKET", "")
 
+# CS-627 evidence upload proof of concept. This is deliberately separate from
+# the analytics export bucket above and can only be enabled in local DEBUG
+# environments. The two processes must use independently assumed roles.
+EVIDENCE_POC_ENABLED = env.bool("EVIDENCE_POC_ENABLED", False)
+if EVIDENCE_POC_ENABLED and not DEBUG:
+    raise ImproperlyConfigured("The CS-627 evidence proof of concept may only be enabled in local DEBUG mode")
+
+EVIDENCE_POC_AWS_REGION = env.str("EVIDENCE_POC_AWS_REGION", "").strip()
+EVIDENCE_POC_INTAKE_BUCKET = env.str("EVIDENCE_POC_INTAKE_BUCKET", "").strip()
+EVIDENCE_POC_ACCEPTED_BUCKET = env.str("EVIDENCE_POC_ACCEPTED_BUCKET", "").strip()
+EVIDENCE_POC_KMS_KEY_ARN = env.str("EVIDENCE_POC_KMS_KEY_ARN", "").strip()
+EVIDENCE_POC_APP_ROLE_ARN = env.str("EVIDENCE_POC_APP_ROLE_ARN", "").strip()
+EVIDENCE_POC_PROCESSOR_ROLE_ARN = env.str("EVIDENCE_POC_PROCESSOR_ROLE_ARN", "").strip()
+EVIDENCE_POC_APP_AWS_PROFILE = env.str("EVIDENCE_POC_APP_AWS_PROFILE", "").strip()
+EVIDENCE_POC_PROCESSOR_AWS_PROFILE = env.str("EVIDENCE_POC_PROCESSOR_AWS_PROFILE", "").strip()
+if EVIDENCE_POC_ENABLED:
+    evidence_poc_required_settings = {
+        "EVIDENCE_POC_AWS_REGION": EVIDENCE_POC_AWS_REGION,
+        "EVIDENCE_POC_INTAKE_BUCKET": EVIDENCE_POC_INTAKE_BUCKET,
+        "EVIDENCE_POC_ACCEPTED_BUCKET": EVIDENCE_POC_ACCEPTED_BUCKET,
+        "EVIDENCE_POC_KMS_KEY_ARN": EVIDENCE_POC_KMS_KEY_ARN,
+        "EVIDENCE_POC_APP_ROLE_ARN": EVIDENCE_POC_APP_ROLE_ARN,
+        "EVIDENCE_POC_PROCESSOR_ROLE_ARN": EVIDENCE_POC_PROCESSOR_ROLE_ARN,
+        "EVIDENCE_POC_APP_AWS_PROFILE": EVIDENCE_POC_APP_AWS_PROFILE,
+        "EVIDENCE_POC_PROCESSOR_AWS_PROFILE": EVIDENCE_POC_PROCESSOR_AWS_PROFILE,
+    }
+    missing_evidence_poc_settings = sorted(name for name, value in evidence_poc_required_settings.items() if not value)
+    if missing_evidence_poc_settings:
+        raise ImproperlyConfigured(
+            "The enabled CS-627 evidence proof of concept requires configuration for: "
+            + ", ".join(missing_evidence_poc_settings)
+        )
+EVIDENCE_POC_UPLOAD_EXPIRY_SECONDS = 600
+EVIDENCE_POC_DOWNLOAD_EXPIRY_SECONDS = 60
+EVIDENCE_POC_MAX_BYTES = 26_214_400
+
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
 
@@ -262,6 +298,29 @@ LOGGING = {
         "notifications_python_client": {
             "handlers": ["discard"],
             "level": "DEBUG",
+            "propagate": False,
+        },
+        # AWS SDK debug messages can contain temporary credential material,
+        # signed request headers and presigned URLs. Keep those out of logs
+        # even when the rest of the local application runs at DEBUG.
+        "boto3": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "botocore": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "s3transfer": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "urllib3": {
+            "handlers": ["console"],
+            "level": "WARNING",
             "propagate": False,
         },
     },
@@ -413,6 +472,11 @@ CONTENT_SECURITY_POLICY = {
         ),
     }
 }
+
+if EVIDENCE_POC_ENABLED:
+    evidence_intake_origin = f"https://{EVIDENCE_POC_INTAKE_BUCKET}.s3.{EVIDENCE_POC_AWS_REGION}.amazonaws.com"
+    CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += (evidence_intake_origin,)
+    CONTENT_SECURITY_POLICY["DIRECTIVES"]["form-action"] += (evidence_intake_origin,)
 
 # If we want to test CSP breaches we need to set a fake reporting URL, so the tests
 # check if it's been called.
