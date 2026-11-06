@@ -1,0 +1,16 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div class="module">
+    <h2>Upload {{ upload.display_filename }}</h2>
+    <p>Select the same benign PDF. The browser sends it directly to the dedicated intake bucket.</p>
+    <form method="post" enctype="multipart/form-data" action="{{ signed_post.url }}">
+        {% for name, value in signed_post.fields.items %}
+            <input type="hidden" name="{{ name }}" value="{{ value }}">
+        {% endfor %}
+        <input name="file" type="file" accept="application/pdf,.pdf" required>
+        <button type="submit" class="button default">Upload PDF</button>
+    </form>
+    <p>Do not navigate away while the file is transferring. After S3 accepts it, processing continues independently.</p>
+</div>
+{% endblock %}

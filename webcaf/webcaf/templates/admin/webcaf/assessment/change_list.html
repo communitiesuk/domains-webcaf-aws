@@ -1,6 +1,11 @@
 {% extends "admin/change_list.html" %}
 
 {% block object-tools-items %}
+    {% if evidence_poc_enabled %}
+    <li>
+        <a href="evidence-poc/" class="viewlink">Evidence upload POC</a>
+    </li>
+    {% endif %}
     <li>
         <a href="import-excel/" class="addlink">Import Excel</a>
     </li>

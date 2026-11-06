@@ -5,27 +5,42 @@ import zoneinfo
 from datetime import datetime
 from io import BytesIO, StringIO, TextIOWrapper
 from typing import Any, MutableMapping, Optional
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.auth.models import User
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.core.validators import RegexValidator
 from django.db.models import F, Model, Q
 from django.forms import CharField, DateTimeInput, ModelForm
 from django.forms.fields import ChoiceField
-from django.http import HttpRequest, HttpResponse
-from django.shortcuts import redirect, render
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import path, reverse
 from django.utils import timezone
 from simple_history.admin import SimpleHistoryAdmin
 
+from webcaf.webcaf.evidence_poc import (
+    EvidenceCredentialError,
+    create_upload,
+    current_upload_profile,
+    editable_assessment,
+    presigned_upload,
+    require_feature,
+    safe_pdf_download_filename,
+    validate_initiation,
+    verified_s3_client,
+)
 from webcaf.webcaf.models import (
     AllowedEmailDomain,
     Assessment,
     Configuration,
+    EvidencePocUpload,
     Organisation,
     Review,
     Settings,
@@ -563,8 +578,234 @@ class AssessmentAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: ig
                 self.admin_site.admin_view(self.export_excel_template),
                 name="assessment_export_excel_template",
             ),
+            path(
+                "evidence-poc/",
+                self.admin_site.admin_view(self.evidence_poc_index),
+                name="assessment_evidence_poc",
+            ),
+            path(
+                "evidence-poc/initiate/",
+                self.admin_site.admin_view(self.evidence_poc_initiate),
+                name="assessment_evidence_poc_initiate",
+            ),
+            path(
+                "evidence-poc/<uuid:evidence_id>/received/",
+                self.admin_site.admin_view(self.evidence_poc_received),
+                name="assessment_evidence_poc_received",
+            ),
+            path(
+                "evidence-poc/<uuid:evidence_id>/return/",
+                self.admin_site.admin_view(self.evidence_poc_return),
+                name="assessment_evidence_poc_return",
+            ),
+            path(
+                "evidence-poc/<uuid:evidence_id>/status/",
+                self.admin_site.admin_view(self.evidence_poc_status),
+                name="assessment_evidence_poc_status",
+            ),
+            path(
+                "evidence-poc/<uuid:evidence_id>/download/",
+                self.admin_site.admin_view(self.evidence_poc_download),
+                name="assessment_evidence_poc_download",
+            ),
         ]
         return custom_urls + urls
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = {**(extra_context or {}), "evidence_poc_enabled": settings.EVIDENCE_POC_ENABLED}
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def _evidence_context(self, request, **extra):
+        return {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": "Evidence upload proof of concept",
+            "max_bytes": settings.EVIDENCE_POC_MAX_BYTES,
+            **extra,
+        }
+
+    @staticmethod
+    def _evidence_for_profile(profile, evidence_id):
+        return get_object_or_404(
+            EvidencePocUpload.objects.select_related("assessment__system__organisation"),
+            id=evidence_id,
+            organisation_id=profile.organisation_id,
+            assessment__system__organisation_id=profile.organisation_id,
+        )
+
+    def evidence_poc_index(self, request):
+        require_feature()
+        try:
+            profile = current_upload_profile(request)
+        except PermissionDenied as exc:
+            return render(
+                request,
+                "admin/webcaf/assessment/evidence_poc.html",
+                self._evidence_context(request, profile_error=str(exc), assessments=[], evidence=[]),
+                status=403,
+            )
+        assessments = Assessment.objects.filter(
+            status="draft", system__organisation_id=profile.organisation_id
+        ).select_related("system")
+        evidence = EvidencePocUpload.objects.filter(organisation_id=profile.organisation_id).select_related(
+            "assessment__system"
+        )
+        return render(
+            request,
+            "admin/webcaf/assessment/evidence_poc.html",
+            self._evidence_context(request, assessments=assessments, evidence=evidence),
+        )
+
+    def evidence_poc_initiate(self, request):
+        require_feature()
+        if request.method != "POST":
+            raise Http404
+        profile = current_upload_profile(request)
+        assessment = editable_assessment(profile, request.POST.get("assessment_id"))
+        enhanced = request.POST.get("enhanced") == "1"
+        try:
+            validate_initiation(
+                request.POST.get("display_filename", ""),
+                request.POST.get("declared_size", ""),
+                request.POST.get("content_type", ""),
+                enhanced,
+            )
+        except ValidationError as exc:
+            if enhanced:
+                return JsonResponse({"error": "; ".join(getattr(exc, "messages", [str(exc)]))}, status=400)
+            self.message_user(request, "; ".join(getattr(exc, "messages", [str(exc)])), messages.ERROR)
+            return redirect("admin:assessment_evidence_poc")
+
+        upload = create_upload(
+            profile,
+            assessment,
+            request.user,
+            request.POST["display_filename"],
+            request.POST.get("content_type", ""),
+        )
+        if enhanced:
+            success_action = {"success_action_status": "204"}
+        else:
+            signed_id = TimestampSigner(salt="evidence-poc-return").sign(str(upload.id))
+            callback = request.build_absolute_uri(reverse("admin:assessment_evidence_poc_return", args=[upload.id]))
+            success_action = {"success_action_redirect": f"{callback}?{urlencode({'token': signed_id})}"}
+        try:
+            signed_post = presigned_upload(upload, success_action)
+        except EvidenceCredentialError as exc:
+            upload.state = EvidencePocUpload.State.FAILED
+            upload.failure_reason = "credential_error"
+            upload.save(update_fields=["state", "failure_reason", "updated_at"])
+            if enhanced:
+                return JsonResponse({"error": str(exc)}, status=503)
+            self.message_user(request, str(exc), messages.ERROR)
+            return redirect("admin:assessment_evidence_poc")
+
+        if enhanced:
+            return JsonResponse(
+                {
+                    "upload_url": signed_post["url"],
+                    "fields": signed_post["fields"],
+                    "received_url": reverse("admin:assessment_evidence_poc_received", args=[upload.id]),
+                    "status_url": reverse("admin:assessment_evidence_poc_status", args=[upload.id]),
+                }
+            )
+        return render(
+            request,
+            "admin/webcaf/assessment/evidence_poc_transfer.html",
+            self._evidence_context(request, upload=upload, signed_post=signed_post),
+        )
+
+    def evidence_poc_received(self, request, evidence_id):
+        require_feature()
+        if request.method != "POST":
+            raise Http404
+        profile = current_upload_profile(request)
+        upload = self._evidence_for_profile(profile, evidence_id)
+        EvidencePocUpload.objects.filter(id=upload.id, state=EvidencePocUpload.State.UPLOADING).update(
+            state=EvidencePocUpload.State.RECEIVED
+        )
+        return JsonResponse({"status": "received"})
+
+    def evidence_poc_return(self, request, evidence_id):
+        require_feature()
+        profile = current_upload_profile(request)
+        upload = self._evidence_for_profile(profile, evidence_id)
+        token = request.GET.get("token", "")
+        try:
+            signed_id = TimestampSigner(salt="evidence-poc-return").unsign(
+                token, max_age=settings.EVIDENCE_POC_UPLOAD_EXPIRY_SECONDS
+            )
+        except (BadSignature, SignatureExpired) as exc:
+            raise Http404 from exc
+        if signed_id != str(upload.id):
+            raise Http404
+        EvidencePocUpload.objects.filter(id=upload.id, state=EvidencePocUpload.State.UPLOADING).update(
+            state=EvidencePocUpload.State.RECEIVED
+        )
+        self.message_user(request, "Upload received. Security checks are in progress.", messages.SUCCESS)
+        return redirect("admin:assessment_evidence_poc")
+
+    def evidence_poc_status(self, request, evidence_id):
+        require_feature()
+        profile = current_upload_profile(request)
+        upload = self._evidence_for_profile(profile, evidence_id)
+        response = {
+            "state": upload.state,
+            "label": upload.get_state_display(),
+            "message": self._evidence_status_message(upload),
+        }
+        if upload.state == EvidencePocUpload.State.AVAILABLE:
+            response["download_url"] = reverse("admin:assessment_evidence_poc_download", args=[upload.id])
+        return JsonResponse(response)
+
+    @staticmethod
+    def _evidence_status_message(upload):
+        if upload.state == EvidencePocUpload.State.UPLOADING:
+            return "Waiting for the browser transfer to finish."
+        if upload.state == EvidencePocUpload.State.RECEIVED:
+            return "Uploaded. Waiting for security scanning."
+        if upload.state == EvidencePocUpload.State.SCANNING:
+            return "Security scanning is in progress."
+        if upload.state == EvidencePocUpload.State.VALIDATING:
+            return "The clean file is being validated."
+        if upload.state == EvidencePocUpload.State.AVAILABLE:
+            return "Every required check passed. The file is available."
+        if upload.state == EvidencePocUpload.State.REJECTED:
+            if upload.failure_reason in {"extension_mismatch", "signature_mismatch", "content_type_mismatch"}:
+                return "The file did not match the permitted PDF format. Upload a valid PDF."
+            if upload.failure_reason == "encrypted_pdf":
+                return "Encrypted PDFs are not supported. Upload an unencrypted PDF."
+            if upload.failure_reason == "invalid_size":
+                return "The file was empty or exceeded 25 MiB."
+            return "The file could not be accepted. Upload a different benign PDF."
+        return "Processing could not complete. Check the processor credentials and retry safely."
+
+    def evidence_poc_download(self, request, evidence_id):
+        require_feature()
+        profile = current_upload_profile(request)
+        upload = self._evidence_for_profile(profile, evidence_id)
+        if upload.state != EvidencePocUpload.State.AVAILABLE or not upload.accepted_version_id:
+            raise Http404
+        filename = safe_pdf_download_filename(upload.display_filename)
+        try:
+            url = verified_s3_client("app").generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": settings.EVIDENCE_POC_ACCEPTED_BUCKET,
+                    "Key": upload.accepted_key,
+                    "VersionId": upload.accepted_version_id,
+                    "ResponseCacheControl": "private, no-store",
+                    "ResponseContentType": "application/octet-stream",
+                    "ResponseContentDisposition": f'attachment; filename="{filename}"',
+                },
+                ExpiresIn=settings.EVIDENCE_POC_DOWNLOAD_EXPIRY_SECONDS,
+            )
+        except EvidenceCredentialError as exc:
+            return HttpResponse(str(exc), status=503, content_type="text/plain")
+        response = redirect(url)
+        response["Cache-Control"] = "private, no-store"
+        response["Referrer-Policy"] = "no-referrer"
+        return response
 
     @admin.display(ordering="system_name", description="System")
     def system_name(self, obj):

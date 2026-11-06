@@ -61,6 +61,7 @@ class SecuritySettingsTest(SimpleTestCase):
         environment["DEBUG"] = str(debug)
         environment["DJANGO_SETTINGS_MODULE"] = "webcaf.settings"
         environment["SECRET_KEY"] = "unneeded"  # pragma: allowlist secret
+        environment["EVIDENCE_POC_ENABLED"] = "False"
 
         result = subprocess.run(
             [sys.executable, "-c", REQUEST_SECURITY_SCRIPT],

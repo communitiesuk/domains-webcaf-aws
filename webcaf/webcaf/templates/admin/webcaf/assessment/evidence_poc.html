@@ -1,0 +1,78 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'webcaf/evidence_poc.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="evidence-poc">
+    <p><strong>Local proof of concept only.</strong> Upload only benign synthetic PDFs. Do not upload sensitive or SECRET material.</p>
+
+    {% if profile_error %}
+        <p class="errornote">{{ profile_error }} Select a suitable profile and try again. Superuser access does not bypass council ownership.</p>
+    {% else %}
+        <section class="module">
+            <h2>Upload synthetic PDF</h2>
+            {% if assessments %}
+                <form id="evidence-upload-form" method="post" action="{% url 'admin:assessment_evidence_poc_initiate' %}">
+                    {% csrf_token %}
+                    <div class="form-row">
+                        <label for="assessment-id">Editable assessment</label>
+                        <select id="assessment-id" name="assessment_id" required>
+                            {% for assessment in assessments %}
+                                <option value="{{ assessment.id }}">{{ assessment.reference|default:assessment.id }} — {{ assessment.system.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label for="display-filename">Safe display filename</label>
+                        <input id="display-filename" name="display_filename" type="text" maxlength="255" required>
+                        <p class="help">With JavaScript disabled, enter the PDF filename here, then select the same file on the next page.</p>
+                    </div>
+                    <div class="form-row">
+                        <label for="evidence-file">PDF file</label>
+                        <input id="evidence-file" type="file" accept="application/pdf,.pdf" required>
+                        <p class="help">1 byte to 25 MiB. Encrypted or malformed PDFs will be rejected after scanning.</p>
+                    </div>
+                    <button type="submit" class="button default">Prepare and upload</button>
+                    <p id="upload-progress" class="evidence-progress" role="status" aria-live="polite"></p>
+                </form>
+                <noscript><p>JavaScript is off. You will select the file again on the secure S3 upload page.</p></noscript>
+            {% else %}
+                <p>There are no editable assessments for the active council profile.</p>
+            {% endif %}
+        </section>
+
+        <section class="module evidence-list">
+            <h2>Council POC evidence</h2>
+            {% if evidence %}
+                <table>
+                    <thead><tr><th>Filename</th><th>Assessment</th><th>Size</th><th>Status</th><th>Action</th></tr></thead>
+                    <tbody>
+                    {% for item in evidence %}
+                        <tr data-status-url="{% url 'admin:assessment_evidence_poc_status' item.id %}" data-state="{{ item.state }}">
+                            <td>{{ item.display_filename }}</td>
+                            <td>{{ item.assessment.reference|default:item.assessment.id }} — {{ item.assessment.system.name }}</td>
+                            <td>{% if item.size is not None %}{{ item.size|filesizeformat }}{% else %}Not verified{% endif %}</td>
+                            <td class="evidence-status">{{ item.get_state_display }}</td>
+                            <td class="evidence-action">
+                                {% if item.state == "available" %}<a href="{% url 'admin:assessment_evidence_poc_download' item.id %}">Download</a>{% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No evidence uploads have been started for this council.</p>
+            {% endif %}
+        </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <script src="{% static 'webcaf/js/evidence_poc.js' %}" defer></script>
+{% endblock %}
