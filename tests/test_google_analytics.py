@@ -44,7 +44,11 @@ class GoogleAnalyticsTemplateTest(SimpleTestCase):
 
         self.assertIn('type="unknown/type" id="google-analytics-script" data-analytics-script', html)
         self.assertIn("https://www.googletagmanager.com/gtag/js?id=", html)
-        self.assertIn("w.gtag('config',i)", html)
+        self.assertIn(
+            "w.gtag('config',i,{'page_title':'Complete a WebCAF self-assessment'})",
+            html,
+        )
+        self.assertNotIn("document.title", html)
         self.assertNotIn("googletagmanager.com/ns.html", html)
 
     def test_analytics_markup_is_omitted_without_configuration(self):

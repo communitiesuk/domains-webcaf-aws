@@ -20,7 +20,8 @@ Google Analytics ID, so this change does not enable GA4 in those environments.
 
 The GA4 script is rendered with an inert script type and is not executed or downloaded until the user accepts analytics
 cookies through the existing cookie banner. A previous acceptance stored in the `cookies_accepted` cookie is also
-honoured. Rejecting analytics cookies leaves the tag inactive.
+honoured. Rejecting analytics cookies leaves the tag inactive. GA4 page views use a fixed, non-personal page title so
+that names present in some browser page titles are not sent to Google; pages remain distinguishable by their URL.
 
 ## Validation
 

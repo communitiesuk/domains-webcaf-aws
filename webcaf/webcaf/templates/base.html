@@ -5,7 +5,8 @@
         <!-- Google tag (gtag.js) -->
         <script type="unknown/type" id="google-analytics-script" data-analytics-script
                 nonce="{{ request.csp_nonce }}">(function(w,d,i){w.dataLayer=w.dataLayer||[];w.gtag=function(){w.dataLayer.push(arguments);};
-            w.gtag('js',new Date());w.gtag('config',i);var s=d.createElement('script');s.async=true;
+            w.gtag('js',new Date());w.gtag('config',i,{'page_title':'Complete a WebCAF self-assessment'});
+            var s=d.createElement('script');s.async=true;
             s.src='https://www.googletagmanager.com/gtag/js?id='+i;s.nonce=d.currentScript.nonce;d.head.appendChild(s);
         })(window,document,'{{ GOOGLE_ANALYTICS_ID }}');</script>
         <!-- End Google tag -->
