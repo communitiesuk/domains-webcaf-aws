@@ -15,8 +15,7 @@ EXPECTED_INDICATORS = {
         "plausible scenarios."
     ),
     ("A2.b", "achieved", "A2.b.15"): (
-        "You maintain a detailed understanding of current threats (e.g. by threat intelligence "
-        "and proactive research)."
+        "You maintain a detailed understanding of current threats (e.g. by threat intelligence and proactive research)."
     ),
     ("A4.a", "achieved", "A4.a.12"): (
         "You consider factors such as your supplier's ownership, nationality, partnerships, "
