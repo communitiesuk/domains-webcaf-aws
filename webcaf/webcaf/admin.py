@@ -9,7 +9,6 @@ from zoneinfo import ZoneInfo
 
 from django import forms
 from django.contrib import admin, messages
-from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
 from django.core.validators import RegexValidator
 from django.db.models import F, Model, Q
@@ -241,13 +240,8 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
         "Lead Government Department",
         "Reference",
         "Type",
-        "Email1",
-        "Email2",
-        "Email3",
-        "Email4",
-        "Email5",
-        "Email6",
     ]
+    legacy_email_headers = ["Email1", "Email2", "Email3", "Email4", "Email5", "Email6"]
 
     # Add custom URL for the import view
     def get_urls(self):
@@ -287,15 +281,11 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
 
     def import_csv(self, request):
         """
-        Handles the import of a CSV file through a POST request, processes its data to create or update
-        organisations and users in the database, and associates organisations with a designated parent
-        organisation.
-        The header row is expected to contain the fields defined in `csv_headers`:
-        Each email field represents a cyber advisor for a particular organisation.
+        Handles the import of a CSV file through a POST request, processes its data to create organisations,
+        and associates organisations with a designated parent organisation.
 
-        This method expects a CSV file containing organisation and user information. It reads and processes
-        this file to create the necessary records in the database while maintaining proper associations between
-        users, organisations, and their parent organisations.
+        User creation, organisation membership, and role assignment are handled separately through council
+        onboarding and are not part of this import.
 
         :param request: The HTTP request object that includes the CSV file to be processed.
         :type request: HttpRequest
@@ -309,10 +299,24 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
             reader = csv.DictReader(decoded)
 
             # Check headers
-            headers = reader.fieldnames
+            headers = reader.fieldnames or []
+            unsupported_headers = [header for header in self.legacy_email_headers if header in headers]
+            if unsupported_headers:
+                self.message_user(
+                    request,
+                    (
+                        f"Unsupported legacy email columns: {', '.join(unsupported_headers)}. "
+                        f"Use the agreed council CSV schema: {', '.join(self.csv_headers)}."
+                    ),
+                    messages.ERROR,
+                )
+                return redirect("..")
+
             if set(headers) != set(self.csv_headers):
                 self.message_user(
-                    request, f"The CSV file is missing required headers {self.csv_headers}.", messages.ERROR
+                    request,
+                    f"The CSV headers must match the agreed council CSV schema: {', '.join(self.csv_headers)}.",
+                    messages.ERROR,
                 )
                 return redirect("..")
 
@@ -339,26 +343,6 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
                         )
                     else:
                         organisation = Organisation.objects.create(name=row["Organisation"])
-
-                for email in ["Email1", "Email2", "Email3", "Email4", "Email5", "Email6"]:
-                    email_ = row.get(email, "").strip()
-                    if email_:
-                        user = User.objects.filter(email=email_).first()
-                        if not user:
-                            self.logger.info(f"Creating {email_} as not found in the database.")
-                            self.message_user(
-                                request, f"Creating {email_} as not found in the database.", messages.WARNING
-                            )
-                            # If not found, create a new user
-                            user = User.objects.create_user(email_, email_)
-                        profile, _created = UserProfile.objects.get_or_create(
-                            user=user, organisation=organisation, role="cyber_advisor"
-                        )
-
-                        if not _created:
-                            msg = f"The user with email {email_} already exists in the database for the organisation {organisation}."
-                            self.logger.warning(msg)
-                            self.logger.info(msg)
 
             # Now set the parent organisation
             # Reset the reader
