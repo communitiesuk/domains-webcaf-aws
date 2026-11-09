@@ -1,9 +1,12 @@
-const activateGtmScript = id => {
-  const script = document.getElementById(id);
+const activateAnalyticsScript = () => {
+  const script = document.querySelector('[data-analytics-script]');
+  if (!script) {
+    return;
+  }
   const newScript = document.createElement('script');
   newScript.type = 'application/javascript';
   newScript.nonce = script.nonce;
-  newScript.id = 'replaced-gtm-snippet';
+  newScript.id = 'activated-analytics-script';
   newScript.textContent = script.textContent;
   script.parentNode.replaceChild(newScript, script);
 };
@@ -20,7 +23,7 @@ if (banner) {
         Cookies.set('cookies_preference_set', 'true', { secure: true, sameSite: 'strict' });
         document.querySelector('#cookie-banner').style.display = 'none';
         document.querySelector('#cookie-banner-done').style.display = 'block';
-        activateGtmScript('gtm-script');
+        activateAnalyticsScript();
       });
       cookieButtons[1].addEventListener('click', () => {
         Cookies.set('cookies_accepted', 'false', { secure: true, sameSite: 'strict' });
@@ -37,7 +40,7 @@ if (banner) {
     }
   } else {
     if (Cookies.get('cookies_accepted') === 'true') {
-      activateGtmScript('gtm-script');
+      activateAnalyticsScript();
     }
   }
 }
