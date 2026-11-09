@@ -312,6 +312,18 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
                 )
                 return redirect("..")
 
+            duplicate_headers = list(dict.fromkeys(header for header in headers if headers.count(header) > 1))
+            if duplicate_headers:
+                self.message_user(
+                    request,
+                    (
+                        f"The CSV contains duplicate headers: {', '.join(duplicate_headers)}. "
+                        f"Use the agreed council CSV schema: {', '.join(self.csv_headers)}."
+                    ),
+                    messages.ERROR,
+                )
+                return redirect("..")
+
             if set(headers) != set(self.csv_headers):
                 self.message_user(
                     request,

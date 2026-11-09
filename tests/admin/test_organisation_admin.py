@@ -216,6 +216,18 @@ class OrganisationAdminImportCSVTest(TestCase):
         )
         self.assertEqual(Organisation.objects.count(), 0)
 
+    def test_duplicate_headers_are_rejected_before_importing_rows(self):
+        headers = self.supported_headers + ["Organisation", "Type"]
+
+        _response, admin_messages = self.import_rows([self.row()], headers=headers)
+
+        self.assertIn("The CSV contains duplicate headers: Organisation, Type.", admin_messages[0])
+        self.assertIn(
+            "Use the agreed council CSV schema: Organisation, Lead Government Department, Reference, Type.",
+            admin_messages[0],
+        )
+        self.assertEqual(Organisation.objects.count(), 0)
+
     def test_import_csv_finds_existing_organisation_by_reference(self):
         Organisation.objects.create(name="Existing Org", reference="ORG001")
 

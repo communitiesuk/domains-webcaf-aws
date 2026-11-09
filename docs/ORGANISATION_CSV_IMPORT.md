@@ -80,6 +80,7 @@ An invalid or empty type is ignored and a new organisation is created without a 
 ## Validation
 
 - The header must match the agreed council CSV schema exactly, although column order may differ.
+- Duplicate headers are rejected before any rows are imported.
 - Legacy `Email1` to `Email6` columns produce a specific unsupported-column error.
 - Validation failures reject the file before organisation processing begins.
 - A successful import reports the number of organisation rows processed.
