@@ -1,0 +1,28 @@
+.evidence-poc .module {
+    margin-bottom: 24px;
+    padding: 16px;
+}
+
+.evidence-poc .form-row {
+    margin-bottom: 16px;
+}
+
+.evidence-poc label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.evidence-poc select,
+.evidence-poc input[type="text"] {
+    min-width: min(100%, 36rem);
+}
+
+.evidence-progress {
+    font-weight: 600;
+    min-height: 1.5em;
+}
+
+.evidence-list table {
+    width: 100%;
+}

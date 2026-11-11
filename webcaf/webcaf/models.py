@@ -1,5 +1,6 @@
 import logging
 import typing
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -405,6 +406,48 @@ class UserProfile(models.Model):
         # must still have a string form: the admin list calls str() on every row.
         organisation_name = self.organisation.name if self.organisation else "No organisation"
         return f"{self.user.email} - {organisation_name} - ({self.get_role_display()})"
+
+
+class EvidencePocUpload(models.Model):
+    """Provisional metadata for the local CS-627 evidence proof of concept."""
+
+    class State(models.TextChoices):
+        UPLOADING = "uploading", "Uploading"
+        RECEIVED = "received", "Received"
+        SCANNING = "scanning", "Scanning"
+        VALIDATING = "validation", "Validation"
+        AVAILABLE = "available", "Available"
+        REJECTED = "rejected", "Rejected"
+        FAILED = "processing_failure", "Processing failure"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organisation = models.ForeignKey(Organisation, on_delete=models.PROTECT, related_name="evidence_poc_uploads")
+    assessment = models.ForeignKey(Assessment, on_delete=models.PROTECT, related_name="evidence_poc_uploads")
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="evidence_poc_uploads")
+    uploaded_with_profile = models.ForeignKey(
+        UserProfile, on_delete=models.SET_NULL, null=True, related_name="evidence_poc_uploads"
+    )
+    intake_key = models.CharField(max_length=80, unique=True)
+    source_version_id = models.CharField(max_length=1024, null=True, blank=True)
+    source_etag = models.CharField(max_length=255, blank=True)
+    accepted_key = models.CharField(max_length=80, unique=True)
+    accepted_version_id = models.CharField(max_length=1024, null=True, blank=True)
+    state = models.CharField(max_length=32, choices=State.choices, default=State.UPLOADING)
+    scan_status = models.CharField(max_length=64, blank=True)
+    failure_reason = models.CharField(max_length=64, blank=True)
+    display_filename = models.CharField(max_length=255)
+    declared_content_type = models.CharField(max_length=255, blank=True)
+    size = models.PositiveBigIntegerField(null=True, blank=True)
+    sha256 = models.CharField(max_length=64, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["state", "created_at"], name="evidence_poc_state_idx")]
+
+    def __str__(self):
+        return f"{self.display_filename} ({self.get_state_display()})"
 
 
 class AllowedEmailDomain(models.Model):
