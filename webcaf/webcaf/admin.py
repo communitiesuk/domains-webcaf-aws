@@ -306,7 +306,7 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
                     request,
                     (
                         f"Unsupported legacy email columns: {', '.join(unsupported_headers)}. "
-                        f"Use the agreed council CSV schema: {', '.join(self.csv_headers)}."
+                        f"Use the current organisation import headers: {', '.join(self.csv_headers)}."
                     ),
                     messages.ERROR,
                 )
@@ -318,7 +318,7 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
                     request,
                     (
                         f"The CSV contains duplicate headers: {', '.join(duplicate_headers)}. "
-                        f"Use the agreed council CSV schema: {', '.join(self.csv_headers)}."
+                        f"Use the current organisation import headers: {', '.join(self.csv_headers)}."
                     ),
                     messages.ERROR,
                 )
@@ -327,7 +327,7 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
             if set(headers) != set(self.csv_headers):
                 self.message_user(
                     request,
-                    f"The CSV headers must match the agreed council CSV schema: {', '.join(self.csv_headers)}.",
+                    f"The CSV headers must match the current organisation import headers: {', '.join(self.csv_headers)}.",
                     messages.ERROR,
                 )
                 return redirect("..")

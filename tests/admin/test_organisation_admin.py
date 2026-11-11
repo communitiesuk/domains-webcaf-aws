@@ -176,7 +176,7 @@ class OrganisationAdminImportCSVTest(TestCase):
             admin_messages[0],
         )
         self.assertIn(
-            "Use the agreed council CSV schema: Organisation, Lead Government Department, Reference, Type.",
+            "Use the current organisation import headers: Organisation, Lead Government Department, Reference, Type.",
             admin_messages[0],
         )
         self.assertEqual(list(Organisation.objects.values_list("id", flat=True)), organisation_ids_before)
@@ -203,14 +203,14 @@ class OrganisationAdminImportCSVTest(TestCase):
                 self.assertFalse(User.objects.filter(email="legacy@test.gov.uk").exists())
                 self.assertEqual(UserProfile.objects.count(), 0)
 
-    def test_other_invalid_headers_are_rejected_against_agreed_schema(self):
+    def test_other_invalid_headers_are_rejected_against_current_headers(self):
         headers = ["Organisation", "Reference"]
         row = {"Organisation": "Rejected Organisation", "Reference": "ORG999"}
 
         _response, admin_messages = self.import_rows([row], headers=headers)
 
         self.assertIn(
-            "The CSV headers must match the agreed council CSV schema: "
+            "The CSV headers must match the current organisation import headers: "
             "Organisation, Lead Government Department, Reference, Type.",
             admin_messages[0],
         )
@@ -223,7 +223,7 @@ class OrganisationAdminImportCSVTest(TestCase):
 
         self.assertIn("The CSV contains duplicate headers: Organisation, Type.", admin_messages[0])
         self.assertIn(
-            "Use the agreed council CSV schema: Organisation, Lead Government Department, Reference, Type.",
+            "Use the current organisation import headers: Organisation, Lead Government Department, Reference, Type.",
             admin_messages[0],
         )
         self.assertEqual(Organisation.objects.count(), 0)

@@ -12,7 +12,7 @@ User onboarding, including invitations and claiming a council, is handled separa
 Open `/admin/webcaf/organisation/` and select **Import Organisations from CSV**. A blank template is available from
 the import page or `/admin/webcaf/organisation/import-org-csv-template/`.
 
-## Agreed council CSV schema
+## Current organisation import headers
 
 The CSV must contain exactly these headers. Their order does not matter:
 
@@ -38,9 +38,9 @@ organisation.
 
 ## Legacy email columns
 
-`Email1`, `Email2`, `Email3`, `Email4`, `Email5`, and `Email6` are not part of the agreed council CSV schema. If any
+`Email1`, `Email2`, `Email3`, `Email4`, `Email5`, and `Email6` are not part of the current organisation import headers. If any
 of these columns is present, the entire import is rejected before any rows are processed. The validation message
-identifies each unsupported column and displays the agreed schema.
+identifies each unsupported column and displays the current headers.
 
 Email addresses in legacy columns are not stored. The import does not use them to create or update users,
 `UserProfile` records, memberships, or roles.
@@ -79,7 +79,7 @@ An invalid or empty type is ignored and a new organisation is created without a 
 
 ## Validation
 
-- The header must match the agreed council CSV schema exactly, although column order may differ.
+- The header must match the current organisation import headers exactly, although column order may differ.
 - Duplicate headers are rejected before any rows are imported.
 - Legacy `Email1` to `Email6` columns produce a specific unsupported-column error.
 - Validation failures reject the file before organisation processing begins.
