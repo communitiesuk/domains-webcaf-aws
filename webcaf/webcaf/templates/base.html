@@ -4,11 +4,17 @@
     {% if GOOGLE_ANALYTICS_TYPE == "ga4" %}
         <!-- Google tag (gtag.js) -->
         <script type="unknown/type" id="google-analytics-script" data-analytics-script
-                nonce="{{ request.csp_nonce }}">(function(w,d,i){w.dataLayer=w.dataLayer||[];w.gtag=function(){w.dataLayer.push(arguments);};
-            w.gtag('js',new Date());w.gtag('config',i,{'page_title':'Complete a WebCAF self-assessment'});
+                nonce="{{ request.csp_nonce }}">(function(w,d,i,p){w.dataLayer=w.dataLayer||[];w.gtag=function(){w.dataLayer.push(arguments);};
+            var k='webcaf_analytics_previous_page',b=w.location.origin+'/analytics/',r='direct';
+            try{r=w.sessionStorage.getItem(k)||r;w.sessionStorage.setItem(k,p);}catch(e){}
+            w.gtag('js',new Date());w.gtag('config',i,{
+                'page_title':'Complete a WebCAF self-assessment',
+                'page_location':b+encodeURIComponent(p),
+                'page_referrer':b+encodeURIComponent(r)
+            });
             var s=d.createElement('script');s.async=true;
             s.src='https://www.googletagmanager.com/gtag/js?id='+i;s.nonce=d.currentScript.nonce;d.head.appendChild(s);
-        })(window,document,'{{ GOOGLE_ANALYTICS_ID }}');</script>
+        })(window,document,'{{ GOOGLE_ANALYTICS_ID }}','{{ GOOGLE_ANALYTICS_PAGE_ID|escapejs }}');</script>
         <!-- End Google tag -->
     {% elif GOOGLE_ANALYTICS_TYPE == "gtm" %}
         <!-- Google Tag Manager -->

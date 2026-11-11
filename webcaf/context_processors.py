@@ -5,11 +5,11 @@ GA4_MEASUREMENT_ID_PATTERN = re.compile(r"G-[A-Z0-9]{10}", re.IGNORECASE)
 GTM_CONTAINER_ID_PATTERN = re.compile(r"GTM-[A-Z0-9]+", re.IGNORECASE)
 
 
-def variable_page_content(_request):
+def variable_page_content(request):
     """
     Provide environment-dependent values for rendering pages
     (e.g. header text for the phase banner)
-    :param _request: not used
+    :param request: current HTTP request
     :return:
     """
     phase = os.getenv("ENVIRONMENT")
@@ -36,5 +36,8 @@ def variable_page_content(_request):
     else:
         context["GOOGLE_ANALYTICS_ID"] = ""
         context["GOOGLE_ANALYTICS_TYPE"] = ""
+
+    resolver_match = getattr(request, "resolver_match", None)
+    context["GOOGLE_ANALYTICS_PAGE_ID"] = getattr(resolver_match, "view_name", "") or "unmapped-page"
 
     return context

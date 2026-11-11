@@ -11,6 +11,14 @@ const activateAnalyticsScript = () => {
   script.parentNode.replaceChild(newScript, script);
 };
 
+const clearAnalyticsSession = () => {
+  try {
+    window.sessionStorage.removeItem('webcaf_analytics_previous_page');
+  } catch (error) {
+    // Session storage may be unavailable in privacy-restricted browsers.
+  }
+};
+
 
 const banner = document.querySelector('#cookie-banner');
 if (banner) {
@@ -28,6 +36,7 @@ if (banner) {
       cookieButtons[1].addEventListener('click', () => {
         Cookies.set('cookies_accepted', 'false', { secure: true, sameSite: 'strict' });
         Cookies.set('cookies_preference_set', 'true', { secure: true, sameSite: 'strict' });
+        clearAnalyticsSession();
         document.querySelector('#cookie-banner').style.display = 'none';
         document.querySelector('#cookie-banner-done').style.display = 'block';
       });
@@ -41,6 +50,8 @@ if (banner) {
   } else {
     if (Cookies.get('cookies_accepted') === 'true') {
       activateAnalyticsScript();
+    } else {
+      clearAnalyticsSession();
     }
   }
 }
@@ -67,6 +78,7 @@ if (cookiePageControls) {
       if (document.querySelector('#no-cookies').checked) {
         Cookies.set('cookies_preference_set', 'true', { secure: true, sameSite: 'strict' });
         Cookies.set('cookies_accepted', 'false', { secure: true, sameSite: 'strict' });
+        clearAnalyticsSession();
       }
       document.querySelector('#cookie-success-back-link').href = document.referrer;
       document.querySelector('#success-banner').style.display = 'block';
