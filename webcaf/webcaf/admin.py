@@ -227,8 +227,8 @@ class UserProfileAdmin(SimpleHistoryAdmin):
 @admin.register(Organisation)
 class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: ignore
     model = Organisation
-    search_fields = ["name", "systems__name", "reference"]
-    list_display = ["name", "reference"]
+    search_fields = ["name", "systems__name", "reference", "gss_code"]
+    list_display = ["name", "reference", "gss_code"]
     readonly_fields = ["reference"]
     optional_fields = ["reference"]
     autocomplete_fields = [

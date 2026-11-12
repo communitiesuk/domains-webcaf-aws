@@ -45,6 +45,81 @@ def add_middleware(request):
     return request
 
 
+class OrganisationAdminTest(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.admin = OrganisationAdmin(Organisation, AdminSite())
+
+    def test_displays_and_searches_by_gss_code(self):
+        self.assertIn("gss_code", self.admin.list_display)
+        self.assertIn("gss_code", self.admin.search_fields)
+
+        matching_organisation = Organisation.objects.create(
+            name="Matching Organisation",
+            gss_code="E06000001",
+        )
+        Organisation.objects.create(name="Other Organisation", gss_code="E06000002")
+
+        results, _may_have_duplicates = self.admin.get_search_results(
+            self.factory.get("/admin/webcaf/organisation/"),
+            Organisation.objects.all(),
+            "E06000001",
+        )
+
+        self.assertEqual(list(results), [matching_organisation])
+
+    def test_form_allows_gss_code_to_be_edited(self):
+        form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
+
+        self.assertIn("gss_code", form_class.base_fields)
+
+    def test_form_shows_clear_invalid_gss_code_error(self):
+        form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
+        form = form_class(
+            data={
+                "name": "Test Organisation",
+                "organisation_type": "other",
+                "gss_code": "invalid",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["gss_code"],
+            ["Enter a valid GSS code: one uppercase letter followed by eight digits (for example, E06000001)."],
+        )
+
+    def test_form_requires_gss_code_for_council(self):
+        form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
+        form = form_class(
+            data={
+                "name": "Test Council",
+                "organisation_type": "council",
+                "gss_code": "",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["gss_code"],
+            ["Councils and combined authorities must have a GSS code."],
+        )
+
+    def test_form_saves_combined_authority_with_gss_code(self):
+        form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
+        form = form_class(
+            data={
+                "name": "Test Combined Authority",
+                "organisation_type": "combined-authority",
+                "gss_code": "E47000001",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        organisation = form.save()
+        self.assertEqual(organisation.gss_code, "E47000001")
+
+
 class OrganisationAdminImportCSVTest(TestCase):
     """Tests for the OrganisationAdmin import_csv method."""
 
