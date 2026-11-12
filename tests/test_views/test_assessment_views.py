@@ -3,7 +3,7 @@ from django.urls import reverse
 from freezegun import freeze_time
 
 from tests.test_views.base_view_test import BaseViewTest
-from webcaf.webcaf.models import Assessment, Configuration
+from webcaf.webcaf.models import Assessment, Configuration, UserProfile
 
 
 class SetupAssessmentTestData(BaseViewTest):
@@ -412,3 +412,98 @@ class TestDraftAssessmentOrganisationChecks(SetupAssessmentTestData):
         self.assertEqual(response.status_code, 403)
         assessment.refresh_from_db()
         self.assertEqual(assessment.caf_profile, "baseline")
+
+    def _draft_for_this_organisation(self):
+        return Assessment.objects.create(
+            system=self.test_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+
+    def test_organisation_user_of_another_organisation_cannot_change_this_organisations_draft(self):
+        other_user_client, _ = self._login_with_role(
+            "organisation_user", self.org_map["Medium organisation"]["organisation"]
+        )
+        assessment = self._draft_for_this_organisation()
+        url = reverse("edit-draft-assessment-profile", kwargs={"assessment_id": assessment.id})
+
+        response = other_user_client.post(url, {"caf_profile": "enhanced"})
+
+        self.assertEqual(response.status_code, 403)
+        assessment.refresh_from_db()
+        self.assertEqual(assessment.caf_profile, "baseline")
+
+    def test_member_of_both_organisations_is_limited_to_the_active_one(self):
+        """
+        A user who holds a permitted role in this organisation and in another one,
+        with the other one active, cannot create or change this organisation's drafts.
+        """
+        medium = self.org_map["Medium organisation"]["organisation"]
+        for role in ["organisation_lead", "organisation_user"]:
+            with self.subTest(role=role):
+                user = self._create_user_with_role(role, self.test_organisation, f"both-{role}")
+                UserProfile.objects.create(user=user, organisation=medium, role=role)
+                active_profile = UserProfile.objects.get(user=user, organisation=medium)
+                client = Client()
+                client.force_login(user)
+                session = client.session
+                session["current_profile_id"] = active_profile.id
+                session["draft_assessment"] = {"caf_profile": "baseline", "review_type": "peer_review"}
+                session.save()
+
+                assessment = self._draft_for_this_organisation()
+                edit_url = reverse("edit-draft-assessment-profile", kwargs={"assessment_id": assessment.id})
+                edit_response = client.post(edit_url, {"caf_profile": "enhanced"})
+                assessment.refresh_from_db()
+                self.assertEqual(edit_response.status_code, 403)
+                self.assertEqual(assessment.caf_profile, "baseline")
+                assessment.delete()
+
+                if role == "organisation_lead":
+                    create_response = client.post(self.create_system_url, {"system": self.test_system.id})
+                    self.assertEqual(create_response.status_code, 403)
+                    self.assertFalse(Assessment.objects.filter(system=self.test_system).exists())
+
+
+class TestOrganisationUserCanEditButNotCreate(SetupAssessmentTestData):
+    """An organisation user may change an existing draft but may not start one."""
+
+    def test_organisation_user_can_edit_a_draft_but_cannot_create_one(self):
+        client, _ = self._login_with_role("organisation_user", self.test_organisation)
+        session = client.session
+        session["draft_assessment"] = {"caf_profile": "baseline", "review_type": "peer_review"}
+        session.save()
+
+        create_response = client.post(self.create_system_url, {"system": self.test_system.id})
+
+        self.assertEqual(create_response.status_code, 403)
+        self.assertFalse(Assessment.objects.filter(system=self.test_system).exists())
+
+        assessment = Assessment.objects.create(
+            system=self.test_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+        session = client.session
+        session["draft_assessment"] = {
+            "assessment_id": assessment.id,
+            "system": self.test_system.id,
+            "caf_profile": "baseline",
+            "review_type": "peer_review",
+        }
+        session.save()
+
+        edit_response = client.post(
+            reverse("edit-draft-assessment-profile", kwargs={"assessment_id": assessment.id}),
+            {"caf_profile": "enhanced"},
+        )
+
+        self.assertEqual(edit_response.status_code, 302)
+        assessment.refresh_from_db()
+        self.assertEqual(assessment.caf_profile, "enhanced")
