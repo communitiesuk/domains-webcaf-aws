@@ -27,6 +27,10 @@ def get_current_user_profile(request):
     return profile
 
 
+# Same roles as PermissionUtil.current_user_can_edit_assessments.
+EDIT_ASSESSMENT_ROLES = ["organisation_lead", "organisation_user"]
+
+
 class BaseAssessmentForm(forms.ModelForm):
     """
     Blank form for the base FormView classes
@@ -69,8 +73,12 @@ class EditAssessmentView(UserRoleCheckMixin, FormView):
     logger = logging.getLogger("EditAssessmentView")
 
     def get_allowed_roles(self) -> list[str]:
-        # Same roles as PermissionUtil.current_user_can_edit_assessments.
-        return ["organisation_lead", "organisation_user"]
+        # The draft overview is also how roles that can only view an assessment
+        # open a draft, so it allows the same roles as
+        # PermissionUtil.current_user_can_view_assessments. The pages that change
+        # the draft's system, profile or review type narrow this to the roles
+        # that can edit (EDIT_ASSESSMENT_ROLES).
+        return ["cyber_advisor", "organisation_lead", "organisation_user"]
 
     def get_context_data(self, **kwargs):
         data = {}
@@ -269,6 +277,9 @@ class EditAssessmentProfileView(EditAssessmentView):
     template_name = "assessment-profile.html"
     form_class = AssessmentProfileForm
 
+    def get_allowed_roles(self) -> list[str]:
+        return EDIT_ASSESSMENT_ROLES
+
     def form_valid(self, form):
         draft_assessment = self.request.session["draft_assessment"]
         draft_assessment["caf_profile"] = form.cleaned_data["caf_profile"]
@@ -309,6 +320,9 @@ class EditAssessmentSystemView(EditAssessmentView):
 
     template_name = "system/system-details.html"
     form_class = AssessmentSystemForm
+
+    def get_allowed_roles(self) -> list[str]:
+        return EDIT_ASSESSMENT_ROLES
 
     def form_valid(self, form):
         draft_assessment = self.request.session["draft_assessment"]
@@ -593,6 +607,9 @@ class EditAssessmentReviewTypeView(EditAssessmentView):
 
     form_class = AssessmentReviewTypeForm
     template_name = "assessment/choose-review-type.html"
+
+    def get_allowed_roles(self) -> list[str]:
+        return EDIT_ASSESSMENT_ROLES
 
     def form_valid(self, form):
         draft_assessment = self.request.session["draft_assessment"]

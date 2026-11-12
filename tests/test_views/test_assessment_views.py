@@ -274,9 +274,13 @@ class TestEditAssessmentViews(SetupAssessmentTestData):
 
 
 class TestEditAssessmentRolePermissions(SetupAssessmentTestData):
-    """Only a GovAssure lead or an organisation user may edit a draft, by page or by form submission."""
+    """
+    Only a GovAssure lead or an organisation user may change a draft, by page or by form submission.
+    A cyber advisor may still open the draft overview, which is how they view a draft.
+    """
 
     roles_not_allowed = ["cyber_advisor", "assessor", "reviewer"]
+    roles_not_allowed_to_view = ["assessor", "reviewer"]
 
     def setUp(self):
         super().setUp()
@@ -308,12 +312,31 @@ class TestEditAssessmentRolePermissions(SetupAssessmentTestData):
         }
         session.save()
 
-    def test_roles_not_allowed_cannot_open_the_edit_pages(self):
+    def test_roles_not_allowed_cannot_open_the_pages_that_change_a_draft(self):
+        change_pages = [
+            "edit-draft-assessment-system",
+            "edit-draft-assessment-profile",
+            "edit-draft-assessment-choose-review-type",
+        ]
         for role in self.roles_not_allowed:
             client, _ = self._login_with_role(role, self.test_organisation)
-            for url in self.edit_urls.values():
-                with self.subTest(role=role, url=url):
-                    self.assertEqual(client.get(url).status_code, 403)
+            for name in change_pages:
+                with self.subTest(role=role, page=name):
+                    self.assertEqual(client.get(self.edit_urls[name]).status_code, 403)
+
+    def test_roles_that_cannot_view_assessments_cannot_open_the_draft_overview(self):
+        for role in self.roles_not_allowed_to_view:
+            with self.subTest(role=role):
+                client, _ = self._login_with_role(role, self.test_organisation)
+                self.assertEqual(client.get(self.edit_urls["edit-draft-assessment"]).status_code, 403)
+
+    def test_cyber_advisor_can_still_view_the_draft_overview(self):
+        client, _ = self._login_with_role("cyber_advisor", self.test_organisation)
+
+        response = client.get(self.edit_urls["edit-draft-assessment"])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "assessment/draft-assessment.html")
 
     def test_roles_not_allowed_cannot_change_a_draft_by_submitting_the_forms(self):
         for role in self.roles_not_allowed:
