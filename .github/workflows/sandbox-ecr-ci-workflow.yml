@@ -111,6 +111,7 @@ jobs:
           environment-variables: |
             DEBUG=${{ vars.DEBUG }}
             ENVIRONMENT=${{ vars.ENVIRONMENT }}
+            GOOGLE_ANALYTICS_ID=${{ vars.GOOGLE_ANALYTICS_ID }}
             GOV_UK_ONE_LOGIN_ENVIRONMENT=${{ vars.GOV_UK_ONE_LOGIN_ENVIRONMENT }}
             GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL=${{ vars.GOV_UK_ONE_LOGIN_OPENID_CONFIG_URL }}
             GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH=${{ vars.GOV_UK_ONE_LOGIN_PRIVATE_KEY_PATH }}

@@ -1,11 +1,22 @@
-const activateGtmScript = id => {
-  const script = document.getElementById(id);
+const activateAnalyticsScript = () => {
+  const script = document.querySelector('[data-analytics-script]');
+  if (!script) {
+    return;
+  }
   const newScript = document.createElement('script');
   newScript.type = 'application/javascript';
   newScript.nonce = script.nonce;
-  newScript.id = 'replaced-gtm-snippet';
+  newScript.id = 'activated-analytics-script';
   newScript.textContent = script.textContent;
   script.parentNode.replaceChild(newScript, script);
+};
+
+const clearAnalyticsSession = () => {
+  try {
+    window.sessionStorage.removeItem('webcaf_analytics_previous_page');
+  } catch (error) {
+    // Session storage may be unavailable in privacy-restricted browsers.
+  }
 };
 
 
@@ -20,11 +31,12 @@ if (banner) {
         Cookies.set('cookies_preference_set', 'true', { secure: true, sameSite: 'strict' });
         document.querySelector('#cookie-banner').style.display = 'none';
         document.querySelector('#cookie-banner-done').style.display = 'block';
-        activateGtmScript('gtm-script');
+        activateAnalyticsScript();
       });
       cookieButtons[1].addEventListener('click', () => {
         Cookies.set('cookies_accepted', 'false', { secure: true, sameSite: 'strict' });
         Cookies.set('cookies_preference_set', 'true', { secure: true, sameSite: 'strict' });
+        clearAnalyticsSession();
         document.querySelector('#cookie-banner').style.display = 'none';
         document.querySelector('#cookie-banner-done').style.display = 'block';
       });
@@ -37,7 +49,9 @@ if (banner) {
     }
   } else {
     if (Cookies.get('cookies_accepted') === 'true') {
-      activateGtmScript('gtm-script');
+      activateAnalyticsScript();
+    } else {
+      clearAnalyticsSession();
     }
   }
 }
@@ -64,6 +78,7 @@ if (cookiePageControls) {
       if (document.querySelector('#no-cookies').checked) {
         Cookies.set('cookies_preference_set', 'true', { secure: true, sameSite: 'strict' });
         Cookies.set('cookies_accepted', 'false', { secure: true, sameSite: 'strict' });
+        clearAnalyticsSession();
       }
       document.querySelector('#cookie-success-back-link').href = document.referrer;
       document.querySelector('#success-banner').style.display = 'block';
