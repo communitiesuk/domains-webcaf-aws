@@ -352,3 +352,40 @@ class TestEditAssessmentRolePermissions(SetupAssessmentTestData):
                 self.assertEqual(
                     self.assessment.last_updated_by, self.org_map[self.test_organisation.name]["users"][role]
                 )
+
+
+class TestDraftAssessmentOrganisationChecks(SetupAssessmentTestData):
+    """A permitted role in another organisation still cannot create or change this organisation's draft."""
+
+    def setUp(self):
+        super().setUp()
+        self.other_lead_client, _ = self._login_with_role(
+            "organisation_lead", self.org_map["Medium organisation"]["organisation"]
+        )
+
+    def test_lead_of_another_organisation_cannot_create_a_draft_for_this_organisations_system(self):
+        session = self.other_lead_client.session
+        session["draft_assessment"] = {"caf_profile": "baseline", "review_type": "peer_review"}
+        session.save()
+
+        response = self.other_lead_client.post(self.create_system_url, {"system": self.test_system.id})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Assessment.objects.filter(system=self.test_system).exists())
+
+    def test_lead_of_another_organisation_cannot_change_this_organisations_draft(self):
+        assessment = Assessment.objects.create(
+            system=self.test_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+        url = reverse("edit-draft-assessment-profile", kwargs={"assessment_id": assessment.id})
+
+        response = self.other_lead_client.post(url, {"caf_profile": "enhanced"})
+
+        self.assertEqual(response.status_code, 403)
+        assessment.refresh_from_db()
+        self.assertEqual(assessment.caf_profile, "baseline")
