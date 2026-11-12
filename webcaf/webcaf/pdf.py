@@ -1,10 +1,9 @@
 from pathlib import Path
 
 from django.conf import settings
-from weasyprint.urls import URLFetcher
 
 
-class StaticFileURLFetcher(URLFetcher):
+class StaticFileURLFetcher:
     """Serve every asset a PDF asks for from STATIC_ROOT, and nothing else.
 
     WeasyPrint cannot fetch the relative asset URLs Django emits, so each one is
@@ -14,11 +13,13 @@ class StaticFileURLFetcher(URLFetcher):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(allowed_protocols=("file",), **kwargs)
+        from weasyprint.urls import URLFetcher
+
+        self.fetcher = URLFetcher(allowed_protocols=("file",), **kwargs)
 
     def fetch(self, url, headers=None):
         root = Path(settings.STATIC_ROOT).resolve()
         path = (root / url.split("assets/")[-1]).resolve()
         if not path.is_relative_to(root):
             raise ValueError(f"Refusing to load a file outside STATIC_ROOT: {url}")
-        return super().fetch(path.as_uri(), headers)
+        return self.fetcher.fetch(path.as_uri(), headers)

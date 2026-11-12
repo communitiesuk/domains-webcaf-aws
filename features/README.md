@@ -40,15 +40,44 @@ make behave_dex
 
 # Run a selected provider-independent feature with One Login services available.
 make behave FEATURE_TEST_ARGS="-i admin-login.feature"
+
+# Run one feature in a visible local browser.
+make behave-headed FEATURE_TEST_ARGS="features/view_only_outcome_continue.feature"
 ```
 
-The containerized workflow is headless by default. Pass `-D headless_testing=false` through `FEATURE_TEST_ARGS` only
-when the environment supports headed Playwright. Do not run Behave directly against the normal development Compose
-stack because that bypasses the disposable test database.
+The containerized workflow is headless by default because the Playwright browser runs inside Docker. Use
+`make behave-headed` when you need to watch a scenario in a visible browser. It starts a separate disposable Compose
+project for the app and runs Behave/Playwright on the host, so Chromium opens normally on the desktop. This host-runner
+workflow needs the local uv environment and Playwright browser installed:
 
-The HTML report is written to `reports/report.html`. Failed scenarios write screenshots and page HTML to
-`artifacts/`. A failed One Login run writes `artifacts/one-login-docker-compose.log`; a failed DEX run writes
-`artifacts/dex-docker-compose.log` before cleanup.
+```shell
+uv sync
+uv run playwright install chromium
+```
+
+Install WeasyPrint's native dependencies, for example `brew install pango` on macOS, only when running a host workflow
+that renders real PDFs instead of stubbing PDF downloads.
+
+Increase or decrease the delay between browser actions with `BEHAVE_SLOW_MO`, for example:
+
+```shell
+make behave-headed BEHAVE_SLOW_MO=500 FEATURE_TEST_ARGS="features/view_only_outcome_continue.feature"
+```
+
+If the browser still appears too briefly or you want to step through the run, open it with Playwright Inspector:
+
+```shell
+make behave-headed BEHAVE_PWDEBUG=1 FEATURE_TEST_ARGS="features/view_only_outcome_continue.feature"
+```
+
+Do not run Behave directly against the normal development Compose stack because that bypasses the disposable test
+database.
+
+The formatter HTML report is written to `reports/report.html`. A scenario summary report is also written to
+`reports/behave-summary.html`; it lists every scenario as passed, failed or skipped, and embeds failure screenshots
+directly in the report. Failed scenarios also write standalone screenshots and page HTML to `artifacts/`. A failed One
+Login run writes `artifacts/one-login-docker-compose.log`; a failed DEX run writes `artifacts/dex-docker-compose.log`
+before cleanup.
 
 If a run is forcibly terminated before cleanup completes, the next invocation removes stale resources before creating
 a fresh environment. Both isolated projects can also be removed explicitly with:
