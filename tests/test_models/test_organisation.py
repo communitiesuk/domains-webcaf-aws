@@ -48,7 +48,7 @@ class OrganisationTest(TestCase):
                     )
 
                 self.assertEqual(
-                    context.exception.message_dict["gss_code"],
+                    context.exception.messages,
                     ["Councils and combined authorities must have a GSS code."],
                 )
 
@@ -70,7 +70,7 @@ class OrganisationTest(TestCase):
             organisation.save()
 
         self.assertEqual(
-            context.exception.message_dict["gss_code"],
+            context.exception.messages,
             ["Councils and combined authorities must have a GSS code."],
         )
 

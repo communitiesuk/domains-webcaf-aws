@@ -111,7 +111,10 @@ class Organisation(ReferenceGeneratorMixin, models.Model):
         if self.gss_code == "":
             self.gss_code = None
         if self.organisation_type in self.GSS_CODE_REQUIRED_ORGANISATION_TYPES and not self.gss_code:
-            raise ValidationError({"gss_code": "Councils and combined authorities must have a GSS code."})
+            # Some user-facing forms intentionally expose only part of the model.
+            # A non-field error lets those forms reject the save without raising
+            # an error for a field they do not contain.
+            raise ValidationError("Councils and combined authorities must have a GSS code.")
         super().clean()
 
     def save(self, *args, **kwargs):

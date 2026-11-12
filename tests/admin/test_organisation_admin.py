@@ -85,7 +85,7 @@ class OrganisationAdminTest(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertEqual(
-            form.errors["gss_code"],
+            form.non_field_errors(),
             ["Councils and combined authorities must have a GSS code."],
         )
 
@@ -171,6 +171,7 @@ class OrganisationAdminImportCSVTest(TestCase):
 
     def test_import_csv_template_uses_supported_schema(self):
         request = self.factory.get("/admin/webcaf/organisation/import-org-csv-template/")
+
         request.user = self.superuser
 
         response = self.admin.import_csv_template(request)
@@ -180,6 +181,46 @@ class OrganisationAdminImportCSVTest(TestCase):
             response.content.decode(),
             '"Organisation","Lead Government Department","Reference","Type"\r\n',
         )
+
+    def test_import_csv_rejects_council_types_before_writing_records(self):
+        response, admin_messages = self.import_rows(
+            [
+                self.row(organisation="Other Organisation", reference="ORG001", organisation_type="Other"),
+                self.row(organisation="Test Council", reference="ORG002", organisation_type="Council"),
+                self.row(
+                    organisation="Test Combined Authority",
+                    reference="ORG003",
+                    organisation_type="Combined authority",
+                ),
+            ]
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Organisation.objects.count(), 0)
+        self.assertEqual(User.objects.count(), 1)
+        self.assertEqual(UserProfile.objects.count(), 0)
+        message_text = " ".join(admin_messages)
+        self.assertIn("not supported by this legacy import", message_text)
+        self.assertIn("row 3 (Council)", message_text)
+        self.assertIn("row 4 (Combined authority)", message_text)
+
+    def test_import_csv_rejects_existing_council_when_type_column_is_blank(self):
+        existing_council = Organisation.objects.create(
+            name="Existing Council",
+            reference="ORG001",
+            organisation_type="council",
+            gss_code="E06000001",
+        )
+        response, admin_messages = self.import_rows(
+            [self.row(organisation=existing_council.name, reference=existing_council.reference)]
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Organisation.objects.count(), 1)
+        self.assertEqual(User.objects.count(), 1)
+        self.assertEqual(UserProfile.objects.count(), 0)
+        message_text = " ".join(admin_messages)
+        self.assertIn("row 2 (Council)", message_text)
 
     def test_valid_import_creates_organisation_without_users_profiles_memberships_or_roles(self):
         users_before = list(User.objects.values("id", "username", "email", "is_active"))

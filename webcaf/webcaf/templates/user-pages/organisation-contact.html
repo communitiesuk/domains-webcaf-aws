@@ -8,6 +8,7 @@
             <span class="govuk-caption-l">{{profile.organisation.name}}</span>
             Add contact details
         </h1>
+        {% include "partials/error_message.html" %}
         <form class="form" id="mainForm" method="post">
             {% csrf_token %}
             <p class="govuk-body">We are collecting your contact details, so that the GovAssure team can get in touch
