@@ -507,3 +507,69 @@ class TestOrganisationUserCanEditButNotCreate(SetupAssessmentTestData):
         self.assertEqual(edit_response.status_code, 302)
         assessment.refresh_from_db()
         self.assertEqual(assessment.caf_profile, "enhanced")
+
+
+class TestDraftOverviewSettingsLinks(SetupAssessmentTestData):
+    """
+    The draft overview shows the system, profile and review type as links only to roles that can
+    change them. Roles that can only view the draft see the same items as plain text.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.assessment = Assessment.objects.create(
+            system=self.test_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+        self.overview_url = reverse("edit-draft-assessment", kwargs={"assessment_id": self.assessment.id})
+        self.settings_urls = [
+            reverse(name, kwargs={"assessment_id": self.assessment.id})
+            for name in [
+                "edit-draft-assessment-system",
+                "edit-draft-assessment-profile",
+                "edit-draft-assessment-choose-review-type",
+            ]
+        ]
+        self.settings_labels = [
+            "Provide system details",
+            "Choose your government CAF profile",
+            "Choose a review type",
+        ]
+
+    def test_cyber_advisor_sees_the_settings_as_plain_text(self):
+        client, _ = self._login_with_role("cyber_advisor", self.test_organisation)
+
+        response = client.get(self.overview_url)
+
+        self.assertEqual(response.status_code, 200)
+        for url in self.settings_urls:
+            self.assertNotContains(response, f'href="{url}"')
+        for label in self.settings_labels:
+            self.assertContains(response, label)
+
+    def test_roles_that_can_edit_see_the_settings_as_links(self):
+        for role in ["organisation_lead", "organisation_user"]:
+            with self.subTest(role=role):
+                client, _ = self._login_with_role(role, self.test_organisation)
+
+                response = client.get(self.overview_url)
+
+                self.assertEqual(response.status_code, 200)
+                for url in self.settings_urls:
+                    self.assertContains(response, f'href="{url}"')
+
+    def test_govassure_lead_sees_the_settings_as_links_before_the_draft_is_saved(self):
+        client, _ = self._login_with_role("organisation_lead", self.test_organisation)
+        session = client.session
+        session["draft_assessment"] = {}
+        session.save()
+
+        response = client.get(self.create_assessment_url)
+
+        self.assertEqual(response.status_code, 200)
+        for url in [self.create_system_url, self.create_profile_url, self.create_review_type_url]:
+            self.assertContains(response, f'href="{url}"')
