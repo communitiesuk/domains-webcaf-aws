@@ -332,14 +332,14 @@ class EditAssessmentSystemView(EditAssessmentView):
         ]
 
 
-class CreateAssessmentView(LoginRequiredMixin, FormView):
+class CreateAssessmentView(UserRoleCheckMixin, FormView):
     """
     Handles the creation of draft assessments by authenticated users.
 
     Provides functionality to create, manage, and navigate draft assessments
     linked to a user's organisation and selected system. This view ensures that
-    only authenticated users can access this feature and handles specific
-    workflows related to draft assessments.
+    only users whose role may start an assessment can access this feature and
+    handles specific workflows related to draft assessments.
 
     :ivar login_url: URL path for unauthenticated users to be redirected to login.
     :type login_url: str
@@ -350,6 +350,11 @@ class CreateAssessmentView(LoginRequiredMixin, FormView):
     template_name = "assessment/draft-assessment.html"
     logger = logging.getLogger("CreateAssessmentView")
     form_class = BaseAssessmentForm
+
+    def get_allowed_roles(self) -> list[str]:
+        # Same roles as PermissionUtil.current_user_can_start_assessment, which
+        # decides whether the "Start a self-assessment" button is shown.
+        return ["organisation_lead"]
 
     def get_context_data(self, **kwargs):
         from webcaf.webcaf.frameworks import routers

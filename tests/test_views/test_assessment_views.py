@@ -105,6 +105,60 @@ class TestCreateAssessmentViews(SetupAssessmentTestData):
         self.assertRedirects(response, edit_review_type_url)
 
 
+class TestCreateAssessmentRolePermissions(SetupAssessmentTestData):
+    """Only a GovAssure lead may start an assessment, by page or by form submission."""
+
+    roles_not_allowed = ["organisation_user", "cyber_advisor", "assessor", "reviewer"]
+
+    def test_roles_not_allowed_cannot_open_the_create_pages(self):
+        for role in self.roles_not_allowed:
+            client, _ = self._login_with_role(role, self.test_organisation)
+            for url in [
+                self.create_assessment_url,
+                self.create_system_url,
+                self.create_profile_url,
+                self.create_review_type_url,
+            ]:
+                with self.subTest(role=role, url=url):
+                    self.assertEqual(client.get(url).status_code, 403)
+
+    def test_roles_not_allowed_cannot_create_a_draft_by_submitting_the_forms(self):
+        for role in self.roles_not_allowed:
+            with self.subTest(role=role):
+                client, _ = self._login_with_role(role, self.test_organisation)
+                session = client.session
+                session["draft_assessment"] = {"system": self.test_system.id, "caf_profile": "baseline"}
+                session.save()
+
+                responses = [
+                    client.post(self.create_system_url, {"system": self.test_system.id}),
+                    client.post(self.create_profile_url, {"caf_profile": "baseline"}),
+                    client.post(self.create_review_type_url, {"review_type": "peer_review"}),
+                ]
+
+                self.assertEqual([response.status_code for response in responses], [403, 403, 403])
+                self.assertFalse(Assessment.objects.filter(system=self.test_system).exists())
+
+    def test_govassure_lead_can_create_a_draft_by_submitting_the_forms(self):
+        client, _ = self._login_with_role("organisation_lead", self.test_organisation)
+        session = client.session
+        session["draft_assessment"] = {}
+        session.save()
+
+        client.post(self.create_system_url, {"system": self.test_system.id})
+        client.post(self.create_profile_url, {"caf_profile": "baseline"})
+        response = client.post(self.create_review_type_url, {"review_type": "peer_review"})
+
+        assessment = Assessment.objects.get(system=self.test_system, status="draft")
+        lead = self.org_map[self.test_organisation.name]["users"]["organisation_lead"]
+        self.assertEqual(assessment.created_by, lead)
+        self.assertRedirects(
+            response,
+            reverse("edit-draft-assessment", kwargs={"assessment_id": assessment.id}),
+            fetch_redirect_response=False,
+        )
+
+
 class TestEditAssessmentViews(SetupAssessmentTestData):
     def setUp(self):
         super().setUp()
