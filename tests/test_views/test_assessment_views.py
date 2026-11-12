@@ -26,7 +26,8 @@ class SetupAssessmentTestData(BaseViewTest):
 
 class TestCreateAssessmentViews(SetupAssessmentTestData):
     def setUp(self):
-        super().setUp()
+        # Only a GovAssure lead may start an assessment, so the create journey runs as one.
+        self.client, self.user_profile = self._login_with_role("organisation_lead", self.test_organisation)
 
     def test_create_system(self):
         response = self.client.get(self.create_system_url)
@@ -129,13 +130,13 @@ class TestEditAssessmentViews(SetupAssessmentTestData):
         self.assertTemplateUsed(response, "system/system-details.html")
 
     def test_edit_profile(self):
-        response = self.client.get(self.create_profile_url)
+        response = self.client.get(self.edit_profile_url)
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "assessment-profile.html")
 
     def test_edit_review_type(self):
-        response = self.client.get(self.create_review_type_url)
+        response = self.client.get(self.edit_review_type_url)
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "assessment/choose-review-type.html")
