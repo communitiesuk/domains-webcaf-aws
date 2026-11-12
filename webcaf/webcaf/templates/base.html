@@ -1,9 +1,25 @@
 {% load static i18n govuk_frontend_django csp %}<!DOCTYPE html>
 <html lang="en" class="govuk-template govuk-template--rebranded">
 <head>
-    {% if GOOGLE_ANALYTICS_ID %}
+    {% if GOOGLE_ANALYTICS_TYPE == "ga4" %}
+        <!-- Google tag (gtag.js) -->
+        <script type="unknown/type" id="google-analytics-script" data-analytics-script
+                nonce="{{ request.csp_nonce }}">(function(w,d,i,p){w.dataLayer=w.dataLayer||[];w.gtag=function(){w.dataLayer.push(arguments);};
+            var k='webcaf_analytics_previous_page',b=w.location.origin+'/analytics/',r='direct';
+            try{r=w.sessionStorage.getItem(k)||r;w.sessionStorage.setItem(k,p);}catch(e){}
+            w.gtag('js',new Date());w.gtag('config',i,{
+                'page_title':'Complete a WebCAF self-assessment',
+                'page_location':b+encodeURIComponent(p),
+                'page_referrer':b+encodeURIComponent(r)
+            });
+            var s=d.createElement('script');s.async=true;
+            s.src='https://www.googletagmanager.com/gtag/js?id='+i;s.nonce=d.currentScript.nonce;d.head.appendChild(s);
+        })(window,document,'{{ GOOGLE_ANALYTICS_ID }}','{{ GOOGLE_ANALYTICS_PAGE_ID|escapejs }}');</script>
+        <!-- End Google tag -->
+    {% elif GOOGLE_ANALYTICS_TYPE == "gtm" %}
         <!-- Google Tag Manager -->
-        <script type="unknown/type" id="gtm-script" nonce="{{ request.csp_nonce }}">(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+        <script type="unknown/type" id="gtm-script" data-analytics-script
+                nonce="{{ request.csp_nonce }}">(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
                   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
               j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
               'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
@@ -38,7 +54,7 @@
 <script nonce="{{ request.csp_nonce }}">
     document.body.className += ' js-enabled' + ('noModule' in HTMLScriptElement.prototype ? ' govuk-frontend-supported' : '');
 </script>
-{% if GOOGLE_ANALYTICS_ID %}
+{% if GOOGLE_ANALYTICS_TYPE == "gtm" %}
     <!-- Google Tag Manager (noscript) -->
     <noscript>
         <iframe nonce="{{ request.csp_nonce }}"

@@ -400,7 +400,13 @@ CONTENT_SECURITY_POLICY = {
         "form-action": (SELF, provider_origin),
         "frame-ancestors": (SELF,),
         "frame-src": (SELF, NONCE, "https://www.googletagmanager.com"),
-        "img-src": (SELF, NONCE, "data:"),
+        "img-src": (
+            SELF,
+            NONCE,
+            "data:",
+            "https://*.google-analytics.com",
+            "https://*.googletagmanager.com",
+        ),
         "script-src": (
             SELF,
             NONCE,
