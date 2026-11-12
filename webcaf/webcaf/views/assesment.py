@@ -3,7 +3,6 @@ from io import BytesIO
 
 from django import forms
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db.models import Subquery
 from django.http import FileResponse, HttpResponseRedirect
@@ -49,15 +48,16 @@ class ImportAssessmentExcelForm(forms.Form):
     )
 
 
-class EditAssessmentView(LoginRequiredMixin, FormView):
+class EditAssessmentView(UserRoleCheckMixin, FormView):
     """
     This view allows users to edit a draft assessment. It handles the retrieval of
     the assessment, renders the form for editing, and processes the updates. The
     view is restricted to logged-in users with appropriate permissions, and it
     validates that the user’s organization has access to the assessment being edited.
 
-    It extends functionality from `LoginRequiredMixin` to enforce login requirements
-    and `FormView` to leverage its form handling utilities.
+    It extends functionality from `UserRoleCheckMixin` to require a signed-in user
+    whose role may edit an assessment, and `FormView` to leverage its form
+    handling utilities.
 
     :ivar login_url: URL to redirect users to if they are not authenticated.
     :type login_url: str
@@ -67,6 +67,10 @@ class EditAssessmentView(LoginRequiredMixin, FormView):
 
     template_name = "assessment/draft-assessment.html"
     logger = logging.getLogger("EditAssessmentView")
+
+    def get_allowed_roles(self) -> list[str]:
+        # Same roles as PermissionUtil.current_user_can_edit_assessments.
+        return ["organisation_lead", "organisation_user"]
 
     def get_context_data(self, **kwargs):
         data = {}

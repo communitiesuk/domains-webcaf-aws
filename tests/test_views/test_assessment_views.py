@@ -271,3 +271,84 @@ class TestEditAssessmentViews(SetupAssessmentTestData):
         self.assertEqual(response.context["current_assessment_period"], "49/50")
         self.assertEqual(response.context["cutoff_time"], "11:59PM")
         self.assertEqual(response.context["cutoff_date"], "31 March 2050")
+
+
+class TestEditAssessmentRolePermissions(SetupAssessmentTestData):
+    """Only a GovAssure lead or an organisation user may edit a draft, by page or by form submission."""
+
+    roles_not_allowed = ["cyber_advisor", "assessor", "reviewer"]
+
+    def setUp(self):
+        super().setUp()
+        self.assessment = Assessment.objects.create(
+            system=self.test_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+        self.edit_urls = {
+            name: reverse(name, kwargs={"assessment_id": self.assessment.id})
+            for name in [
+                "edit-draft-assessment",
+                "edit-draft-assessment-system",
+                "edit-draft-assessment-profile",
+                "edit-draft-assessment-choose-review-type",
+            ]
+        }
+
+    def _draft_in_session(self, client):
+        session = client.session
+        session["draft_assessment"] = {
+            "assessment_id": self.assessment.id,
+            "system": self.test_system.id,
+            "caf_profile": "baseline",
+            "review_type": "peer_review",
+        }
+        session.save()
+
+    def test_roles_not_allowed_cannot_open_the_edit_pages(self):
+        for role in self.roles_not_allowed:
+            client, _ = self._login_with_role(role, self.test_organisation)
+            for url in self.edit_urls.values():
+                with self.subTest(role=role, url=url):
+                    self.assertEqual(client.get(url).status_code, 403)
+
+    def test_roles_not_allowed_cannot_change_a_draft_by_submitting_the_forms(self):
+        for role in self.roles_not_allowed:
+            with self.subTest(role=role):
+                client, _ = self._login_with_role(role, self.test_organisation)
+                self._draft_in_session(client)
+
+                responses = [
+                    client.post(self.edit_urls["edit-draft-assessment-profile"], {"caf_profile": "enhanced"}),
+                    client.post(self.edit_urls["edit-draft-assessment-system"], {"system": self.test_system.id}),
+                    client.post(
+                        self.edit_urls["edit-draft-assessment-choose-review-type"], {"review_type": "independent"}
+                    ),
+                ]
+
+                self.assertEqual([response.status_code for response in responses], [403, 403, 403])
+                self.assessment.refresh_from_db()
+                self.assertEqual(
+                    (self.assessment.caf_profile, self.assessment.review_type), ("baseline", "peer_review")
+                )
+                self.assertIsNone(self.assessment.last_updated_by)
+
+    def test_allowed_roles_can_change_a_draft_by_submitting_the_forms(self):
+        for role in ["organisation_lead", "organisation_user"]:
+            with self.subTest(role=role):
+                self.assessment.caf_profile = "baseline"
+                self.assessment.save()
+                client, _ = self._login_with_role(role, self.test_organisation)
+                self._draft_in_session(client)
+
+                response = client.post(self.edit_urls["edit-draft-assessment-profile"], {"caf_profile": "enhanced"})
+
+                self.assertEqual(response.status_code, 302)
+                self.assessment.refresh_from_db()
+                self.assertEqual(self.assessment.caf_profile, "enhanced")
+                self.assertEqual(
+                    self.assessment.last_updated_by, self.org_map[self.test_organisation.name]["users"][role]
+                )
