@@ -88,9 +88,6 @@ class Organisation(ReferenceGeneratorMixin, models.Model):
     contact_name = models.CharField(max_length=255, null=True, blank=True)
     contact_email = models.EmailField(null=True, blank=True)
     contact_role = models.CharField(max_length=255, null=True, blank=True)
-    parent_organisation = models.ForeignKey(
-        "self", on_delete=models.SET_NULL, related_name="sub_organisations", null=True, blank=True
-    )
 
     history = HistoricalRecords()
 

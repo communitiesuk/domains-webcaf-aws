@@ -373,7 +373,7 @@ class OrganisationAdminImportCSVTest(TestCase):
         self.assertSetEqual(
             set(Organisation.objects.values_list("name", flat=True)), {"Parent Organisation", "Child Organisation"}
         )
-        self.assertIsNone(Organisation.objects.get(name="Child Organisation").parent_organisation)
+        self.assertNotIn("parent_organisation", {field.name for field in Organisation._meta.get_fields()})
 
     def test_import_csv_processes_multiple_rows(self):
         rows = [self.row(organisation=f"Organisation {number}", reference=f"ORG00{number}") for number in range(1, 4)]
