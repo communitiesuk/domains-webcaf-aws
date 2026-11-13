@@ -24,6 +24,20 @@ class OrganisationTypeForm(ModelForm):
     Update organisation type of organisation
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        current_type = self.instance.organisation_type
+        admin_managed_types = Organisation.GSS_CODE_REQUIRED_ORGANISATION_TYPES
+
+        if current_type in admin_managed_types:
+            choices = [choice for choice in Organisation.ORGANISATION_TYPE_CHOICES if choice[0] == current_type]
+        else:
+            choices = [
+                choice for choice in Organisation.ORGANISATION_TYPE_CHOICES if choice[0] not in admin_managed_types
+            ]
+
+        self.fields["organisation_type"].choices = choices
+
     class Meta:
         model = Organisation
         fields = ["organisation_type"]

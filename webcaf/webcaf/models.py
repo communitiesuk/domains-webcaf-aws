@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.core.validators import validate_domain_name
+from django.core.validators import RegexValidator, validate_domain_name
 from django.db import models, transaction
 from django.db.models import (
     BooleanField,
@@ -61,11 +61,19 @@ class ReferenceGeneratorMixin:
 
 
 class Organisation(ReferenceGeneratorMixin, models.Model):
+    GSS_CODE_REQUIRED_ORGANISATION_TYPES = frozenset({"council", "combined-authority"})
+    GSS_CODE_VALIDATOR = RegexValidator(
+        regex=r"\A[A-Z][0-9]{8}\Z",
+        message="Enter a valid GSS code: one uppercase letter followed by eight digits (for example, E06000001).",
+        code="invalid_gss_code",
+    )
     ORGANISATION_TYPE_CHOICES = sorted(
         [
             ("ad-hoc-advisory-group", "Ad-hoc advisory group"),
             ("advisory-non-departmental-public-body", "Advisory non-departmental public body"),
             ("agency-or-other-public-body", "Agency or other public body"),
+            ("combined-authority", "Combined authority"),
+            ("council", "Council"),
             ("devolved-administration", "Devolved administration"),
             ("executive-agency", "Executive agency"),
             ("executive-non-departmental-public-body", "Executive non-departmental public body"),
@@ -79,6 +87,14 @@ class Organisation(ReferenceGeneratorMixin, models.Model):
     ) + [("other", "Other")]
     name = models.CharField(max_length=255, unique=True)
     reference = models.CharField(max_length=20, null=True, unique=True)
+    gss_code = models.CharField(
+        "GSS code",
+        max_length=9,
+        null=True,
+        blank=True,
+        unique=True,
+        validators=[GSS_CODE_VALIDATOR],
+    )
     organisation_type = models.CharField(
         max_length=255, null=True, blank=True, choices=ORGANISATION_TYPE_CHOICES, default=None
     )
@@ -90,6 +106,41 @@ class Organisation(ReferenceGeneratorMixin, models.Model):
     )
 
     history = HistoricalRecords()
+
+    def clean(self):
+        if self.gss_code == "":
+            self.gss_code = None
+        if self.organisation_type in self.GSS_CODE_REQUIRED_ORGANISATION_TYPES and not self.gss_code:
+            # Some user-facing forms intentionally expose only part of the model.
+            # A non-field error lets those forms reject the save without raising
+            # an error for a field they do not contain.
+            raise ValidationError("Councils and combined authorities must have a GSS code.")
+        super().clean()
+
+    def save(self, *args, **kwargs):
+        if self.gss_code == "":
+            self.gss_code = None
+
+        # Validate only the new field here so existing Organisation save behaviour
+        # remains unchanged. ModelForms still run normal validation for every field.
+        excluded_fields = {field.name for field in self._meta.fields if field.name != "gss_code"}
+        self.full_clean(exclude=excluded_fields)
+
+        update_fields = kwargs.get("update_fields")
+        if self.pk is not None and update_fields is not None:
+            update_fields = set(update_fields)
+            stored_values = type(self).objects.values("organisation_type", "gss_code").get(pk=self.pk)
+            saved_organisation_type = (
+                self.organisation_type if "organisation_type" in update_fields else stored_values["organisation_type"]
+            )
+            saved_gss_code = self.gss_code if "gss_code" in update_fields else stored_values["gss_code"]
+
+            if saved_organisation_type in self.GSS_CODE_REQUIRED_ORGANISATION_TYPES and not saved_gss_code:
+                raise ValidationError(
+                    "Councils and combined authorities must save their GSS code in the same operation."
+                )
+
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name

@@ -226,8 +226,8 @@ class UserProfileAdmin(SimpleHistoryAdmin):
 @admin.register(Organisation)
 class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: ignore
     model = Organisation
-    search_fields = ["name", "systems__name", "reference"]
-    list_display = ["name", "reference"]
+    search_fields = ["name", "systems__name", "reference", "gss_code"]
+    list_display = ["name", "reference", "gss_code"]
     readonly_fields = ["reference"]
     optional_fields = ["reference"]
     autocomplete_fields = [
@@ -298,43 +298,14 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
             decoded = TextIOWrapper(csv_file.file, encoding="utf-8")
             reader = csv.DictReader(decoded)
 
-            # Check headers
-            headers = reader.fieldnames or []
-            unsupported_headers = [header for header in self.legacy_email_headers if header in headers]
-            if unsupported_headers:
-                self.message_user(
-                    request,
-                    (
-                        f"Unsupported legacy email columns: {', '.join(unsupported_headers)}. "
-                        f"Use the current organisation import headers: {', '.join(self.csv_headers)}."
-                    ),
-                    messages.ERROR,
-                )
-                return redirect("..")
-
-            duplicate_headers = list(dict.fromkeys(header for header in headers if headers.count(header) > 1))
-            if duplicate_headers:
-                self.message_user(
-                    request,
-                    (
-                        f"The CSV contains duplicate headers: {', '.join(duplicate_headers)}. "
-                        f"Use the current organisation import headers: {', '.join(self.csv_headers)}."
-                    ),
-                    messages.ERROR,
-                )
-                return redirect("..")
-
-            if set(headers) != set(self.csv_headers):
-                self.message_user(
-                    request,
-                    f"The CSV headers must match the current organisation import headers: {', '.join(self.csv_headers)}.",
-                    messages.ERROR,
-                )
+            rows, validation_error = self._read_legacy_import_rows(reader)
+            if validation_error:
+                self.message_user(request, validation_error, messages.ERROR)
                 return redirect("..")
 
             count = 0
             # Import the organisations
-            for row in reader:
+            for row in rows:
                 count += 1
                 organisation = self.find_organisation(row)
 
@@ -357,10 +328,7 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
                         organisation = Organisation.objects.create(name=row["Organisation"])
 
             # Now set the parent organisation
-            # Reset the reader
-            decoded.seek(0)
-            reader = csv.DictReader(decoded)
-            for row in reader:
+            for row in rows:
                 parent_organisation = Organisation.objects.filter(Q(name=row["Lead Government Department"])).first()
                 if parent_organisation:
                     organisation = self.find_organisation(row)
@@ -384,6 +352,48 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
         }
         # Render upload form
         return render(request, "admin/webcaf/organisation/import_csv.html", context)
+
+    def _read_legacy_import_rows(self, reader):
+        headers = reader.fieldnames or []
+        unsupported_headers = [header for header in self.legacy_email_headers if header in headers]
+        if unsupported_headers:
+            return [], (
+                f"Unsupported legacy email columns: {', '.join(unsupported_headers)}. "
+                f"Use the current organisation import headers: {', '.join(self.csv_headers)}."
+            )
+
+        duplicate_headers = list(dict.fromkeys(header for header in headers if headers.count(header) > 1))
+        if duplicate_headers:
+            return [], (
+                f"The CSV contains duplicate headers: {', '.join(duplicate_headers)}. "
+                f"Use the current organisation import headers: {', '.join(self.csv_headers)}."
+            )
+
+        if set(headers) != set(self.csv_headers):
+            return [], (
+                f"The CSV headers must match the current organisation import headers: {', '.join(self.csv_headers)}."
+            )
+
+        rows = list(reader)
+        unsupported_rows = []
+        for row_number, row in enumerate(rows, start=2):
+            organisation_type = row.get("Type", "").strip()
+            organisation_type_id = Organisation.get_type_id(organisation_type)
+            existing_organisation = self.find_organisation(row)
+            existing_type_id = existing_organisation.organisation_type if existing_organisation else None
+            admin_managed_types = Organisation.GSS_CODE_REQUIRED_ORGANISATION_TYPES
+            if organisation_type_id in admin_managed_types or existing_type_id in admin_managed_types:
+                type_label = organisation_type or existing_organisation.get_organisation_type_display()
+                unsupported_rows.append(f"row {row_number} ({type_label})")
+
+        if unsupported_rows:
+            return [], (
+                "Council and Combined authority rows are not supported by this legacy import because they require a "
+                "GSS code. Use the dedicated council import when it is available. Affected rows: "
+                f"{', '.join(unsupported_rows)}."
+            )
+
+        return rows, None
 
     def find_organisation(self, row: dict[str | Any, str | Any]) -> Organisation | None:
         """

@@ -29,6 +29,81 @@ def add_middleware(request):
     return request
 
 
+class OrganisationAdminTest(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.admin = OrganisationAdmin(Organisation, AdminSite())
+
+    def test_displays_and_searches_by_gss_code(self):
+        self.assertIn("gss_code", self.admin.list_display)
+        self.assertIn("gss_code", self.admin.search_fields)
+
+        matching_organisation = Organisation.objects.create(
+            name="Matching Organisation",
+            gss_code="E06000001",
+        )
+        Organisation.objects.create(name="Other Organisation", gss_code="E06000002")
+
+        results, _may_have_duplicates = self.admin.get_search_results(
+            self.factory.get("/admin/webcaf/organisation/"),
+            Organisation.objects.all(),
+            "E06000001",
+        )
+
+        self.assertEqual(list(results), [matching_organisation])
+
+    def test_form_allows_gss_code_to_be_edited(self):
+        form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
+
+        self.assertIn("gss_code", form_class.base_fields)
+
+    def test_form_shows_clear_invalid_gss_code_error(self):
+        form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
+        form = form_class(
+            data={
+                "name": "Test Organisation",
+                "organisation_type": "other",
+                "gss_code": "invalid",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["gss_code"],
+            ["Enter a valid GSS code: one uppercase letter followed by eight digits (for example, E06000001)."],
+        )
+
+    def test_form_requires_gss_code_for_council(self):
+        form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
+        form = form_class(
+            data={
+                "name": "Test Council",
+                "organisation_type": "council",
+                "gss_code": "",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.non_field_errors(),
+            ["Councils and combined authorities must have a GSS code."],
+        )
+
+    def test_form_saves_combined_authority_with_gss_code(self):
+        form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
+        form = form_class(
+            data={
+                "name": "Test Combined Authority",
+                "organisation_type": "combined-authority",
+                "gss_code": "E47000001",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        organisation = form.save()
+        self.assertEqual(organisation.gss_code, "E47000001")
+
+
 class OrganisationAdminImportCSVTest(TestCase):
     """Tests for the OrganisationAdmin import_csv method."""
 
@@ -96,6 +171,7 @@ class OrganisationAdminImportCSVTest(TestCase):
 
     def test_import_csv_template_uses_supported_schema(self):
         request = self.factory.get("/admin/webcaf/organisation/import-org-csv-template/")
+
         request.user = self.superuser
 
         response = self.admin.import_csv_template(request)
@@ -105,6 +181,46 @@ class OrganisationAdminImportCSVTest(TestCase):
             response.content.decode(),
             '"Organisation","Lead Government Department","Reference","Type"\r\n',
         )
+
+    def test_import_csv_rejects_council_types_before_writing_records(self):
+        response, admin_messages = self.import_rows(
+            [
+                self.row(organisation="Other Organisation", reference="ORG001", organisation_type="Other"),
+                self.row(organisation="Test Council", reference="ORG002", organisation_type="Council"),
+                self.row(
+                    organisation="Test Combined Authority",
+                    reference="ORG003",
+                    organisation_type="Combined authority",
+                ),
+            ]
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Organisation.objects.count(), 0)
+        self.assertEqual(User.objects.count(), 1)
+        self.assertEqual(UserProfile.objects.count(), 0)
+        message_text = " ".join(admin_messages)
+        self.assertIn("not supported by this legacy import", message_text)
+        self.assertIn("row 3 (Council)", message_text)
+        self.assertIn("row 4 (Combined authority)", message_text)
+
+    def test_import_csv_rejects_existing_council_when_type_column_is_blank(self):
+        existing_council = Organisation.objects.create(
+            name="Existing Council",
+            reference="ORG001",
+            organisation_type="council",
+            gss_code="E06000001",
+        )
+        response, admin_messages = self.import_rows(
+            [self.row(organisation=existing_council.name, reference=existing_council.reference)]
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Organisation.objects.count(), 1)
+        self.assertEqual(User.objects.count(), 1)
+        self.assertEqual(UserProfile.objects.count(), 0)
+        message_text = " ".join(admin_messages)
+        self.assertIn("row 2 (Council)", message_text)
 
     def test_valid_import_creates_organisation_without_users_profiles_memberships_or_roles(self):
         users_before = list(User.objects.values("id", "username", "email", "is_active"))

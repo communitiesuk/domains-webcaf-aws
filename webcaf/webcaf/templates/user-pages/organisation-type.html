@@ -8,6 +8,7 @@
                 <span class="govuk-caption-l">{{profile.organisation.name}}</span>
                 Select organisation type
             </h1>
+            {% include "partials/error_message.html" %}
             <form class="form" id="mainForm" method="post">
                 {% csrf_token %}
                 <div class="govuk-form-group">
@@ -18,7 +19,7 @@
                             new tab)</a>, select the type shown.
                         </div>
                         <div class="govuk-radios" data-module="govuk-radios">
-                            {% for option in profile.organisation.ORGANISATION_TYPE_CHOICES %}
+                            {% for option in form.organisation_type.field.choices %}
                                 <div class="govuk-radios__item">
                                     <input class="govuk-radios__input" id="orgType{{ forloop.counter }}"
                                            name="organisation_type"
