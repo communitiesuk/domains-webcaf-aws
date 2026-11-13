@@ -62,6 +62,21 @@ class TestAddLocalUsers(TestCase):
         Organisation.objects.all().delete()
         System.objects.all().delete()
 
+    def test_command_creates_an_organisation_when_none_exist(self):
+        Organisation.objects.all().delete()
+
+        call_command("add_local_seed_data")
+
+        organisation = Organisation.objects.get()
+        self.assertEqual(organisation.name, "An Organisation")
+        self.assertEqual(organisation.organisation_type, "other")
+        self.assertEqual(organisation.systems.count(), 2)
+
+    def test_command_uses_an_existing_organisation(self):
+        call_command("add_local_seed_data")
+
+        self.assertEqual(list(Organisation.objects.values_list("name", flat=True)), ["TestOrg"])
+
     def test_command_creates_admin_user_when_none_exist(self):
         call_command("add_local_seed_data")
         superuser = User.objects.get(username="admin")

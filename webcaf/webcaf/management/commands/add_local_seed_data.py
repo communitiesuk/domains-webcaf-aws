@@ -1,5 +1,3 @@
-import sys
-
 from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
 
@@ -18,8 +16,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         if not Organisation.objects.exists():
-            self.stdout.write(self.style.ERROR("Run python manage.py add_organisations before running this command"))
-            sys.exit(1)
+            Organisation.objects.create(name=ORG_NAME, organisation_type="other")
+            self.stdout.write(self.style.SUCCESS(f"Organisation '{ORG_NAME}' created"))
 
         if not User.objects.filter(username=SUPERUSER_NAME).exists():
             User.objects.create_superuser(
