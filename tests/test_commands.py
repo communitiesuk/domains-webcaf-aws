@@ -45,6 +45,19 @@ class AddOrganisationsCommandTest(TestCase):
             },
         )
 
+    def test_seeds_organisations_with_other_type(self):
+        call_command("add_organisations")
+        organisation_types = set(Organisation.objects.values_list("organisation_type", flat=True))
+        self.assertSetEqual(organisation_types, {"other"})
+
+    def test_seed_csv_has_no_organisations(self):
+        cmd_mod = importlib.import_module("webcaf.webcaf.management.commands.add_organisations")
+        cmd_mod.CSV_PATH = self._orig_csv_path
+
+        call_command("add_organisations")
+
+        self.assertEqual(Organisation.objects.count(), 0)
+
     def test_pk_set_from_csv(self):
         call_command("add_organisations")
         expected_pks = {1, 60, 87, 175, 212}
