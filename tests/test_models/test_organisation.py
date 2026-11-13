@@ -74,6 +74,32 @@ class OrganisationTest(TestCase):
             ["Councils and combined authorities must have a GSS code."],
         )
 
+    def test_partial_save_requires_gss_code_to_be_saved_with_unrelated_changes(self):
+        organisation = Organisation(name="Existing Council", organisation_type="council")
+        Organisation.objects.bulk_create([organisation])
+
+        organisation.name = "Renamed Existing Council"
+        organisation.gss_code = "E06000001"
+
+        with self.assertRaises(ValidationError) as context:
+            organisation.save(update_fields=["name"])
+
+        self.assertEqual(
+            context.exception.messages,
+            ["Councils and combined authorities must save their GSS code in the same operation."],
+        )
+        organisation.refresh_from_db()
+        self.assertEqual(organisation.name, "Existing Council")
+        self.assertIsNone(organisation.gss_code)
+
+        organisation.name = "Renamed Existing Council"
+        organisation.gss_code = "E06000001"
+        organisation.save(update_fields=["name", "gss_code"])
+
+        organisation.refresh_from_db()
+        self.assertEqual(organisation.name, "Renamed Existing Council")
+        self.assertEqual(organisation.gss_code, "E06000001")
+
     def test_stores_empty_optional_gss_codes_as_null(self):
         first = Organisation.objects.create(name="First Organisation", gss_code="")
         second = Organisation.objects.create(name="Second Organisation", gss_code="")

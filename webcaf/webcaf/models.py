@@ -125,6 +125,21 @@ class Organisation(ReferenceGeneratorMixin, models.Model):
         # remains unchanged. ModelForms still run normal validation for every field.
         excluded_fields = {field.name for field in self._meta.fields if field.name != "gss_code"}
         self.full_clean(exclude=excluded_fields)
+
+        update_fields = kwargs.get("update_fields")
+        if self.pk is not None and update_fields is not None:
+            update_fields = set(update_fields)
+            stored_values = type(self).objects.values("organisation_type", "gss_code").get(pk=self.pk)
+            saved_organisation_type = (
+                self.organisation_type if "organisation_type" in update_fields else stored_values["organisation_type"]
+            )
+            saved_gss_code = self.gss_code if "gss_code" in update_fields else stored_values["gss_code"]
+
+            if saved_organisation_type in self.GSS_CODE_REQUIRED_ORGANISATION_TYPES and not saved_gss_code:
+                raise ValidationError(
+                    "Councils and combined authorities must save their GSS code in the same operation."
+                )
+
         super().save(*args, **kwargs)
 
     def __str__(self):
