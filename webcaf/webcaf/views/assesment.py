@@ -143,7 +143,7 @@ class EditAssessmentView(UserRoleCheckMixin, FormView):
             # edit the assessment instance in the database. This enables us to
             # forward the user to the editing screen with an known assessment id.
             system = System.objects.get(id=draft_assessment["system"], organisation=current_organisation)
-            assessment = Assessment.objects.get(id=draft_assessment["assessment_id"])
+            assessment = self.get_draft_assessment()
 
             draft_assessment["assessment_id"] = assessment.id
             draft_assessment["framework"] = assessment.framework
@@ -165,20 +165,40 @@ class EditAssessmentView(UserRoleCheckMixin, FormView):
                 return redirect(reverse("edit-draft-assessment", kwargs={"assessment_id": assessment.id}))
         return super().form_valid(form)
 
+    def get_draft_assessment(self) -> Assessment:
+        """
+        The draft named in the URL, if it belongs to the active organisation.
+        The form is built from this draft and the changes are saved to it.
+        """
+        assessment = Assessment.objects.get(id=self.kwargs.get("assessment_id"), status="draft")
+        current_organisation = get_current_user_profile(self.request).organisation
+        if assessment.system.id not in current_organisation.systems.values_list("id", flat=True):
+            self.logger.error(f"The user {self.request.user} does not have access to this assessment {assessment}")
+            raise PermissionDenied("You are not allowed to edit this assessment")
+        return assessment
+
+    def post(self, request, *args, **kwargs):
+        # The draft in the session can be left over from another draft or from
+        # an organisation the user has since switched away from. Start from the
+        # draft in the URL so the changes are applied to that draft only.
+        assessment = self.get_draft_assessment()
+        if request.session.get("draft_assessment", {}).get("assessment_id") != assessment.id:
+            request.session["draft_assessment"] = {
+                "assessment_id": assessment.id,
+                "system": assessment.system.id,
+                "caf_profile": assessment.caf_profile,
+                "framework": assessment.framework,
+                "review_type": assessment.review_type,
+            }
+        return super().post(request, *args, **kwargs)
+
     def get_form_kwargs(self):
         """
         Add the form instance to the kwargs.
         :return:
         """
         kwargs = super().get_form_kwargs()
-        assessment_to_modify = Assessment.objects.get(id=self.kwargs.get("assessment_id"), status="draft")
-        current_organisation = get_current_user_profile(self.request).organisation
-        if assessment_to_modify.system.id not in current_organisation.systems.values_list("id", flat=True):
-            self.logger.error(
-                f"The user {self.request.user} does not have access to this assessment {assessment_to_modify}"
-            )
-            raise PermissionDenied("You are not allowed to edit this assessment")
-        kwargs["instance"] = assessment_to_modify
+        kwargs["instance"] = self.get_draft_assessment()
         return kwargs
 
     def get_success_url(self):

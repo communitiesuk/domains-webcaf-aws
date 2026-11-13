@@ -467,6 +467,77 @@ class TestDraftAssessmentOrganisationChecks(SetupAssessmentTestData):
                     self.assertEqual(create_response.status_code, 403)
                     self.assertFalse(Assessment.objects.filter(system=self.test_system).exists())
 
+    def _session_draft(self, client, assessment):
+        session = client.session
+        session["draft_assessment"] = {
+            "assessment_id": assessment.id,
+            "system": assessment.system.id,
+            "caf_profile": assessment.caf_profile,
+            "review_type": assessment.review_type,
+        }
+        session.save()
+
+    def test_draft_left_in_the_session_before_an_organisation_switch_is_not_changed(self):
+        """
+        A user opens a draft in this organisation, switches to another organisation
+        and changes a draft there: only the draft in the URL is saved.
+        """
+        medium = self.org_map["Medium organisation"]["organisation"]
+        medium_system = next(iter(self.org_map["Medium organisation"]["systems"].values()))
+        user = self._create_user_with_role("organisation_lead", self.test_organisation, "switching-lead")
+        medium_profile = UserProfile.objects.create(user=user, organisation=medium, role="organisation_lead")
+        this_draft = self._draft_for_this_organisation()
+        medium_draft = Assessment.objects.create(
+            system=medium_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+        client = Client()
+        client.force_login(user)
+        self._session_draft(client, this_draft)
+        session = client.session
+        session["current_profile_id"] = medium_profile.id
+        session.save()
+
+        url = reverse("edit-draft-assessment-profile", kwargs={"assessment_id": medium_draft.id})
+        response = client.post(url, {"caf_profile": "enhanced"})
+
+        self.assertEqual(response.status_code, 302)
+        medium_draft.refresh_from_db()
+        this_draft.refresh_from_db()
+        self.assertEqual(medium_draft.caf_profile, "enhanced")
+        self.assertEqual((this_draft.caf_profile, this_draft.last_updated_by), ("baseline", None))
+
+    def test_draft_left_in_the_session_is_not_changed_when_another_draft_is_saved(self):
+        lead_client, _ = self._login_with_role("organisation_lead", self.test_organisation)
+        draft_in_session = self._draft_for_this_organisation()
+        other_system = next(
+            system
+            for system in self.org_map[self.test_organisation.name]["systems"].values()
+            if system != self.test_system
+        )
+        draft_in_url = Assessment.objects.create(
+            system=other_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+        self._session_draft(lead_client, draft_in_session)
+
+        url = reverse("edit-draft-assessment-profile", kwargs={"assessment_id": draft_in_url.id})
+        response = lead_client.post(url, {"caf_profile": "enhanced"})
+
+        self.assertEqual(response.status_code, 302)
+        draft_in_url.refresh_from_db()
+        draft_in_session.refresh_from_db()
+        self.assertEqual(draft_in_url.caf_profile, "enhanced")
+        self.assertEqual((draft_in_session.caf_profile, draft_in_session.last_updated_by), ("baseline", None))
+
 
 class TestOrganisationUserCanEditButNotCreate(SetupAssessmentTestData):
     """An organisation user may change an existing draft but may not start one."""
