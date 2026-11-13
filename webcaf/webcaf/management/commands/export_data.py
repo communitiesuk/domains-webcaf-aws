@@ -260,7 +260,6 @@ class Command(BaseCommand):
         """
         for organisation in Organisation.objects.all():
             self.stdout.write(f"File uploaded to s3://{bucket_name}/organisations/{organisation.reference}.json")
-            parent = organisation.parent_organisation
             s3.put_object(
                 Bucket=bucket_name,
                 Key=f"organisations/{organisation.reference}.json",
@@ -270,8 +269,6 @@ class Command(BaseCommand):
                             "organisation_name": organisation.name,
                             "organisation_type": organisation.get_organisation_type_display(),
                             "organisation_id": organisation.id,
-                            "parent_organisation_id": parent.id if parent else None,
-                            "parent_organisation_name": parent.name if parent else None,
                             "app_version": "webcaf-2",
                             "legacy_organisation_id": None,
                         }

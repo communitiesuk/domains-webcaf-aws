@@ -370,9 +370,6 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
     list_display = ["name", "reference", "gss_code"]
     readonly_fields = ["reference"]
     optional_fields = ["reference"]
-    autocomplete_fields = [
-        "parent_organisation",
-    ]
     inlines = [OrganisationEmailDomainInline]
 
     def get_formset_kwargs(self, request, obj, inline, prefix):
@@ -428,8 +425,9 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
 
     def import_csv(self, request):
         """
-        Handles the import of a CSV file through a POST request, processes its data to create organisations,
-        and associates organisations with a designated parent organisation.
+        Handles the import of a CSV file through a POST request and processes its data to create organisations.
+        The "Lead Government Department" column is accepted but ignored, because organisations no longer
+        have a parent organisation.
 
         User creation, organisation membership, and role assignment are handled separately through council
         onboarding and are not part of this import.
@@ -473,19 +471,6 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
                         )
                     else:
                         organisation = Organisation.objects.create(name=row["Organisation"])
-
-            # Now set the parent organisation
-            for row in rows:
-                parent_organisation = Organisation.objects.filter(Q(name=row["Lead Government Department"])).first()
-                if parent_organisation:
-                    organisation = self.find_organisation(row)
-                    if organisation != parent_organisation:
-                        # No parent if this is the parent organisation
-                        organisation.parent_organisation = parent_organisation
-                        organisation.save()
-                    else:
-                        organisation.parent_organisation = None
-                        organisation.save()
 
             self.message_user(request, f"✅ Imported {count} Organisations.", messages.SUCCESS)
             return redirect("..")

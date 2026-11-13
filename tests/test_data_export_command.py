@@ -619,8 +619,7 @@ class TestExportSystemsIntegration(TestCase):
     Covers:
       - S3 key format for organisations: organisations/{reference}.json
       - S3 key format for systems: systems/{reference}.json
-      - Organisation body: name, type display, id, null parent fields
-      - Child organisation body: parent_organisation_id and parent_organisation_name populated
+      - Organisation body: name, type display, id, and no parent organisation fields
       - System body: name, type display, multi-select fields correctly split into lists,
                      organisation_id, system_id, last_assessed
       - Total call count: one upload per organisation + one per system
@@ -638,7 +637,6 @@ class TestExportSystemsIntegration(TestCase):
             name="HMRC",
             organisation_type="council",
             gss_code="E06000001",
-            parent_organisation=cls.parent_org,
         )
         cls.system = System.objects.create(
             name="Tax Filing Portal",
@@ -669,7 +667,7 @@ class TestExportSystemsIntegration(TestCase):
         for call in s3.put_object.call_args_list:
             self.assertEqual("analytics-bucket", call.kwargs["Bucket"])
 
-        # --- Parent organisation: all fields correct, parent fields are None ---
+        # --- Organisations: all fields correct, no parent organisation fields ---
         parent_body = calls_by_key[f"organisations/{self.parent_org.reference}.json"]
         self.assertEqual(
             {
@@ -677,14 +675,11 @@ class TestExportSystemsIntegration(TestCase):
                 "organisation_name": "Cabinet Office",
                 "organisation_type": "Other",
                 "organisation_id": self.parent_org.id,
-                "parent_organisation_id": None,
-                "parent_organisation_name": None,
                 "legacy_organisation_id": None,
             },
             parent_body,
         )
 
-        # --- Child organisation: parent_organisation_id and name populated ---
         child_body = calls_by_key[f"organisations/{self.child_org.reference}.json"]
         self.assertEqual(
             {
@@ -692,8 +687,6 @@ class TestExportSystemsIntegration(TestCase):
                 "organisation_name": "HMRC",
                 "organisation_type": "Council",
                 "organisation_id": self.child_org.id,
-                "parent_organisation_id": self.parent_org.id,
-                "parent_organisation_name": "Cabinet Office",
                 "legacy_organisation_id": None,
             },
             child_body,

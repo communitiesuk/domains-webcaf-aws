@@ -2,8 +2,7 @@
 
 ## Purpose
 
-The Django admin import creates organisation records and associates them with a lead government department. It does
-not create or update users, user profiles, organisation memberships, or role assignments.
+The Django admin import creates organisation records. It does not create or update users, user profiles, organisation memberships, or role assignments.
 
 User onboarding, including invitations and claiming a council, is handled separately.
 
@@ -21,7 +20,7 @@ Organisation,Lead Government Department,Reference,Type
 ```
 
 - `Organisation` (required): name of the organisation.
-- `Lead Government Department` (optional): parent organisation name.
+- `Lead Government Department` (optional): accepted but ignored. Organisations no longer have a parent organisation.
 - `Reference` (optional): existing WebCAF organisation reference used for matching.
 - `Type` (optional): organisation type label.
 
@@ -53,7 +52,6 @@ For each valid row, the importer:
 2. Falls back to matching by `Organisation` name.
 3. Creates the organisation when no match is found.
 4. Sets a recognised organisation type on new records.
-5. Assigns the parent organisation named in `Lead Government Department`, while preventing self-parenting.
 
 Existing users and profiles, including records created by earlier imports, are not changed or removed.
 

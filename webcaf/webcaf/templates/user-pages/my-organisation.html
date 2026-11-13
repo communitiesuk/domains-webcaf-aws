@@ -46,22 +46,6 @@
                                    href="{% url 'edit-my-organisation-type' id=profile.id %}">Change</a>
                             </dd>
                         </div>
-                        <div class="govuk-summary-list__row">
-                            <dt class="govuk-summary-list__key">
-                                Parent organisation
-                            </dt>
-                            <dd class="govuk-summary-list__value">
-                                {% if profile %}
-                                    {% if profile.organisation.parent_organisation %}
-                                        {{ profile.organisation.parent_organisation.name }}
-                                    {% else %}
-                                        -
-                                    {% endif %}
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </dd>
-                        </div>
                     </dl>
                 </div>
             </div>

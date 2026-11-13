@@ -358,7 +358,7 @@ class OrganisationAdminImportCSVTest(TestCase):
 
         self.assertEqual(Organisation.objects.count(), 1)
 
-    def test_import_csv_sets_parent_organisation(self):
+    def test_import_csv_ignores_lead_government_department(self):
         rows = [
             self.row(organisation="Parent Organisation", reference="PARENT001"),
             self.row(
@@ -370,22 +370,10 @@ class OrganisationAdminImportCSVTest(TestCase):
 
         self.import_rows(rows)
 
-        parent_org = Organisation.objects.get(name="Parent Organisation")
-        child_org = Organisation.objects.get(name="Child Organisation")
-        self.assertIsNone(parent_org.parent_organisation)
-        self.assertEqual(child_org.parent_organisation, parent_org)
-
-    def test_import_csv_parent_organisation_is_self(self):
-        self.import_rows(
-            [
-                self.row(
-                    organisation="Self Organisation",
-                    lead_government_department="Self Organisation",
-                )
-            ]
+        self.assertSetEqual(
+            set(Organisation.objects.values_list("name", flat=True)), {"Parent Organisation", "Child Organisation"}
         )
-
-        self.assertIsNone(Organisation.objects.get(name="Self Organisation").parent_organisation)
+        self.assertIsNone(Organisation.objects.get(name="Child Organisation").parent_organisation)
 
     def test_import_csv_processes_multiple_rows(self):
         rows = [self.row(organisation=f"Organisation {number}", reference=f"ORG00{number}") for number in range(1, 4)]
