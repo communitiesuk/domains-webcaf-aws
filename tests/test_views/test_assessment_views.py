@@ -338,6 +338,18 @@ class TestEditAssessmentRolePermissions(SetupAssessmentTestData):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "assessment/draft-assessment.html")
 
+    def test_draft_overview_only_accepts_get(self):
+        for role in ["cyber_advisor", "organisation_lead", "organisation_user"]:
+            with self.subTest(role=role):
+                client, _ = self._login_with_role(role, self.test_organisation)
+                self._draft_in_session(client)
+
+                response = client.post(self.edit_urls["edit-draft-assessment"], {"caf_profile": "enhanced"})
+
+                self.assertEqual(response.status_code, 405)
+                self.assessment.refresh_from_db()
+                self.assertEqual(self.assessment.caf_profile, "baseline")
+
     def test_roles_not_allowed_cannot_change_a_draft_by_submitting_the_forms(self):
         for role in self.roles_not_allowed:
             with self.subTest(role=role):
