@@ -308,7 +308,7 @@ class TestExportReviewsIntegration(TestCase):
     def setUpTestData(cls):
         cls.org = Organisation.objects.create(
             name="Ministry of Transport",
-            organisation_type="ministerial-department",
+            organisation_type="other",
         )
         cls.system = System.objects.create(
             name="National Traffic Management System",
@@ -632,11 +632,12 @@ class TestExportSystemsIntegration(TestCase):
     def setUpTestData(cls):
         cls.parent_org = Organisation.objects.create(
             name="Cabinet Office",
-            organisation_type="ministerial-department",
+            organisation_type="other",
         )
         cls.child_org = Organisation.objects.create(
             name="HMRC",
-            organisation_type="executive-agency",
+            organisation_type="council",
+            gss_code="E06000001",
             parent_organisation=cls.parent_org,
         )
         cls.system = System.objects.create(
@@ -674,7 +675,7 @@ class TestExportSystemsIntegration(TestCase):
             {
                 "app_version": "webcaf-2",
                 "organisation_name": "Cabinet Office",
-                "organisation_type": "Ministerial department",
+                "organisation_type": "Other",
                 "organisation_id": self.parent_org.id,
                 "parent_organisation_id": None,
                 "parent_organisation_name": None,
@@ -689,7 +690,7 @@ class TestExportSystemsIntegration(TestCase):
             {
                 "app_version": "webcaf-2",
                 "organisation_name": "HMRC",
-                "organisation_type": "Executive agency",
+                "organisation_type": "Council",
                 "organisation_id": self.child_org.id,
                 "parent_organisation_id": self.parent_org.id,
                 "parent_organisation_name": "Cabinet Office",

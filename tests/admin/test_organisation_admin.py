@@ -426,9 +426,14 @@ class OrganisationAdminImportCSVTest(TestCase):
         self.assertEqual(found_organisation, organisation_by_reference)
 
     def test_import_csv_sets_organisation_type_when_provided(self):
+        self.import_rows([self.row(organisation="Test Company", organisation_type="Other")])
+
+        self.assertEqual(Organisation.objects.get(name="Test Company").organisation_type, "other")
+
+    def test_import_csv_ignores_removed_organisation_type(self):
         self.import_rows([self.row(organisation="Test Ministry", organisation_type="Ministerial department")])
 
-        self.assertEqual(Organisation.objects.get(name="Test Ministry").organisation_type, "ministerial-department")
+        self.assertIsNone(Organisation.objects.get(name="Test Ministry").organisation_type)
 
     def test_import_csv_ignores_invalid_organisation_type(self):
         self.import_rows([self.row(organisation_type="Invalid Type")])
@@ -441,6 +446,6 @@ class OrganisationAdminImportCSVTest(TestCase):
         self.assertIsNone(Organisation.objects.get(name="Test Organisation").organisation_type)
 
     def test_import_csv_handles_whitespace_in_type(self):
-        self.import_rows([self.row(organisation="Test Agency", organisation_type="  Executive agency  ")])
+        self.import_rows([self.row(organisation="Test Company", organisation_type="  Other  ")])
 
-        self.assertEqual(Organisation.objects.get(name="Test Agency").organisation_type, "executive-agency")
+        self.assertEqual(Organisation.objects.get(name="Test Company").organisation_type, "other")

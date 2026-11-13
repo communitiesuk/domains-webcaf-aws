@@ -67,24 +67,11 @@ class Organisation(ReferenceGeneratorMixin, models.Model):
         message="Enter a valid GSS code: one uppercase letter followed by eight digits (for example, E06000001).",
         code="invalid_gss_code",
     )
-    ORGANISATION_TYPE_CHOICES = sorted(
-        [
-            ("ad-hoc-advisory-group", "Ad-hoc advisory group"),
-            ("advisory-non-departmental-public-body", "Advisory non-departmental public body"),
-            ("agency-or-other-public-body", "Agency or other public body"),
-            ("combined-authority", "Combined authority"),
-            ("council", "Council"),
-            ("devolved-administration", "Devolved administration"),
-            ("executive-agency", "Executive agency"),
-            ("executive-non-departmental-public-body", "Executive non-departmental public body"),
-            ("executive-office", "Executive office"),
-            ("high-profile-group", "High profile group"),
-            ("ministerial-department", "Ministerial department"),
-            ("non-ministerial-department", "Non-ministerial department"),
-            ("public-corporation", "Public corporation"),
-            ("tribunal", "Tribunal"),
-        ]
-    ) + [("other", "Other")]
+    ORGANISATION_TYPE_CHOICES = [
+        ("combined-authority", "Combined authority"),
+        ("council", "Council"),
+        ("other", "Other"),
+    ]
     name = models.CharField(max_length=255, unique=True)
     reference = models.CharField(max_length=20, null=True, unique=True)
     gss_code = models.CharField(

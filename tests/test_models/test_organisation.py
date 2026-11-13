@@ -5,6 +5,12 @@ from webcaf.webcaf.models import Organisation
 
 
 class OrganisationTest(TestCase):
+    def test_offers_only_council_combined_authority_and_other_types(self):
+        self.assertEqual(
+            Organisation.ORGANISATION_TYPE_CHOICES,
+            [("combined-authority", "Combined authority"), ("council", "Council"), ("other", "Other")],
+        )
+
     def test_saves_valid_gss_code(self):
         organisation = Organisation.objects.create(
             name="Test Council",

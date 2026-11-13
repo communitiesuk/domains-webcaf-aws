@@ -13,6 +13,17 @@ class OrganisationTypeFormTest(TestCase):
 
         self.assertTrue(choice_ids.isdisjoint(Organisation.GSS_CODE_REQUIRED_ORGANISATION_TYPES))
 
+    def test_offers_only_other_to_organisations_that_are_not_councils(self):
+        for organisation_type in ["other", None]:
+            with self.subTest(organisation_type=organisation_type):
+                organisation = Organisation.objects.create(
+                    name=f"Test Organisation {organisation_type}", organisation_type=organisation_type
+                )
+
+                form = OrganisationTypeForm(instance=organisation)
+
+                self.assertEqual(list(form.fields["organisation_type"].choices), [("other", "Other")])
+
     def test_existing_council_can_only_retain_its_admin_managed_type(self):
         organisation = Organisation.objects.create(
             name="Test Council",
