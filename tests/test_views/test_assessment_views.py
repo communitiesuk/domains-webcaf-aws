@@ -3,7 +3,7 @@ from django.urls import reverse
 from freezegun import freeze_time
 
 from tests.test_views.base_view_test import BaseViewTest
-from webcaf.webcaf.models import Assessment, Configuration
+from webcaf.webcaf.models import Assessment, Configuration, UserProfile
 
 
 class SetupAssessmentTestData(BaseViewTest):
@@ -26,7 +26,8 @@ class SetupAssessmentTestData(BaseViewTest):
 
 class TestCreateAssessmentViews(SetupAssessmentTestData):
     def setUp(self):
-        super().setUp()
+        # Only a GovAssure lead may start an assessment, so the create journey runs as one.
+        self.client, self.user_profile = self._login_with_role("organisation_lead", self.test_organisation)
 
     def test_create_system(self):
         response = self.client.get(self.create_system_url)
@@ -104,6 +105,60 @@ class TestCreateAssessmentViews(SetupAssessmentTestData):
         self.assertRedirects(response, edit_review_type_url)
 
 
+class TestCreateAssessmentRolePermissions(SetupAssessmentTestData):
+    """Only a GovAssure lead may start an assessment, by page or by form submission."""
+
+    roles_not_allowed = ["organisation_user", "cyber_advisor", "assessor", "reviewer"]
+
+    def test_roles_not_allowed_cannot_open_the_create_pages(self):
+        for role in self.roles_not_allowed:
+            client, _ = self._login_with_role(role, self.test_organisation)
+            for url in [
+                self.create_assessment_url,
+                self.create_system_url,
+                self.create_profile_url,
+                self.create_review_type_url,
+            ]:
+                with self.subTest(role=role, url=url):
+                    self.assertEqual(client.get(url).status_code, 403)
+
+    def test_roles_not_allowed_cannot_create_a_draft_by_submitting_the_forms(self):
+        for role in self.roles_not_allowed:
+            with self.subTest(role=role):
+                client, _ = self._login_with_role(role, self.test_organisation)
+                session = client.session
+                session["draft_assessment"] = {"system": self.test_system.id, "caf_profile": "baseline"}
+                session.save()
+
+                responses = [
+                    client.post(self.create_system_url, {"system": self.test_system.id}),
+                    client.post(self.create_profile_url, {"caf_profile": "baseline"}),
+                    client.post(self.create_review_type_url, {"review_type": "peer_review"}),
+                ]
+
+                self.assertEqual([response.status_code for response in responses], [403, 403, 403])
+                self.assertFalse(Assessment.objects.filter(system=self.test_system).exists())
+
+    def test_govassure_lead_can_create_a_draft_by_submitting_the_forms(self):
+        client, _ = self._login_with_role("organisation_lead", self.test_organisation)
+        session = client.session
+        session["draft_assessment"] = {}
+        session.save()
+
+        client.post(self.create_system_url, {"system": self.test_system.id})
+        client.post(self.create_profile_url, {"caf_profile": "baseline"})
+        response = client.post(self.create_review_type_url, {"review_type": "peer_review"})
+
+        assessment = Assessment.objects.get(system=self.test_system, status="draft")
+        lead = self.org_map[self.test_organisation.name]["users"]["organisation_lead"]
+        self.assertEqual(assessment.created_by, lead)
+        self.assertRedirects(
+            response,
+            reverse("edit-draft-assessment", kwargs={"assessment_id": assessment.id}),
+            fetch_redirect_response=False,
+        )
+
+
 class TestEditAssessmentViews(SetupAssessmentTestData):
     def setUp(self):
         super().setUp()
@@ -129,13 +184,13 @@ class TestEditAssessmentViews(SetupAssessmentTestData):
         self.assertTemplateUsed(response, "system/system-details.html")
 
     def test_edit_profile(self):
-        response = self.client.get(self.create_profile_url)
+        response = self.client.get(self.edit_profile_url)
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "assessment-profile.html")
 
     def test_edit_review_type(self):
-        response = self.client.get(self.create_review_type_url)
+        response = self.client.get(self.edit_review_type_url)
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "assessment/choose-review-type.html")
@@ -216,3 +271,388 @@ class TestEditAssessmentViews(SetupAssessmentTestData):
         self.assertEqual(response.context["current_assessment_period"], "49/50")
         self.assertEqual(response.context["cutoff_time"], "11:59PM")
         self.assertEqual(response.context["cutoff_date"], "31 March 2050")
+
+
+class TestEditAssessmentRolePermissions(SetupAssessmentTestData):
+    """
+    Only a GovAssure lead or an organisation user may change a draft, by page or by form submission.
+    A cyber advisor may still open the draft overview, which is how they view a draft.
+    """
+
+    roles_not_allowed = ["cyber_advisor", "assessor", "reviewer"]
+    roles_not_allowed_to_view = ["assessor", "reviewer"]
+
+    def setUp(self):
+        super().setUp()
+        self.assessment = Assessment.objects.create(
+            system=self.test_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+        self.edit_urls = {
+            name: reverse(name, kwargs={"assessment_id": self.assessment.id})
+            for name in [
+                "edit-draft-assessment",
+                "edit-draft-assessment-system",
+                "edit-draft-assessment-profile",
+                "edit-draft-assessment-choose-review-type",
+            ]
+        }
+
+    def _draft_in_session(self, client):
+        session = client.session
+        session["draft_assessment"] = {
+            "assessment_id": self.assessment.id,
+            "system": self.test_system.id,
+            "caf_profile": "baseline",
+            "review_type": "peer_review",
+        }
+        session.save()
+
+    def test_roles_not_allowed_cannot_open_the_pages_that_change_a_draft(self):
+        change_pages = [
+            "edit-draft-assessment-system",
+            "edit-draft-assessment-profile",
+            "edit-draft-assessment-choose-review-type",
+        ]
+        for role in self.roles_not_allowed:
+            client, _ = self._login_with_role(role, self.test_organisation)
+            for name in change_pages:
+                with self.subTest(role=role, page=name):
+                    self.assertEqual(client.get(self.edit_urls[name]).status_code, 403)
+
+    def test_roles_that_cannot_view_assessments_cannot_open_the_draft_overview(self):
+        for role in self.roles_not_allowed_to_view:
+            with self.subTest(role=role):
+                client, _ = self._login_with_role(role, self.test_organisation)
+                self.assertEqual(client.get(self.edit_urls["edit-draft-assessment"]).status_code, 403)
+
+    def test_cyber_advisor_can_still_view_the_draft_overview(self):
+        client, _ = self._login_with_role("cyber_advisor", self.test_organisation)
+
+        response = client.get(self.edit_urls["edit-draft-assessment"])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "assessment/draft-assessment.html")
+
+    def test_draft_overview_only_accepts_get(self):
+        for role in ["cyber_advisor", "organisation_lead", "organisation_user"]:
+            with self.subTest(role=role):
+                client, _ = self._login_with_role(role, self.test_organisation)
+                self._draft_in_session(client)
+
+                response = client.post(self.edit_urls["edit-draft-assessment"], {"caf_profile": "enhanced"})
+
+                self.assertEqual(response.status_code, 405)
+                self.assessment.refresh_from_db()
+                self.assertEqual(self.assessment.caf_profile, "baseline")
+
+    def test_roles_not_allowed_cannot_change_a_draft_by_submitting_the_forms(self):
+        for role in self.roles_not_allowed:
+            with self.subTest(role=role):
+                client, _ = self._login_with_role(role, self.test_organisation)
+                self._draft_in_session(client)
+
+                responses = [
+                    client.post(self.edit_urls["edit-draft-assessment-profile"], {"caf_profile": "enhanced"}),
+                    client.post(self.edit_urls["edit-draft-assessment-system"], {"system": self.test_system.id}),
+                    client.post(
+                        self.edit_urls["edit-draft-assessment-choose-review-type"], {"review_type": "independent"}
+                    ),
+                ]
+
+                self.assertEqual([response.status_code for response in responses], [403, 403, 403])
+                self.assessment.refresh_from_db()
+                self.assertEqual(
+                    (self.assessment.caf_profile, self.assessment.review_type), ("baseline", "peer_review")
+                )
+                self.assertIsNone(self.assessment.last_updated_by)
+
+    def test_allowed_roles_can_change_a_draft_by_submitting_the_forms(self):
+        for role in ["organisation_lead", "organisation_user"]:
+            with self.subTest(role=role):
+                self.assessment.caf_profile = "baseline"
+                self.assessment.save()
+                client, _ = self._login_with_role(role, self.test_organisation)
+                self._draft_in_session(client)
+
+                response = client.post(self.edit_urls["edit-draft-assessment-profile"], {"caf_profile": "enhanced"})
+
+                self.assertEqual(response.status_code, 302)
+                self.assessment.refresh_from_db()
+                self.assertEqual(self.assessment.caf_profile, "enhanced")
+                self.assertEqual(
+                    self.assessment.last_updated_by, self.org_map[self.test_organisation.name]["users"][role]
+                )
+
+
+class TestDraftAssessmentOrganisationChecks(SetupAssessmentTestData):
+    """A permitted role in another organisation still cannot create or change this organisation's draft."""
+
+    def setUp(self):
+        super().setUp()
+        self.other_lead_client, _ = self._login_with_role(
+            "organisation_lead", self.org_map["Medium organisation"]["organisation"]
+        )
+
+    def test_lead_of_another_organisation_cannot_create_a_draft_for_this_organisations_system(self):
+        session = self.other_lead_client.session
+        session["draft_assessment"] = {"caf_profile": "baseline", "review_type": "peer_review"}
+        session.save()
+
+        response = self.other_lead_client.post(self.create_system_url, {"system": self.test_system.id})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Assessment.objects.filter(system=self.test_system).exists())
+
+    def test_lead_of_another_organisation_cannot_change_this_organisations_draft(self):
+        assessment = Assessment.objects.create(
+            system=self.test_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+        url = reverse("edit-draft-assessment-profile", kwargs={"assessment_id": assessment.id})
+
+        response = self.other_lead_client.post(url, {"caf_profile": "enhanced"})
+
+        self.assertEqual(response.status_code, 403)
+        assessment.refresh_from_db()
+        self.assertEqual(assessment.caf_profile, "baseline")
+
+    def _draft_for_this_organisation(self):
+        return Assessment.objects.create(
+            system=self.test_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+
+    def test_organisation_user_of_another_organisation_cannot_change_this_organisations_draft(self):
+        other_user_client, _ = self._login_with_role(
+            "organisation_user", self.org_map["Medium organisation"]["organisation"]
+        )
+        assessment = self._draft_for_this_organisation()
+        url = reverse("edit-draft-assessment-profile", kwargs={"assessment_id": assessment.id})
+
+        response = other_user_client.post(url, {"caf_profile": "enhanced"})
+
+        self.assertEqual(response.status_code, 403)
+        assessment.refresh_from_db()
+        self.assertEqual(assessment.caf_profile, "baseline")
+
+    def test_member_of_both_organisations_is_limited_to_the_active_one(self):
+        """
+        A user who holds a permitted role in this organisation and in another one,
+        with the other one active, cannot create or change this organisation's drafts.
+        """
+        medium = self.org_map["Medium organisation"]["organisation"]
+        for role in ["organisation_lead", "organisation_user"]:
+            with self.subTest(role=role):
+                user = self._create_user_with_role(role, self.test_organisation, f"both-{role}")
+                UserProfile.objects.create(user=user, organisation=medium, role=role)
+                active_profile = UserProfile.objects.get(user=user, organisation=medium)
+                client = Client()
+                client.force_login(user)
+                session = client.session
+                session["current_profile_id"] = active_profile.id
+                session["draft_assessment"] = {"caf_profile": "baseline", "review_type": "peer_review"}
+                session.save()
+
+                assessment = self._draft_for_this_organisation()
+                edit_url = reverse("edit-draft-assessment-profile", kwargs={"assessment_id": assessment.id})
+                edit_response = client.post(edit_url, {"caf_profile": "enhanced"})
+                assessment.refresh_from_db()
+                self.assertEqual(edit_response.status_code, 403)
+                self.assertEqual(assessment.caf_profile, "baseline")
+                assessment.delete()
+
+                if role == "organisation_lead":
+                    create_response = client.post(self.create_system_url, {"system": self.test_system.id})
+                    self.assertEqual(create_response.status_code, 403)
+                    self.assertFalse(Assessment.objects.filter(system=self.test_system).exists())
+
+    def _session_draft(self, client, assessment):
+        session = client.session
+        session["draft_assessment"] = {
+            "assessment_id": assessment.id,
+            "system": assessment.system.id,
+            "caf_profile": assessment.caf_profile,
+            "review_type": assessment.review_type,
+        }
+        session.save()
+
+    def test_draft_left_in_the_session_before_an_organisation_switch_is_not_changed(self):
+        """
+        A user opens a draft in this organisation, switches to another organisation
+        and changes a draft there: only the draft in the URL is saved.
+        """
+        medium = self.org_map["Medium organisation"]["organisation"]
+        medium_system = next(iter(self.org_map["Medium organisation"]["systems"].values()))
+        user = self._create_user_with_role("organisation_lead", self.test_organisation, "switching-lead")
+        medium_profile = UserProfile.objects.create(user=user, organisation=medium, role="organisation_lead")
+        this_draft = self._draft_for_this_organisation()
+        medium_draft = Assessment.objects.create(
+            system=medium_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+        client = Client()
+        client.force_login(user)
+        self._session_draft(client, this_draft)
+        session = client.session
+        session["current_profile_id"] = medium_profile.id
+        session.save()
+
+        url = reverse("edit-draft-assessment-profile", kwargs={"assessment_id": medium_draft.id})
+        response = client.post(url, {"caf_profile": "enhanced"})
+
+        self.assertEqual(response.status_code, 302)
+        medium_draft.refresh_from_db()
+        this_draft.refresh_from_db()
+        self.assertEqual(medium_draft.caf_profile, "enhanced")
+        self.assertEqual((this_draft.caf_profile, this_draft.last_updated_by), ("baseline", None))
+
+    def test_draft_left_in_the_session_is_not_changed_when_another_draft_is_saved(self):
+        lead_client, _ = self._login_with_role("organisation_lead", self.test_organisation)
+        draft_in_session = self._draft_for_this_organisation()
+        other_system = next(
+            system
+            for system in self.org_map[self.test_organisation.name]["systems"].values()
+            if system != self.test_system
+        )
+        draft_in_url = Assessment.objects.create(
+            system=other_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+        self._session_draft(lead_client, draft_in_session)
+
+        url = reverse("edit-draft-assessment-profile", kwargs={"assessment_id": draft_in_url.id})
+        response = lead_client.post(url, {"caf_profile": "enhanced"})
+
+        self.assertEqual(response.status_code, 302)
+        draft_in_url.refresh_from_db()
+        draft_in_session.refresh_from_db()
+        self.assertEqual(draft_in_url.caf_profile, "enhanced")
+        self.assertEqual((draft_in_session.caf_profile, draft_in_session.last_updated_by), ("baseline", None))
+
+
+class TestOrganisationUserCanEditButNotCreate(SetupAssessmentTestData):
+    """An organisation user may change an existing draft but may not start one."""
+
+    def test_organisation_user_can_edit_a_draft_but_cannot_create_one(self):
+        client, _ = self._login_with_role("organisation_user", self.test_organisation)
+        session = client.session
+        session["draft_assessment"] = {"caf_profile": "baseline", "review_type": "peer_review"}
+        session.save()
+
+        create_response = client.post(self.create_system_url, {"system": self.test_system.id})
+
+        self.assertEqual(create_response.status_code, 403)
+        self.assertFalse(Assessment.objects.filter(system=self.test_system).exists())
+
+        assessment = Assessment.objects.create(
+            system=self.test_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+        session = client.session
+        session["draft_assessment"] = {
+            "assessment_id": assessment.id,
+            "system": self.test_system.id,
+            "caf_profile": "baseline",
+            "review_type": "peer_review",
+        }
+        session.save()
+
+        edit_response = client.post(
+            reverse("edit-draft-assessment-profile", kwargs={"assessment_id": assessment.id}),
+            {"caf_profile": "enhanced"},
+        )
+
+        self.assertEqual(edit_response.status_code, 302)
+        assessment.refresh_from_db()
+        self.assertEqual(assessment.caf_profile, "enhanced")
+
+
+class TestDraftOverviewSettingsLinks(SetupAssessmentTestData):
+    """
+    The draft overview shows the system, profile and review type as links only to roles that can
+    change them. Roles that can only view the draft see the same items as plain text.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.assessment = Assessment.objects.create(
+            system=self.test_system,
+            status="draft",
+            assessment_period="25/26",
+            review_type="peer_review",
+            framework="caf32",
+            caf_profile="baseline",
+        )
+        self.overview_url = reverse("edit-draft-assessment", kwargs={"assessment_id": self.assessment.id})
+        self.settings_urls = [
+            reverse(name, kwargs={"assessment_id": self.assessment.id})
+            for name in [
+                "edit-draft-assessment-system",
+                "edit-draft-assessment-profile",
+                "edit-draft-assessment-choose-review-type",
+            ]
+        ]
+        self.settings_labels = [
+            "Provide system details",
+            "Choose your government CAF profile",
+            "Choose a review type",
+        ]
+
+    def test_cyber_advisor_sees_the_settings_as_plain_text(self):
+        client, _ = self._login_with_role("cyber_advisor", self.test_organisation)
+
+        response = client.get(self.overview_url)
+
+        self.assertEqual(response.status_code, 200)
+        for url in self.settings_urls:
+            self.assertNotContains(response, f'href="{url}"')
+        for label in self.settings_labels:
+            self.assertContains(response, label)
+
+    def test_roles_that_can_edit_see_the_settings_as_links(self):
+        for role in ["organisation_lead", "organisation_user"]:
+            with self.subTest(role=role):
+                client, _ = self._login_with_role(role, self.test_organisation)
+
+                response = client.get(self.overview_url)
+
+                self.assertEqual(response.status_code, 200)
+                for url in self.settings_urls:
+                    self.assertContains(response, f'href="{url}"')
+
+    def test_govassure_lead_sees_the_settings_as_links_before_the_draft_is_saved(self):
+        client, _ = self._login_with_role("organisation_lead", self.test_organisation)
+        session = client.session
+        session["draft_assessment"] = {}
+        session.save()
+
+        response = client.get(self.create_assessment_url)
+
+        self.assertEqual(response.status_code, 200)
+        for url in [self.create_system_url, self.create_profile_url, self.create_review_type_url]:
+            self.assertContains(response, f'href="{url}"')

@@ -159,7 +159,12 @@ urlpatterns = [
         name="create-draft-assessment-choose-review-type",
     ),
     # Editing existing draft assessment
-    path("edit-draft-assessment/<int:assessment_id>/", EditAssessmentView.as_view(), name="edit-draft-assessment"),
+    # The overview has no form; the settings are changed on the pages below.
+    path(
+        "edit-draft-assessment/<int:assessment_id>/",
+        EditAssessmentView.as_view(http_method_names=["get", "head", "options"]),
+        name="edit-draft-assessment",
+    ),
     path(
         "edit-draft-assessment/<int:assessment_id>/profile",
         EditAssessmentProfileView.as_view(),

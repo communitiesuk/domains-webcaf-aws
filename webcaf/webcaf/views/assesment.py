@@ -3,7 +3,6 @@ from io import BytesIO
 
 from django import forms
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db.models import Subquery
 from django.http import FileResponse, HttpResponseRedirect
@@ -28,6 +27,10 @@ def get_current_user_profile(request):
     return profile
 
 
+# Same roles as PermissionUtil.current_user_can_edit_assessments.
+EDIT_ASSESSMENT_ROLES = ["organisation_lead", "organisation_user"]
+
+
 class BaseAssessmentForm(forms.ModelForm):
     """
     Blank form for the base FormView classes
@@ -49,15 +52,16 @@ class ImportAssessmentExcelForm(forms.Form):
     )
 
 
-class EditAssessmentView(LoginRequiredMixin, FormView):
+class EditAssessmentView(UserRoleCheckMixin, FormView):
     """
     This view allows users to edit a draft assessment. It handles the retrieval of
     the assessment, renders the form for editing, and processes the updates. The
     view is restricted to logged-in users with appropriate permissions, and it
     validates that the user’s organization has access to the assessment being edited.
 
-    It extends functionality from `LoginRequiredMixin` to enforce login requirements
-    and `FormView` to leverage its form handling utilities.
+    It extends functionality from `UserRoleCheckMixin` to require a signed-in user
+    whose role may edit an assessment, and `FormView` to leverage its form
+    handling utilities.
 
     :ivar login_url: URL to redirect users to if they are not authenticated.
     :type login_url: str
@@ -67,6 +71,14 @@ class EditAssessmentView(LoginRequiredMixin, FormView):
 
     template_name = "assessment/draft-assessment.html"
     logger = logging.getLogger("EditAssessmentView")
+
+    def get_allowed_roles(self) -> list[str]:
+        # The draft overview is also how roles that can only view an assessment
+        # open a draft, so it allows the same roles as
+        # PermissionUtil.current_user_can_view_assessments. The pages that change
+        # the draft's system, profile or review type narrow this to the roles
+        # that can edit (EDIT_ASSESSMENT_ROLES).
+        return ["cyber_advisor", "organisation_lead", "organisation_user"]
 
     def get_context_data(self, **kwargs):
         data = {}
@@ -131,7 +143,7 @@ class EditAssessmentView(LoginRequiredMixin, FormView):
             # edit the assessment instance in the database. This enables us to
             # forward the user to the editing screen with an known assessment id.
             system = System.objects.get(id=draft_assessment["system"], organisation=current_organisation)
-            assessment = Assessment.objects.get(id=draft_assessment["assessment_id"])
+            assessment = self.get_draft_assessment()
 
             draft_assessment["assessment_id"] = assessment.id
             draft_assessment["framework"] = assessment.framework
@@ -153,20 +165,40 @@ class EditAssessmentView(LoginRequiredMixin, FormView):
                 return redirect(reverse("edit-draft-assessment", kwargs={"assessment_id": assessment.id}))
         return super().form_valid(form)
 
+    def get_draft_assessment(self) -> Assessment:
+        """
+        The draft named in the URL, if it belongs to the active organisation.
+        The form is built from this draft and the changes are saved to it.
+        """
+        assessment = Assessment.objects.get(id=self.kwargs.get("assessment_id"), status="draft")
+        current_organisation = get_current_user_profile(self.request).organisation
+        if assessment.system.id not in current_organisation.systems.values_list("id", flat=True):
+            self.logger.error(f"The user {self.request.user} does not have access to this assessment {assessment}")
+            raise PermissionDenied("You are not allowed to edit this assessment")
+        return assessment
+
+    def post(self, request, *args, **kwargs):
+        # The draft in the session can be left over from another draft or from
+        # an organisation the user has since switched away from. Start from the
+        # draft in the URL so the changes are applied to that draft only.
+        assessment = self.get_draft_assessment()
+        if request.session.get("draft_assessment", {}).get("assessment_id") != assessment.id:
+            request.session["draft_assessment"] = {
+                "assessment_id": assessment.id,
+                "system": assessment.system.id,
+                "caf_profile": assessment.caf_profile,
+                "framework": assessment.framework,
+                "review_type": assessment.review_type,
+            }
+        return super().post(request, *args, **kwargs)
+
     def get_form_kwargs(self):
         """
         Add the form instance to the kwargs.
         :return:
         """
         kwargs = super().get_form_kwargs()
-        assessment_to_modify = Assessment.objects.get(id=self.kwargs.get("assessment_id"), status="draft")
-        current_organisation = get_current_user_profile(self.request).organisation
-        if assessment_to_modify.system.id not in current_organisation.systems.values_list("id", flat=True):
-            self.logger.error(
-                f"The user {self.request.user} does not have access to this assessment {assessment_to_modify}"
-            )
-            raise PermissionDenied("You are not allowed to edit this assessment")
-        kwargs["instance"] = assessment_to_modify
+        kwargs["instance"] = self.get_draft_assessment()
         return kwargs
 
     def get_success_url(self):
@@ -265,6 +297,9 @@ class EditAssessmentProfileView(EditAssessmentView):
     template_name = "assessment-profile.html"
     form_class = AssessmentProfileForm
 
+    def get_allowed_roles(self) -> list[str]:
+        return EDIT_ASSESSMENT_ROLES
+
     def form_valid(self, form):
         draft_assessment = self.request.session["draft_assessment"]
         draft_assessment["caf_profile"] = form.cleaned_data["caf_profile"]
@@ -306,6 +341,9 @@ class EditAssessmentSystemView(EditAssessmentView):
     template_name = "system/system-details.html"
     form_class = AssessmentSystemForm
 
+    def get_allowed_roles(self) -> list[str]:
+        return EDIT_ASSESSMENT_ROLES
+
     def form_valid(self, form):
         draft_assessment = self.request.session["draft_assessment"]
         current_user_profile = get_current_user_profile(self.request)
@@ -332,14 +370,14 @@ class EditAssessmentSystemView(EditAssessmentView):
         ]
 
 
-class CreateAssessmentView(LoginRequiredMixin, FormView):
+class CreateAssessmentView(UserRoleCheckMixin, FormView):
     """
     Handles the creation of draft assessments by authenticated users.
 
     Provides functionality to create, manage, and navigate draft assessments
     linked to a user's organisation and selected system. This view ensures that
-    only authenticated users can access this feature and handles specific
-    workflows related to draft assessments.
+    only users whose role may start an assessment can access this feature and
+    handles specific workflows related to draft assessments.
 
     :ivar login_url: URL path for unauthenticated users to be redirected to login.
     :type login_url: str
@@ -350,6 +388,11 @@ class CreateAssessmentView(LoginRequiredMixin, FormView):
     template_name = "assessment/draft-assessment.html"
     logger = logging.getLogger("CreateAssessmentView")
     form_class = BaseAssessmentForm
+
+    def get_allowed_roles(self) -> list[str]:
+        # Same roles as PermissionUtil.current_user_can_start_assessment, which
+        # decides whether the "Start a self-assessment" button is shown.
+        return ["organisation_lead"]
 
     def get_context_data(self, **kwargs):
         from webcaf.webcaf.frameworks import routers
@@ -584,6 +627,9 @@ class EditAssessmentReviewTypeView(EditAssessmentView):
 
     form_class = AssessmentReviewTypeForm
     template_name = "assessment/choose-review-type.html"
+
+    def get_allowed_roles(self) -> list[str]:
+        return EDIT_ASSESSMENT_ROLES
 
     def form_valid(self, form):
         draft_assessment = self.request.session["draft_assessment"]
