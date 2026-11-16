@@ -303,6 +303,9 @@ class OrganisationEmailDomainInlineFormSet(BaseInlineFormSet):
                 None,
             )
             if selected_primary is not None:
+                # Lock the organisation, not its current primary: there may
+                # not be a primary yet when two requests arrive together.
+                Organisation.objects.select_for_update().get(pk=self.instance.pk)
                 current_primary_links = OrganisationEmailDomain.objects.filter(
                     organisation=self.instance,
                     is_primary=True,
@@ -341,8 +344,11 @@ class OrganisationEmailDomainAdmin(SimpleHistoryAdmin):
     autocomplete_fields = ["organisation", "domain"]
     list_select_related = ["organisation", "domain"]
 
+    @transaction.atomic
     def save_model(self, request, obj, form, change):
         if obj.is_primary:
+            # Use the same lock as the inline, including first assignments.
+            Organisation.objects.select_for_update().get(pk=obj.organisation_id)
             current_primary_links = list(
                 OrganisationEmailDomain.objects.filter(
                     organisation=obj.organisation,

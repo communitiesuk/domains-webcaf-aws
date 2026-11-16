@@ -1,7 +1,11 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
+
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Permission, User
+from django.db import connection, connections, transaction
 from django.forms.models import inlineformset_factory
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, TransactionTestCase, skipUnlessDBFeature
 from django.urls import reverse
 
 from webcaf.webcaf.admin import (
@@ -298,6 +302,78 @@ class OrganisationEmailDomainAdminPermissionTest(TestCase):
             ).exists()
         )
 
+    def test_link_only_staff_can_link_existing_domain_but_cannot_create_global_domain(self):
+        response = self.client.get(reverse("admin:webcaf_organisation_change", args=[self.organisation.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="add_id_email_domain_links-__prefix__-domain"')
+        self.assertFalse(
+            response.context["inline_admin_formsets"][0].formset.empty_form.fields["domain"].widget.can_add_related
+        )
+
+        popup_url = reverse("admin:webcaf_allowedemaildomain_add")
+        response = self.client.get(popup_url, {"_popup": "1", "_to_field": "id"})
+        self.assertEqual(response.status_code, 403)
+        response = self.client.post(
+            popup_url,
+            {"domain": "new.gov.uk", "_popup": "1", "_to_field": "id", "_save": "Save"},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(AllowedEmailDomain.objects.filter(domain="new.gov.uk").exists())
+
+        data = self.organisation_change_data()
+        data.pop("email_domain_links-0-is_primary")
+        response = self.client.post(
+            reverse("admin:webcaf_organisation_change", args=[self.organisation.pk]),
+            data,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(AllowedEmailDomain.objects.count(), 2)
+        self.assertTrue(
+            OrganisationEmailDomain.objects.filter(
+                organisation=self.organisation, domain=self.second_domain, is_primary=False
+            ).exists()
+        )
+        self.existing_primary.refresh_from_db()
+        self.assertTrue(self.existing_primary.is_primary)
+
+    def test_authorised_staff_can_create_domain_from_council_page_and_link_it(self):
+        self.user.user_permissions.add(
+            Permission.objects.get(content_type__app_label="webcaf", codename="add_allowedemaildomain")
+        )
+        council_url = reverse("admin:webcaf_organisation_change", args=[self.organisation.pk])
+        response = self.client.get(council_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="add_id_email_domain_links-__prefix__-domain"')
+        widget = response.context["inline_admin_formsets"][0].formset.empty_form.fields["domain"].widget
+        self.assertTrue(widget.can_add_related)
+        popup_url = widget.get_context("email_domain_links-__prefix__-domain", None, {})["add_related_url"]
+        response = self.client.get(popup_url, {"_popup": "1", "_to_field": "id"})
+        self.assertEqual(response.status_code, 200)
+        response = self.client.post(
+            popup_url,
+            {"domain": "New.Gov.UK", "_popup": "1", "_to_field": "id", "_save": "Save"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "admin/popup_response.html")
+        domain = AllowedEmailDomain.objects.get(domain="new.gov.uk")
+        self.assertJSONEqual(response.context["popup_response_data"], {"value": str(domain.pk), "obj": domain.domain})
+        self.assertFalse(domain.organisation_links.exists())
+
+        data = self.organisation_change_data()
+        data["email_domain_links-0-domain"] = str(domain.pk)
+        data.pop("email_domain_links-0-is_primary")
+        response = self.client.post(council_url, data)
+
+        self.assertEqual(response.status_code, 302)
+        link = OrganisationEmailDomain.objects.get(organisation=self.organisation, domain=domain)
+        self.assertEqual(domain.history.count(), 1)
+        self.assertEqual(link.history.count(), 1)
+        self.assertFalse(link.is_primary)
+
 
 class AllowedEmailDomainAdminPermissionTest(TestCase):
     def setUp(self):
@@ -388,3 +464,97 @@ class AllowedEmailDomainAdminPermissionTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(AllowedEmailDomain.objects.filter(domain="kent.gov.uk").count(), 1)
+
+
+@skipUnlessDBFeature("has_select_for_update")
+class OrganisationEmailDomainAdminConcurrencyTest(TransactionTestCase):
+    def setUp(self):
+        self.organisation = Organisation.objects.create(
+            name="Test Council", organisation_type="council", gss_code="E06000001"
+        )
+        self.domains = [
+            AllowedEmailDomain.objects.create(domain="first.gov.uk"),
+            AllowedEmailDomain.objects.create(domain="second.gov.uk"),
+        ]
+        self.user = User.objects.create_superuser(username="admin", email="admin@example.com")
+
+    def save_primary(self, path, domain, lock_attempted):
+        def track_organisation_lock(execute, sql, params, many, context):
+            if "FOR UPDATE" in sql and f'"{Organisation._meta.db_table}"' in sql:
+                lock_attempted.set()
+            return execute(sql, params, many, context)
+
+        try:
+            # Bound failures so a broken lock cannot leave a test worker stuck.
+            with connection.cursor() as cursor:
+                cursor.execute("SET lock_timeout = '15s'")
+            with connection.execute_wrapper(track_organisation_lock):
+                if path == "standalone":
+                    model_admin = OrganisationEmailDomainAdmin(OrganisationEmailDomain, AdminSite())
+                    request = RequestFactory().post("/admin/webcaf/organisationemaildomain/add/")
+                    request.user = self.user
+                    model_admin.save_model(
+                        request,
+                        OrganisationEmailDomain(organisation=self.organisation, domain=domain, is_primary=True),
+                        form=None,
+                        change=False,
+                    )
+                else:
+                    formset_class = inlineformset_factory(
+                        Organisation,
+                        OrganisationEmailDomain,
+                        form=OrganisationEmailDomainAdminForm,
+                        formset=OrganisationEmailDomainInlineFormSet,
+                        fields=["domain", "is_primary", "status"],
+                        extra=0,
+                    )
+                    formset = formset_class(
+                        instance=self.organisation,
+                        prefix="domains",
+                        data={
+                            "domains-TOTAL_FORMS": "1",
+                            "domains-INITIAL_FORMS": "0",
+                            "domains-MIN_NUM_FORMS": "0",
+                            "domains-MAX_NUM_FORMS": "1000",
+                            "domains-0-domain": str(domain.pk),
+                            "domains-0-is_primary": "on",
+                            "domains-0-status": OrganisationEmailDomain.Status.ACTIVE,
+                        },
+                        can_change_existing_links=True,
+                    )
+                    self.assertTrue(formset.is_valid(), formset.errors)
+                    formset.save()
+        finally:
+            connections.close_all()
+
+    def assert_concurrent_primary_assignments(self, paths):
+        lock_attempts = [Event(), Event()]
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            # Both requests start with no primary and must wait for this same
+            # parent-row lock before looking up the current primary.
+            with transaction.atomic():
+                Organisation.objects.select_for_update().get(pk=self.organisation.pk)
+                futures = [
+                    executor.submit(self.save_primary, path, domain, attempted)
+                    for path, domain, attempted in zip(paths, self.domains, lock_attempts)
+                ]
+                attempted_locks = [attempted.wait(timeout=5) for attempted in lock_attempts]
+            for future in futures:
+                future.result(timeout=20)
+
+        self.assertEqual(attempted_locks, [True, True])
+        links = OrganisationEmailDomain.objects.filter(organisation=self.organisation)
+        self.assertEqual(links.count(), 2)
+        self.assertEqual(links.filter(is_primary=True).count(), 1)
+        demoted = links.get(is_primary=False)
+        self.assertEqual(demoted.history.count(), 2)
+        self.assertFalse(demoted.history.latest().is_primary)
+
+    def test_concurrent_standalone_first_primary_assignments(self):
+        self.assert_concurrent_primary_assignments(["standalone", "standalone"])
+
+    def test_concurrent_inline_first_primary_assignments(self):
+        self.assert_concurrent_primary_assignments(["inline", "inline"])
+
+    def test_concurrent_inline_and_standalone_first_primary_assignments(self):
+        self.assert_concurrent_primary_assignments(["inline", "standalone"])
