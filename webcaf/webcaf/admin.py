@@ -262,6 +262,10 @@ class OrganisationEmailDomainAdminForm(forms.ModelForm):
 class OrganisationEmailDomainInlineFormSet(BaseInlineFormSet):
     """Validate and safely persist an organisation's complete set of domain links."""
 
+    def __init__(self, *args, can_change_existing_links=False, **kwargs):
+        self.can_change_existing_links = can_change_existing_links
+        super().__init__(*args, **kwargs)
+
     def clean(self):
         super().clean()
         if any(self.errors):
@@ -305,6 +309,9 @@ class OrganisationEmailDomainInlineFormSet(BaseInlineFormSet):
                 )
                 if selected_primary.pk:
                     current_primary_links = current_primary_links.exclude(pk=selected_primary.pk)
+                current_primary_links = list(current_primary_links)
+                if current_primary_links and not self.can_change_existing_links:
+                    raise PermissionDenied("You do not have permission to change the existing primary domain.")
                 # Demote before saving the selected primary so the partial
                 # unique constraint is never transiently violated. Save each
                 # link individually so every demotion is recorded in history.
@@ -336,10 +343,15 @@ class OrganisationEmailDomainAdmin(SimpleHistoryAdmin):
 
     def save_model(self, request, obj, form, change):
         if obj.is_primary:
-            for link in OrganisationEmailDomain.objects.filter(
-                organisation=obj.organisation,
-                is_primary=True,
-            ).exclude(pk=obj.pk):
+            current_primary_links = list(
+                OrganisationEmailDomain.objects.filter(
+                    organisation=obj.organisation,
+                    is_primary=True,
+                ).exclude(pk=obj.pk)
+            )
+            if any(not self.has_change_permission(request, link) for link in current_primary_links):
+                raise PermissionDenied("You do not have permission to change the existing primary domain.")
+            for link in current_primary_links:
                 link.is_primary = False
                 link.save(update_fields=["is_primary"])
         super().save_model(request, obj, form, change)
@@ -356,6 +368,12 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
         "parent_organisation",
     ]
     inlines = [OrganisationEmailDomainInline]
+
+    def get_formset_kwargs(self, request, obj, inline, prefix):
+        kwargs = super().get_formset_kwargs(request, obj, inline, prefix)
+        if isinstance(inline, OrganisationEmailDomainInline):
+            kwargs["can_change_existing_links"] = inline.has_change_permission(request, obj)
+        return kwargs
 
     logger = logging.getLogger("OrganisationAdmin")
     csv_headers = [

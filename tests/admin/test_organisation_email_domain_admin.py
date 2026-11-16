@@ -70,6 +70,7 @@ class OrganisationEmailDomainInlineTest(TestCase):
             data=self.formset_data([first_link, second_link]),
             instance=self.organisation,
             prefix="domains",
+            can_change_existing_links=True,
         )
 
         self.assertFalse(formset.is_valid())
@@ -91,6 +92,7 @@ class OrganisationEmailDomainInlineTest(TestCase):
             data=self.formset_data([first_link, second_link]),
             instance=self.organisation,
             prefix="domains",
+            can_change_existing_links=True,
         )
 
         self.assertTrue(formset.is_valid(), formset.errors)
@@ -122,6 +124,7 @@ class OrganisationEmailDomainInlineTest(TestCase):
             instance=self.organisation,
             prefix="domains",
             queryset=OrganisationEmailDomain.objects.none(),
+            can_change_existing_links=True,
         )
 
         self.assertTrue(formset.is_valid(), formset.errors)
@@ -160,6 +163,140 @@ class OrganisationEmailDomainAdminTest(TestCase):
         existing_primary.refresh_from_db()
         self.assertFalse(existing_primary.is_primary)
         self.assertFalse(existing_primary.history.latest().is_primary)
+
+
+class OrganisationEmailDomainAdminPermissionTest(TestCase):
+    def setUp(self):
+        self.organisation = Organisation.objects.create(
+            name="Test Council",
+            organisation_type="council",
+            gss_code="E06000001",
+        )
+        self.first_domain = AllowedEmailDomain.objects.create(domain="first.gov.uk")
+        self.second_domain = AllowedEmailDomain.objects.create(domain="second.gov.uk")
+        self.existing_primary = OrganisationEmailDomain.objects.create(
+            organisation=self.organisation,
+            domain=self.first_domain,
+            is_primary=True,
+        )
+        self.user = User.objects.create_user(
+            username="link-manager",
+            email="link-manager@example.com",
+            is_staff=True,
+        )
+        self.user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="webcaf",
+                codename__in=[
+                    "change_organisation",
+                    "add_organisationemaildomain",
+                    "view_allowedemaildomain",
+                ],
+            )
+        )
+        self.client.force_login(self.user)
+
+    def grant_link_change_permission(self):
+        self.user.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="webcaf",
+                codename="change_organisationemaildomain",
+            )
+        )
+
+    def standalone_add_data(self):
+        return {
+            "organisation": str(self.organisation.pk),
+            "domain": str(self.second_domain.pk),
+            "is_primary": "on",
+            "status": OrganisationEmailDomain.Status.ACTIVE,
+            "_save": "Save",
+        }
+
+    def organisation_change_data(self):
+        return {
+            "name": self.organisation.name,
+            "gss_code": self.organisation.gss_code,
+            "organisation_type": self.organisation.organisation_type,
+            "contact_name": "",
+            "contact_email": "",
+            "contact_role": "",
+            "parent_organisation": "",
+            "email_domain_links-TOTAL_FORMS": "1",
+            "email_domain_links-INITIAL_FORMS": "0",
+            "email_domain_links-MIN_NUM_FORMS": "0",
+            "email_domain_links-MAX_NUM_FORMS": "1000",
+            "email_domain_links-0-domain": str(self.second_domain.pk),
+            "email_domain_links-0-is_primary": "on",
+            "email_domain_links-0-status": OrganisationEmailDomain.Status.ACTIVE,
+            "_save": "Save",
+        }
+
+    def assert_primary_is_unchanged(self):
+        self.existing_primary.refresh_from_db()
+        self.assertTrue(self.existing_primary.is_primary)
+        self.assertFalse(
+            OrganisationEmailDomain.objects.filter(
+                organisation=self.organisation,
+                domain=self.second_domain,
+            ).exists()
+        )
+
+    def test_standalone_add_cannot_demote_primary_without_change_permission(self):
+        response = self.client.post(
+            reverse("admin:webcaf_organisationemaildomain_add"),
+            self.standalone_add_data(),
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assert_primary_is_unchanged()
+
+    def test_standalone_add_can_demote_primary_with_change_permission(self):
+        self.grant_link_change_permission()
+
+        response = self.client.post(
+            reverse("admin:webcaf_organisationemaildomain_add"),
+            self.standalone_add_data(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.existing_primary.refresh_from_db()
+        self.assertFalse(self.existing_primary.is_primary)
+        self.assertTrue(
+            OrganisationEmailDomain.objects.filter(
+                organisation=self.organisation,
+                domain=self.second_domain,
+                is_primary=True,
+            ).exists()
+        )
+
+    def test_inline_add_cannot_demote_omitted_primary_without_change_permission(self):
+        response = self.client.post(
+            reverse("admin:webcaf_organisation_change", args=[self.organisation.pk]),
+            self.organisation_change_data(),
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assert_primary_is_unchanged()
+
+    def test_inline_add_can_demote_primary_with_change_permission(self):
+        self.grant_link_change_permission()
+
+        response = self.client.post(
+            reverse("admin:webcaf_organisation_change", args=[self.organisation.pk]),
+            self.organisation_change_data(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.existing_primary.refresh_from_db()
+        self.assertFalse(self.existing_primary.is_primary)
+        self.assertTrue(
+            OrganisationEmailDomain.objects.filter(
+                organisation=self.organisation,
+                domain=self.second_domain,
+                is_primary=True,
+            ).exists()
+        )
 
 
 class AllowedEmailDomainAdminPermissionTest(TestCase):
