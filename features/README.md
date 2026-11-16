@@ -46,8 +46,9 @@ The containerized workflow is headless by default. Pass `-D headless_testing=fal
 when the environment supports headed Playwright. Do not run Behave directly against the normal development Compose
 stack because that bypasses the disposable test database.
 
-The HTML report is written to `reports/report.html`. Failed scenarios write screenshots and page HTML to
-`artifacts/`. A failed One Login run writes `artifacts/one-login-docker-compose.log`; a failed DEX run writes
+The self-contained Allure HTML report is written to `reports/allure-report/index.html`, with raw Allure results in
+`reports/allure-results/`. Failed scenarios attach screenshots to the Allure report and write the screenshots and page
+HTML to `artifacts/`. A failed One Login run writes `artifacts/one-login-docker-compose.log`; a failed DEX run writes
 `artifacts/dex-docker-compose.log` before cleanup.
 
 If a run is forcibly terminated before cleanup completes, the next invocation removes stale resources before creating

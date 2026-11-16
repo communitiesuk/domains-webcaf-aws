@@ -1,7 +1,9 @@
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
+import allure
 import django
 from behave.model_type import Status
 from django.conf import settings
@@ -121,11 +123,16 @@ def after_scenario(context, scenario):
 
         if hasattr(context, "page") and isinstance(context.page, Page):
             # Generate safe filename
-            safe_name = scenario.name.replace(" ", "_").replace("/", "_")
+            safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", scenario.name).strip("_")
 
             # Save screenshot
             screenshot_path = f"artifacts/{safe_name}.png"
-            context.page.screenshot(path=screenshot_path, full_page=True)
+            screenshot = context.page.screenshot(path=screenshot_path, full_page=True)
+            allure.attach(
+                screenshot,
+                name="Screenshot",
+                attachment_type=allure.attachment_type.PNG,
+            )
 
             # Save HTML
             html_path = f"artifacts/{safe_name}.html"
