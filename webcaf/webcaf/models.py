@@ -518,7 +518,7 @@ class OrganisationEmailDomain(models.Model):
     )
     domain = models.ForeignKey(
         AllowedEmailDomain,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="organisation_links",
     )
     is_primary = models.BooleanField(default=False, verbose_name="Primary domain")

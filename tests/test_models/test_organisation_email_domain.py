@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 
 from webcaf.webcaf.models import AllowedEmailDomain, Organisation, OrganisationEmailDomain
@@ -114,3 +115,82 @@ class OrganisationEmailDomainTest(TestCase):
 
         self.assertEqual(link.history.count(), 2)
         self.assertEqual(link.history.latest().status, OrganisationEmailDomain.Status.RETIRED)
+
+    def test_deleting_shared_domain_is_blocked_and_preserves_primary_links_and_history(self):
+        links = [
+            OrganisationEmailDomain.objects.create(organisation=organisation, domain=self.domain, is_primary=True)
+            for organisation in [self.first_organisation, self.second_organisation]
+        ]
+
+        for use_queryset in [False, True]:
+            with self.subTest(use_queryset=use_queryset):
+                with self.assertRaises(ProtectedError):
+                    if use_queryset:
+                        AllowedEmailDomain.objects.filter(pk=self.domain.pk).delete()
+                    else:
+                        self.domain.delete()
+
+                self.assertTrue(AllowedEmailDomain.objects.filter(pk=self.domain.pk).exists())
+                self.assertEqual(self.domain.history.count(), 1)
+                for link in links:
+                    link.refresh_from_db()
+                    self.assertTrue(link.is_primary)
+                    self.assertEqual(link.status, OrganisationEmailDomain.Status.ACTIVE)
+                    self.assertEqual(link.history.count(), 1)
+                self.assertTrue(AllowedEmailDomain.allows_email("user@example.gov.uk"))
+
+    def test_retired_association_still_protects_domain_from_deletion(self):
+        link = OrganisationEmailDomain.objects.create(
+            organisation=self.first_organisation, domain=self.domain, status=OrganisationEmailDomain.Status.RETIRED
+        )
+
+        with self.assertRaises(ProtectedError):
+            self.domain.delete()
+
+        self.assertTrue(AllowedEmailDomain.objects.filter(pk=self.domain.pk).exists())
+        self.assertTrue(OrganisationEmailDomain.objects.filter(pk=link.pk).exists())
+
+    def test_unlinked_domain_can_be_deleted_and_retains_history(self):
+        domain_pk = self.domain.pk
+
+        self.domain.delete()
+
+        self.assertFalse(AllowedEmailDomain.objects.filter(pk=domain_pk).exists())
+        self.assertEqual(AllowedEmailDomain.history.filter(id=domain_pk).count(), 2)
+        self.assertEqual(AllowedEmailDomain.history.filter(id=domain_pk).latest().history_type, "-")
+
+    def test_domain_can_be_deleted_after_all_associations_are_explicitly_removed(self):
+        links = [
+            OrganisationEmailDomain.objects.create(organisation=organisation, domain=self.domain, is_primary=True)
+            for organisation in [self.first_organisation, self.second_organisation]
+        ]
+        link_ids = [link.pk for link in links]
+        links[0].delete()
+
+        with self.assertRaises(ProtectedError):
+            self.domain.delete()
+
+        links[1].delete()
+        domain_pk = self.domain.pk
+        self.domain.delete()
+
+        self.assertFalse(AllowedEmailDomain.objects.filter(pk=domain_pk).exists())
+        for link_id in link_ids:
+            history = OrganisationEmailDomain.history.filter(id=link_id)
+            self.assertEqual(history.count(), 2)
+            self.assertEqual(history.latest().history_type, "-")
+
+    def test_deleting_organisation_still_removes_only_its_links(self):
+        first_link = OrganisationEmailDomain.objects.create(
+            organisation=self.first_organisation, domain=self.domain, is_primary=True
+        )
+        second_link = OrganisationEmailDomain.objects.create(
+            organisation=self.second_organisation, domain=self.domain, is_primary=True
+        )
+
+        self.first_organisation.delete()
+
+        self.assertFalse(OrganisationEmailDomain.objects.filter(pk=first_link.pk).exists())
+        self.assertTrue(AllowedEmailDomain.objects.filter(pk=self.domain.pk).exists())
+        second_link.refresh_from_db()
+        self.assertTrue(second_link.is_primary)

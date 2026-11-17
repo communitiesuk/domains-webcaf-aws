@@ -466,6 +466,76 @@ class AllowedEmailDomainAdminPermissionTest(TestCase):
         self.assertEqual(AllowedEmailDomain.objects.filter(domain="kent.gov.uk").count(), 1)
 
 
+class AllowedEmailDomainAdminDeletionTest(TestCase):
+    def setUp(self):
+        self.domain = AllowedEmailDomain.objects.create(domain="shared.gov.uk")
+        self.unlinked_domain = AllowedEmailDomain.objects.create(domain="unlinked.gov.uk")
+        self.links = []
+        for name, gss_code in [("First Council", "E06000001"), ("Second Council", "E06000002")]:
+            organisation = Organisation.objects.create(name=name, organisation_type="council", gss_code=gss_code)
+            self.links.append(
+                OrganisationEmailDomain.objects.create(organisation=organisation, domain=self.domain, is_primary=True)
+            )
+        self.client.force_login(User.objects.create_superuser(username="admin", email="admin@example.com"))
+
+    def assert_shared_domain_is_unchanged(self):
+        self.assertTrue(AllowedEmailDomain.objects.filter(pk=self.domain.pk).exists())
+        self.assertEqual(self.domain.history.count(), 1)
+        for link in self.links:
+            link.refresh_from_db()
+            self.assertTrue(link.is_primary)
+            self.assertEqual(link.history.count(), 1)
+
+    def test_delete_page_blocks_shared_domain_deletion_even_for_superuser(self):
+        url = reverse("admin:webcaf_allowedemaildomain_delete", args=[self.domain.pk])
+        for method in ["get", "post"]:
+            with self.subTest(method=method):
+                response = getattr(self.client, method)(url, {"post": "yes"} if method == "post" else {})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.context["protected"])
+                self.assertContains(response, "First Council")
+                self.assertContains(response, "Second Council")
+                self.assert_shared_domain_is_unchanged()
+
+    def test_bulk_delete_blocks_entire_selection_if_a_domain_is_linked(self):
+        url = reverse("admin:webcaf_allowedemaildomain_changelist")
+        data = {
+            "action": "delete_selected",
+            "_selected_action": [str(self.domain.pk), str(self.unlinked_domain.pk)],
+        }
+        for confirmed in [False, True]:
+            with self.subTest(confirmed=confirmed):
+                if confirmed:
+                    data["post"] = "yes"
+                response = self.client.post(url, data)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.context["protected"])
+                self.assert_shared_domain_is_unchanged()
+                self.assertTrue(AllowedEmailDomain.objects.filter(pk=self.unlinked_domain.pk).exists())
+
+    def test_unlinked_domain_can_be_deleted_by_authorised_staff(self):
+        response = self.client.post(
+            reverse("admin:webcaf_allowedemaildomain_delete", args=[self.unlinked_domain.pk]),
+            {"post": "yes"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(AllowedEmailDomain.objects.filter(pk=self.unlinked_domain.pk).exists())
+        self.assert_shared_domain_is_unchanged()
+
+    def test_unlinked_domain_can_be_bulk_deleted_by_authorised_staff(self):
+        response = self.client.post(
+            reverse("admin:webcaf_allowedemaildomain_changelist"),
+            {"action": "delete_selected", "_selected_action": [str(self.unlinked_domain.pk)], "post": "yes"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(AllowedEmailDomain.objects.filter(pk=self.unlinked_domain.pk).exists())
+        self.assert_shared_domain_is_unchanged()
+
+
 @skipUnlessDBFeature("has_select_for_update")
 class OrganisationEmailDomainAdminConcurrencyTest(TransactionTestCase):
     def setUp(self):
