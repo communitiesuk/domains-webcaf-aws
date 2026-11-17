@@ -552,7 +552,16 @@ class OrganisationEmailDomain(models.Model):
         super().clean()
 
     def __str__(self):
-        return f"{self.organisation} - {self.domain}"
+        # Historical links retain parent IDs after those records are deleted.
+        try:
+            organisation = str(self.organisation)
+        except Organisation.DoesNotExist:
+            organisation = f"Deleted organisation (ID: {self.organisation_id})"
+        try:
+            domain = str(self.domain)
+        except AllowedEmailDomain.DoesNotExist:
+            domain = f"Deleted domain (ID: {self.domain_id})"
+        return f"{organisation} - {domain}"
 
 
 class ConfigurationManager(models.Manager):

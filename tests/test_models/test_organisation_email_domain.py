@@ -116,6 +116,12 @@ class OrganisationEmailDomainTest(TestCase):
         self.assertEqual(link.history.count(), 2)
         self.assertEqual(link.history.latest().status, OrganisationEmailDomain.Status.RETIRED)
 
+    def test_string_representation_preserves_existing_parent_labels(self):
+        link = OrganisationEmailDomain.objects.create(organisation=self.first_organisation, domain=self.domain)
+
+        self.assertEqual(str(link), "First Council - example.gov.uk")
+        self.assertEqual(str(link.history.latest().instance), "First Council - example.gov.uk")
+
     def test_deleting_shared_domain_is_blocked_and_preserves_primary_links_and_history(self):
         links = [
             OrganisationEmailDomain.objects.create(organisation=organisation, domain=self.domain, is_primary=True)

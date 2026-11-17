@@ -169,6 +169,64 @@ class OrganisationEmailDomainAdminTest(TestCase):
         self.assertFalse(existing_primary.history.latest().is_primary)
 
 
+class OrganisationEmailDomainAdminHistoryTest(TestCase):
+    def setUp(self):
+        self.organisation = Organisation.objects.create(
+            name="Test Council", organisation_type="council", gss_code="E06000001"
+        )
+        self.domain = AllowedEmailDomain.objects.create(domain="history.gov.uk")
+        self.link = OrganisationEmailDomain.objects.create(organisation=self.organisation, domain=self.domain)
+        self.link_id = self.link.pk
+        self.organisation_id = self.organisation.pk
+        self.domain_id = self.domain.pk
+        self.client.force_login(User.objects.create_superuser(username="admin", email="admin@example.com"))
+
+    def assert_history_is_readable(self, label):
+        history = OrganisationEmailDomain.history.filter(id=self.link_id)
+        self.assertEqual(history.count(), 2)
+        response = self.client.get(reverse("admin:webcaf_organisationemaildomain_history", args=[self.link_id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, label)
+        for record in history:
+            with self.subTest(history_id=record.history_id):
+                self.assertEqual(str(record.instance), label)
+                self.assertEqual(str(record.history_object), label)
+                response = self.client.get(
+                    reverse(
+                        "admin:webcaf_organisationemaildomain_simple_history", args=[self.link_id, record.history_id]
+                    )
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, label)
+
+    def test_deleted_link_history_remains_readable_after_domain_deletion(self):
+        self.link.delete()
+        self.domain.delete()
+
+        self.assert_history_is_readable(f"Test Council - Deleted domain (ID: {self.domain_id})")
+
+    def test_deleted_link_history_remains_readable_after_organisation_deletion(self):
+        self.link.delete()
+        self.organisation.delete()
+
+        self.assert_history_is_readable(f"Deleted organisation (ID: {self.organisation_id}) - history.gov.uk")
+
+    def test_deleted_link_history_remains_readable_after_both_parents_are_deleted(self):
+        self.link.delete()
+        self.domain.delete()
+        self.organisation.delete()
+
+        self.assert_history_is_readable(
+            f"Deleted organisation (ID: {self.organisation_id}) - Deleted domain (ID: {self.domain_id})"
+        )
+
+    def test_link_history_remains_readable_after_cascading_organisation_deletion(self):
+        self.organisation.delete()
+
+        self.assert_history_is_readable(f"Deleted organisation (ID: {self.organisation_id}) - history.gov.uk")
+
+
 class OrganisationEmailDomainAdminPermissionTest(TestCase):
     def setUp(self):
         self.organisation = Organisation.objects.create(
