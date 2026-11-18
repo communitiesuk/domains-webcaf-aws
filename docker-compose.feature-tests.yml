@@ -103,6 +103,8 @@ services:
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
       ONE_LOGIN_SIMULATOR_URL: http://one-login-simulator:3000
       FEATURE_TEST_ARGS: ${FEATURE_TEST_ARGS:-}
+      FEATURE_TEST_BRANCH: ${FEATURE_TEST_BRANCH:-unknown}
+      FEATURE_TEST_COMMIT: ${FEATURE_TEST_COMMIT:-unknown}
       PYTHONDONTWRITEBYTECODE: "1"
     volumes:
       - ./artifacts:/app/artifacts

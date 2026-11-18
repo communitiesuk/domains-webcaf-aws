@@ -1886,7 +1886,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "allure-behave", specifier = ">=2.16.2" },
+    { name = "allure-behave", specifier = ">=2.16.2,<3" },
     { name = "behave", specifier = ">=1.3.3,<2" },
     { name = "boto3-stubs", specifier = ">=1.43.108,<2" },
     { name = "django-stubs", extras = ["compatible-mypy"], specifier = ">=5.2.9,<5.3" },
