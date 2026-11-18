@@ -1,6 +1,7 @@
 import os
 import re
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 
 import allure
@@ -145,8 +146,10 @@ def after_scenario(context, scenario):
         os.makedirs(parent_path / "artifacts", exist_ok=True)  # Folder for all failure artifacts
 
         if hasattr(context, "page") and isinstance(context.page, Page):
-            # Generate safe filename
-            safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", scenario.name).strip("_")
+            # Keep filenames readable while distinguishing names and source locations.
+            readable_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", scenario.name).strip("_")[:100] or "scenario"
+            scenario_id = f"{scenario.filename}:{scenario.line}:{scenario.name}"
+            safe_name = f"{readable_name}_{sha256(scenario_id.encode('utf-8')).hexdigest()[:16]}"
 
             # Save screenshot
             screenshot_path = f"artifacts/{safe_name}.png"

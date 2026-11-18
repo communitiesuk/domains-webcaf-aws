@@ -78,15 +78,18 @@ class FeatureReportingTest(TestCase):
                 page = Mock(spec=Page)
                 page.screenshot.return_value = b"screenshot"
                 page.content.return_value = "<html><body>Failure evidence</body></html>"
-                scenario = SimpleNamespace(status=status, name="Failure / unsafe: name?")
+                scenario = SimpleNamespace(
+                    status=status, name="Failure / unsafe: name?", filename="features/report.feature", line=10
+                )
 
                 with patch.object(environment.allure, "attach") as attach:
                     environment.after_scenario(SimpleNamespace(page=page), scenario)
 
-                page.screenshot.assert_called_once_with(path="artifacts/Failure_unsafe_name.png", full_page=True)
-                self.assertEqual(
-                    (self.tmp_path / "artifacts" / "Failure_unsafe_name.html").read_text(), page.content.return_value
-                )
+                page.screenshot.assert_called_once()
+                screenshot_path = Path(page.screenshot.call_args.kwargs["path"])
+                self.assertEqual(page.screenshot.call_args.kwargs["full_page"], True)
+                self.assertRegex(screenshot_path.name, r"^Failure_unsafe_name_[a-f0-9]{16}\.png$")
+                self.assertEqual(screenshot_path.with_suffix(".html").read_text(), page.content.return_value)
                 page.content.assert_called_once()
                 self.assertEqual(
                     attach.call_args_list,
@@ -95,6 +98,50 @@ class FeatureReportingTest(TestCase):
                         call(page.content.return_value, name="Page HTML", attachment_type=allure.attachment_type.HTML),
                     ],
                 )
+
+    def test_failure_artifacts_do_not_overwrite_other_scenarios(self):
+        scenarios = [
+            ("Failure/A", "features/report.feature", 10),
+            ("Failure?A", "features/report.feature", 10),
+            ("Failure/A", "features/other.feature", 10),
+            ("Failure/A", "features/report.feature", 20),
+        ]
+        page = Mock(spec=Page)
+
+        def save_screenshot(path, full_page):
+            screenshot = page.screenshot.return_value
+            Path(path).write_bytes(screenshot)
+            return screenshot
+
+        page.screenshot.side_effect = save_screenshot
+        artifact_paths = []
+        with patch.object(environment.allure, "attach"):
+            for index, (name, filename, line) in enumerate(scenarios):
+                page.screenshot.return_value = f"Screenshot {index}".encode()
+                page.content.return_value = f"<html>Failure {index}</html>"
+                scenario = SimpleNamespace(status=Status.failed, name=name, filename=filename, line=line)
+
+                environment.after_scenario(SimpleNamespace(page=page), scenario)
+
+                artifact_paths.append(Path(page.screenshot.call_args.kwargs["path"]))
+
+        self.assertEqual(len(set(artifact_paths)), len(scenarios))
+        for index, screenshot_path in enumerate(artifact_paths):
+            self.assertEqual(screenshot_path.read_bytes(), f"Screenshot {index}".encode())
+            self.assertEqual(screenshot_path.with_suffix(".html").read_text(), f"<html>Failure {index}</html>")
+
+    def test_failure_artifact_names_are_stable(self):
+        page = Mock(spec=Page)
+        page.screenshot.return_value = b"screenshot"
+        page.content.return_value = "<html>Failure evidence</html>"
+        scenario = SimpleNamespace(status=Status.failed, name="Failure/A", filename="features/report.feature", line=10)
+
+        with patch.object(environment.allure, "attach"):
+            environment.after_scenario(SimpleNamespace(page=page), scenario)
+            environment.after_scenario(SimpleNamespace(page=page), scenario)
+
+        first, second = page.screenshot.call_args_list
+        self.assertEqual(first.kwargs["path"], second.kwargs["path"])
 
     def test_successful_or_skipped_scenario_does_not_capture_artifacts(self):
         for status in (Status.passed, Status.skipped):
