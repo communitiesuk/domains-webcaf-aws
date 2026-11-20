@@ -3,6 +3,18 @@ import logging
 from webcaf.middleware import log_context
 
 
+class ExcludeEmailQueriesFilter(logging.Filter):
+    """Do not log SQL/parameters that could contain email addresses.
+
+    With DEBUG enabled Django logs complete inserted rows, including contact
+    emails and history records. Withhold the whole query rather than attempt to
+    parse every email syntax (including quoted addresses) out of SQL literals.
+    """
+
+    def filter(self, record):
+        return "@" not in record.getMessage()
+
+
 class RequestLogFilter(logging.Filter):
     """
     Custom logging filter for enriching log records with contextual information.
