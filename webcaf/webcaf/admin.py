@@ -3,7 +3,7 @@ import json
 import logging
 import zoneinfo
 from datetime import datetime
-from io import BytesIO, StringIO, TextIOWrapper
+from io import BytesIO, StringIO
 from typing import Any, MutableMapping, Optional
 from zoneinfo import ZoneInfo
 
@@ -23,6 +23,7 @@ from django.urls import path, reverse
 from django.utils import timezone
 from simple_history.admin import SimpleHistoryAdmin
 
+from webcaf.webcaf.forms.organisation import OrganisationAdminForm
 from webcaf.webcaf.models import (
     AllowedEmailDomain,
     Assessment,
@@ -41,6 +42,14 @@ from webcaf.webcaf.utils.excel_importer import (
     assessment_json_to_review_data,
     excel_framework_id,
     excel_to_assessment_json_with_raw,
+)
+from webcaf.webcaf.utils.organisation_importer import (
+    CSV_HEADERS,
+    OPTIONAL_HEADERS,
+    REQUIRED_HEADERS,
+    ImportIssue,
+    OrganisationImportError,
+    import_organisations,
 )
 from webcaf.webcaf.views.system import SystemForm
 
@@ -366,6 +375,7 @@ class OrganisationEmailDomainAdmin(SimpleHistoryAdmin):
 @admin.register(Organisation)
 class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: ignore
     model = Organisation
+    form = OrganisationAdminForm
     search_fields = ["name", "systems__name", "reference", "gss_code"]
     list_display = ["name", "reference", "gss_code"]
     readonly_fields = ["reference"]
@@ -382,13 +392,7 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
         return kwargs
 
     logger = logging.getLogger("OrganisationAdmin")
-    csv_headers = [
-        "Organisation",
-        "Lead Government Department",
-        "Reference",
-        "Type",
-    ]
-    legacy_email_headers = ["Email1", "Email2", "Email3", "Email4", "Email5", "Email6"]
+    csv_headers = CSV_HEADERS
 
     # Add custom URL for the import view
     def get_urls(self):
@@ -404,14 +408,8 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
         return custom_urls + urls
 
     def import_csv_template(self, request):
-        """
-        Creates and serves a CSV file as a downloadable response. The CSV file acts
-        as a template for importing organisation data, containing specific headers
-        which must be adhered to for proper processing during an import operation.
-
-        :param request: The HTTP request object.
-        :return: An HTTP response containing the generated CSV file.
-        """
+        """Download the same schema that the upload view validates."""
+        self._check_import_permission(request)
         csv_buffer = StringIO()
         writer = csv.DictWriter(
             csv_buffer,
@@ -419,150 +417,50 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
             quoting=csv.QUOTE_ALL,
         )
         writer.writeheader()
-        csv_buffer.seek(0)
-        csv_bytes = BytesIO(csv_buffer.getvalue().encode("utf-8"))
-        response = HttpResponse(content_type="text/csv")
-        response.write(csv_bytes.getvalue())
+        response = HttpResponse(csv_buffer.getvalue(), content_type="text/csv; charset=utf-8")
         response["Content-Disposition"] = 'attachment; filename="organisation_import_template.csv"'
         return response
 
     def import_csv(self, request):
-        """
-        Handles the import of a CSV file through a POST request, processes its data to create organisations,
-        and associates organisations with a designated parent organisation.
-
-        User creation, organisation membership, and role assignment are handled separately through council
-        onboarding and are not part of this import.
-
-        :param request: The HTTP request object that includes the CSV file to be processed.
-        :type request: HttpRequest
-        :return: A redirect to the organisation admin page upon successful file processing or renders a
-            form to upload the CSV file if the request method is not POST.
-        :rtype: HttpResponse
-        """
+        """Import councils only; report every error without partial writes."""
+        self._check_import_permission(request)
+        issues, result = [], None
         if request.method == "POST":
-            csv_file = request.FILES["csv_file"]
-            decoded = TextIOWrapper(csv_file.file, encoding="utf-8")
-            reader = csv.DictReader(decoded)
-
-            rows, validation_error = self._read_legacy_import_rows(reader)
-            if validation_error:
-                self.message_user(request, validation_error, messages.ERROR)
-                return redirect("..")
-
-            count = 0
-            # Import the organisations
-            for row in rows:
-                count += 1
-                organisation = self.find_organisation(row)
-
-                # If still not found, then create a new organisation
-                if not organisation:
-                    self.logger.info(
-                        f"Creating {row['Organisation']} as not found in the database"
-                        f"reference: {row['Reference']}"
-                        f"name: {row['Organisation']}."
+            upload = request.FILES.get("csv_file")
+            if upload is None:
+                issues = [ImportIssue(None, "File", "Choose a CSV file to upload.")]
+            else:
+                try:
+                    result = import_organisations(upload, user=request.user, form_class=self.get_form(request))
+                except OrganisationImportError as error:
+                    issues = error.issues
+                    self.logger.warning("Council CSV import rejected; no changes saved")
+                else:
+                    summary = (
+                        f"Organisations: {result.created} created, {result.updated} updated, "
+                        f"{result.unchanged} unchanged."
                     )
-                    self.message_user(
-                        request, f"Creating {row['Organisation']} as not found in the database", messages.WARNING
-                    )
-                    organisation_type = row.get("Type", "").strip()
-                    if org_type_id := Organisation.get_type_id(organisation_type):
-                        organisation = Organisation.objects.create(
-                            name=row["Organisation"], organisation_type=org_type_id
-                        )
-                    else:
-                        organisation = Organisation.objects.create(name=row["Organisation"])
-
-            # Now set the parent organisation
-            for row in rows:
-                parent_organisation = Organisation.objects.filter(Q(name=row["Lead Government Department"])).first()
-                if parent_organisation:
-                    organisation = self.find_organisation(row)
-                    if organisation != parent_organisation:
-                        # No parent if this is the parent organisation
-                        organisation.parent_organisation = parent_organisation
-                        organisation.save()
-                    else:
-                        organisation.parent_organisation = None
-                        organisation.save()
-
-            self.message_user(request, f"✅ Imported {count} Organisations.", messages.SUCCESS)
-            return redirect("..")
+                    self.message_user(request, summary, messages.SUCCESS)
+                    self.logger.info("Council CSV import completed: %s", summary)
 
         opts = self.model._meta
         context = {
             **self.admin_site.each_context(request),  # adds admin context
             "opts": opts,
             "app_label": opts.app_label,
-            "title": "Import Organisations from CSV",
+            "title": "Import councils from CSV",
+            "csv_headers": self.csv_headers,
+            "required_headers": REQUIRED_HEADERS,
+            "optional_headers": OPTIONAL_HEADERS,
+            "import_issues": issues,
+            "import_result": result,
         }
-        # Render upload form
         return render(request, "admin/webcaf/organisation/import_csv.html", context)
 
-    def _read_legacy_import_rows(self, reader):
-        headers = reader.fieldnames or []
-        unsupported_headers = [header for header in self.legacy_email_headers if header in headers]
-        if unsupported_headers:
-            return [], (
-                f"Unsupported legacy email columns: {', '.join(unsupported_headers)}. "
-                f"Use the current organisation import headers: {', '.join(self.csv_headers)}."
-            )
-
-        duplicate_headers = list(dict.fromkeys(header for header in headers if headers.count(header) > 1))
-        if duplicate_headers:
-            return [], (
-                f"The CSV contains duplicate headers: {', '.join(duplicate_headers)}. "
-                f"Use the current organisation import headers: {', '.join(self.csv_headers)}."
-            )
-
-        if set(headers) != set(self.csv_headers):
-            return [], (
-                f"The CSV headers must match the current organisation import headers: {', '.join(self.csv_headers)}."
-            )
-
-        rows = list(reader)
-        unsupported_rows = []
-        for row_number, row in enumerate(rows, start=2):
-            organisation_type = row.get("Type", "").strip()
-            organisation_type_id = Organisation.get_type_id(organisation_type)
-            existing_organisation = self.find_organisation(row)
-            existing_type_id = existing_organisation.organisation_type if existing_organisation else None
-            admin_managed_types = Organisation.GSS_CODE_REQUIRED_ORGANISATION_TYPES
-            if organisation_type_id in admin_managed_types or existing_type_id in admin_managed_types:
-                type_label = organisation_type or existing_organisation.get_organisation_type_display()
-                unsupported_rows.append(f"row {row_number} ({type_label})")
-
-        if unsupported_rows:
-            return [], (
-                "Council and Combined authority rows are not supported by this legacy import because they require a "
-                "GSS code. Use the dedicated council import when it is available. Affected rows: "
-                f"{', '.join(unsupported_rows)}."
-            )
-
-        return rows, None
-
-    def find_organisation(self, row: dict[str | Any, str | Any]) -> Organisation | None:
-        """
-        Finds and returns an Organisation instance based on the provided row data.
-
-        This method attempts to retrieve an Organisation object by first using the
-        `Reference` field. If the organisation cannot be found using the reference,
-        it falls back to searching by the organisation's name.
-
-        :param row: A dictionary containing data for finding an organisation. Keys
-            include `Reference` and `Organisation`.
-        :return: An Organisation object if found, otherwise None.
-        """
-        organisation: Organisation | None = None
-        # first try to get the organisation by reference
-        if row["Reference"]:
-            organisation = Organisation.objects.filter(Q(reference=row["Reference"])).first()
-
-        # If fails try to get the organisation by name
-        if not organisation and row["Organisation"]:
-            organisation = Organisation.objects.filter(Q(name=row["Organisation"])).first()
-        return organisation
+    def _check_import_permission(self, request):
+        user = request.user
+        if not user.is_active or not user.is_staff or not self.has_add_permission(request):
+            raise PermissionDenied
 
 
 class AdminSystemForm(SystemForm):

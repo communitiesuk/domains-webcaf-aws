@@ -1,23 +1,79 @@
 {% extends "admin/base_site.html" %}
 
 {% block content %}
-    {{ block.super }} {# this keeps the normal change list table #}
+    {{ block.super }}
+    {% if import_issues %}
+        <div class="errornote" role="alert">
+            The CSV was not imported. Nothing was saved. Correct all problems below and upload again.
+        </div>
+        <ul class="errorlist">
+            {% for issue in import_issues %}
+                <li>
+                    {% if issue.row_number %}Row {{ issue.row_number }} — {% endif %}{{ issue.field }}: {{ issue.message }}
+                    {% if issue.candidates %}
+                        <ul>
+                            {% for candidate in issue.candidates %}
+                                <li>
+                                    <a href="{% url 'admin:webcaf_organisation_change' candidate.pk %}">{{ candidate.name }}</a>
+                                    (ID {{ candidate.pk }}): {{ candidate.reason }}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+    {% if import_result %}
+        <div class="module">
+            <h2>Import results</h2>
+            <p>{{ import_result.created }} created, {{ import_result.updated }} updated, {{ import_result.unchanged }} unchanged.</p>
+            <table>
+                <caption>Organisations processed in this upload</caption>
+                <thead><tr><th scope="col">Organisation</th><th scope="col">GSS code</th><th scope="col">Result</th><th scope="col">Changes</th></tr></thead>
+                <tbody>
+                    {% for change in import_result.changes %}
+                        <tr>
+                            <td><a href="{% url 'admin:webcaf_organisation_change' change.pk %}">{{ change.name }}</a></td>
+                            <td>{{ change.gss_code }}</td>
+                            <td>{{ change.action }}</td>
+                            <td>{% if change.details %}<ul>{% for detail in change.details %}<li>{{ detail }}</li>{% endfor %}</ul>{% else %}No changes{% endif %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if import_result.missing_organisations %}
+                <h3>Existing organisations not in this file</h3>
+                <p>These organisations were not changed or deleted. Review whether they should be included.</p>
+                <ul>
+                    {% for organisation in import_result.missing_organisations %}
+                        <li>
+                            <a href="{% url 'admin:webcaf_organisation_change' organisation.pk %}">{{ organisation.name }}</a>
+                            — {{ organisation.gss_code|default:"No GSS code" }} (ID {{ organisation.pk }})
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+    {% endif %}
     <div class="module">
-        <h2>Import CSV File</h2>
-        <p>Upload a CSV file to import organisations.</p>
-        <p>Make sure you have the header row in the following format:</p>
-        <h3>
-            Organisation, Lead Government Department, Reference, Type
-            <br/>
-            Download template <a href="{% url 'admin:import-org-csv-template' %}">here</a>
-        </h3>
+        <h2>Import councils from CSV</h2>
+        <p>Upload a UTF-8 CSV file no larger than 5 MiB. The entire file is checked before any organisations are saved.</p>
+        <p>Organisation type labels and classifications still require confirmation under CS-680.</p>
+        <p>CSV schema: <code>{{ csv_headers|join:", " }}</code></p>
+        <p>Required columns and values: {{ required_headers|join:", " }}.</p>
+        <p>Optional columns: {{ optional_headers|join:", " }}. Blank optional values preserve existing data.</p>
+        <p>Types: Council or Combined authority. Separate multiple domains with semicolons.</p>
+        <p>New domains must first be approved by an authorised administrator in Allowed email domains. Importing domains affects sign-in eligibility.</p>
+        <p>Domains are added to existing links, never removed. Retired links require review in Admin.</p>
+        <p>Legacy Reference, Lead Government Department and Email1 to Email6 columns are not supported.</p>
+        <p><a href="{% url 'admin:import-org-csv-template' %}">Download CSV template</a></p>
         <p>User accounts, organisation memberships and roles are managed separately through council onboarding.</p>
-        <br/>
-        <br/>
         <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
-            <input type="file" name="csv_file" accept=".csv" required>
-            <button type="submit" class="button">Upload</button>
+            <label for="csv_file">Council CSV file</label>
+            <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
+            <button type="submit" class="button">Validate and import</button>
         </form>
     </div>
 {% endblock %}
