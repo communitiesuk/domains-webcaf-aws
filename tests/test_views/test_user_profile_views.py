@@ -390,7 +390,7 @@ class TestUserProfileView(BaseViewTest):
     def test_create_profile_with_existing_email_associates_existing_user(self):
         """
         When creating a profile with an email that matches an existing user,
-        that existing user should be associated with the profile and their name should be updated.
+        that existing user should be associated with the profile without changing their name.
         """
         # Create an existing user without a profile in this organisation
         existing_email = "existing@bigorganisation.gov.uk"
@@ -419,14 +419,54 @@ class TestUserProfileView(BaseViewTest):
         # Should not create a new user
         self.assertEqual(User.objects.filter(email=existing_email).count(), 1)
 
-        # User's name should be updated
+        # Adding a profile must not change the shared account's name.
         existing_user.refresh_from_db()
-        self.assertEqual(existing_user.first_name, new_first_name)
-        self.assertEqual(existing_user.last_name, new_last_name)
+        self.assertEqual(existing_user.first_name, "Old")
+        self.assertEqual(existing_user.last_name, "Name")
 
         # Profile should be created with the existing user
         profile = UserProfile.objects.get(user=existing_user, organisation=self.test_organisation)
         self.assertEqual(profile.role, "organisation_user")
+
+    def test_add_existing_user_to_second_organisation_preserves_name_with_email_case_variant(self):
+        existing_email = "Existing.Person@BigOrganisation.gov.uk"
+        existing_user = User.objects.create(
+            username="legacy-existing-user",
+            email=existing_email,
+            first_name="Original",
+            last_name="Person",
+        )
+        original_organisation = self.org_map["Medium organisation"]["organisation"]
+        original_profile = UserProfile.objects.create(
+            user=existing_user, organisation=original_organisation, role="organisation_lead"
+        )
+        user_count = User.objects.count()
+
+        response = self.client.post(
+            reverse("create-new-profile"),
+            data={
+                "email": existing_email.lower(),
+                "role": "organisation_user",
+                "first_name": "Different",
+                "last_name": "Name",
+                "action": "confirm",
+            },
+        )
+
+        self.assertRedirects(response, "/view-profiles/", fetch_redirect_response=False)
+        self.assertEqual(User.objects.count(), user_count)
+        existing_user.refresh_from_db()
+        self.assertEqual(existing_user.first_name, "Original")
+        self.assertEqual(existing_user.last_name, "Person")
+        self.assertEqual(existing_user.email, existing_email)
+        self.assertEqual(existing_user.username, "legacy-existing-user")
+        original_profile.refresh_from_db()
+        self.assertEqual(original_profile.user_id, existing_user.pk)
+        self.assertEqual(original_profile.organisation_id, original_organisation.pk)
+        self.assertEqual(original_profile.role, "organisation_lead")
+        new_profile = UserProfile.objects.get(user=existing_user, organisation=self.test_organisation)
+        self.assertEqual(new_profile.role, "organisation_user")
+        self.assertEqual(existing_user.profiles.count(), 2)
 
     def test_update_profile_with_new_email_creates_new_user_and_orphans_old(self):
         """

@@ -77,9 +77,11 @@ class UserProfileForm(forms.ModelForm):
         Details
         -------
         This method saves the current instance of a Role model to the UserProfile
-        and updates the associated User model with the submitted name. Only new accounts
-        receive a lowercased email and username; existing email addresses and usernames
-        are preserved. As before, `commit` controls saving the profile, not the related user.
+        and updates the associated User model with the submitted name only for a new
+        account or an explicit profile edit. Adding a profile for an existing account
+        preserves its names. Only new accounts receive a lowercased email and username;
+        existing email addresses and usernames are preserved. As before, `commit`
+        controls saving the profile, not the related user.
 
         :param commit: Optional boolean indicating whether to save the changes to the database. Default is True.
         :return: UserProfile object representing the saved user profile.
@@ -99,11 +101,12 @@ class UserProfileForm(forms.ModelForm):
         except IntegrityError as exc:
             raise ValidationError({"email": self.username_conflict_message}) from exc
 
-        # Save any updated information on the user
-        user.first_name = self.cleaned_data["first_name"]
-        user.last_name = self.cleaned_data["last_name"]
+        # Names belong to the shared account, not its organisation membership.
+        if created or self.instance.pk is not None:
+            user.first_name = self.cleaned_data["first_name"]
+            user.last_name = self.cleaned_data["last_name"]
+            user.save(update_fields=["first_name", "last_name"])
         self.instance.user = user
-        self.instance.user.save()
 
         log_message = (
             f"Created new user {user_email} {user.id} for profile {self.instance.id if self.instance.id else 'new profile'}"

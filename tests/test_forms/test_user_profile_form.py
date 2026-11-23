@@ -34,6 +34,8 @@ class UserProfileFormTest(TestCase):
 
         self.assertEqual(profile.user.email, "new.person@example.gov.uk")
         self.assertEqual(profile.user.username, "new.person@example.gov.uk")
+        self.assertEqual(profile.user.first_name, "New")
+        self.assertEqual(profile.user.last_name, "Name")
 
     def test_invalid_emails_are_rejected_without_creating_records(self):
         for email in ("not-an-email", "new-email@@example.gov.uk", "", "person@"):
@@ -46,7 +48,12 @@ class UserProfileFormTest(TestCase):
 
     def test_case_insensitive_match_preserves_existing_user_and_memberships(self):
         # Bypass create_user's domain normalisation to model a legacy stored address.
-        user = User.objects.create(username="Legacy.Person@Example.gov.uk", email="Person@Example.gov.uk")
+        user = User.objects.create(
+            username="Legacy.Person@Example.gov.uk",
+            email="Person@Example.gov.uk",
+            first_name="Original",
+            last_name="Person",
+        )
         organisation = Organisation.objects.create(name="Existing organisation")
         old_profile = UserProfile.objects.create(user=user, organisation=organisation, role="organisation_lead")
         form = profile_form("PERSON@EXAMPLE.GOV.UK")
@@ -59,10 +66,24 @@ class UserProfileFormTest(TestCase):
         user.refresh_from_db()
         self.assertEqual(user.username, "Legacy.Person@Example.gov.uk")
         self.assertEqual(user.email, "Person@Example.gov.uk")
+        self.assertEqual(user.first_name, "Original")
+        self.assertEqual(user.last_name, "Person")
         old_profile.refresh_from_db()
         self.assertEqual(old_profile.user_id, user.pk)
         self.assertEqual(old_profile.organisation_id, organisation.pk)
         self.assertEqual(old_profile.role, "organisation_lead")
+
+    def test_adding_profile_for_existing_user_preserves_blank_names(self):
+        user = User.objects.create_user(username="legacy-person", email="Person@example.gov.uk")
+        form = profile_form("person@example.gov.uk")
+        self.assertTrue(form.is_valid(), form.errors)
+
+        profile = form.save()
+
+        self.assertEqual(profile.user_id, user.pk)
+        user.refresh_from_db()
+        self.assertEqual(user.first_name, "")
+        self.assertEqual(user.last_name, "")
 
     def test_case_only_edit_keeps_the_same_user_and_profile(self):
         user = User.objects.create(username="Person@Example.gov.uk", email="Person@Example.gov.uk")
@@ -79,11 +100,15 @@ class UserProfileFormTest(TestCase):
         user.refresh_from_db()
         self.assertEqual(user.username, "Person@Example.gov.uk")
         self.assertEqual(user.email, "Person@Example.gov.uk")
+        self.assertEqual(user.first_name, "New")
+        self.assertEqual(user.last_name, "Name")
 
     def test_match_created_after_validation_keeps_its_existing_email_and_username(self):
         form = profile_form("PERSON@example.gov.uk")
         self.assertTrue(form.is_valid(), form.errors)
-        user = User.objects.create(username="legacy-person", email="Person@Example.gov.uk")
+        user = User.objects.create(
+            username="legacy-person", email="Person@Example.gov.uk", first_name="Original", last_name="Person"
+        )
 
         profile = form.save()
 
@@ -92,6 +117,8 @@ class UserProfileFormTest(TestCase):
         user.refresh_from_db()
         self.assertEqual(user.email, "Person@Example.gov.uk")
         self.assertEqual(user.username, "legacy-person")
+        self.assertEqual(user.first_name, "Original")
+        self.assertEqual(user.last_name, "Person")
 
     def test_existing_duplicates_are_not_merged_or_modified(self):
         first = User.objects.create_user(username="first", email="Person@example.gov.uk", first_name="First")
