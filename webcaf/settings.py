@@ -227,6 +227,9 @@ LOGGING = {
         "request_context": {
             "()": "webcaf.logging_filters.RequestLogFilter",
         },
+        "exclude_email_queries": {
+            "()": "webcaf.logging_filters.ExcludeEmailQueriesFilter",
+        },
     },
     "formatters": {
         "verbose": {
@@ -254,6 +257,7 @@ LOGGING = {
         # Get SQL query logs in development
         "django.db.backends": {
             "handlers": ["console"],
+            "filters": ["exclude_email_queries"],
             "level": ("WARN" if not DEBUG else "DEBUG"),
             "propagate": False,
         },
