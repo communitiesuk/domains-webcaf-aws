@@ -617,7 +617,7 @@ class TestExportSystemsIntegration(TestCase):
     No mocking beyond the S3 client — the real Django ORM is exercised end-to-end.
 
     Covers:
-      - S3 key format for organisations: organisations/{reference}.json
+      - S3 key format for organisations: organisations/{id}.json
       - S3 key format for systems: systems/{reference}.json
       - Organisation body: name, type display, id, and no parent organisation fields
       - System body: name, type display, multi-select fields correctly split into lists,
@@ -659,8 +659,8 @@ class TestExportSystemsIntegration(TestCase):
         calls_by_key = {call.kwargs["Key"]: json.loads(call.kwargs["Body"]) for call in s3.put_object.call_args_list}
 
         # --- S3 key format ---
-        self.assertIn(f"organisations/{self.parent_org.reference}.json", calls_by_key)
-        self.assertIn(f"organisations/{self.child_org.reference}.json", calls_by_key)
+        self.assertIn(f"organisations/{self.parent_org.id}.json", calls_by_key)
+        self.assertIn(f"organisations/{self.child_org.id}.json", calls_by_key)
         self.assertIn(f"systems/{self.system.reference}.json", calls_by_key)
 
         # --- Correct bucket on every call ---
@@ -668,7 +668,7 @@ class TestExportSystemsIntegration(TestCase):
             self.assertEqual("analytics-bucket", call.kwargs["Bucket"])
 
         # --- Organisations: all fields correct, no parent organisation fields ---
-        parent_body = calls_by_key[f"organisations/{self.parent_org.reference}.json"]
+        parent_body = calls_by_key[f"organisations/{self.parent_org.id}.json"]
         self.assertEqual(
             {
                 "app_version": "webcaf-2",
@@ -680,7 +680,7 @@ class TestExportSystemsIntegration(TestCase):
             parent_body,
         )
 
-        child_body = calls_by_key[f"organisations/{self.child_org.reference}.json"]
+        child_body = calls_by_key[f"organisations/{self.child_org.id}.json"]
         self.assertEqual(
             {
                 "app_version": "webcaf-2",

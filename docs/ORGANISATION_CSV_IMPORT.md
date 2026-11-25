@@ -21,7 +21,7 @@ Organisation,Lead Government Department,Reference,Type
 
 - `Organisation` (required): name of the organisation.
 - `Lead Government Department` (optional): accepted but ignored. Organisations no longer have a parent organisation.
-- `Reference` (optional): existing WebCAF organisation reference used for matching.
+- `Reference` (optional): the id of an existing WebCAF organisation, used for matching.
 - `Type` (optional): organisation type label.
 
 Example:
@@ -32,8 +32,8 @@ Cabinet Office,,,Ministerial department
 Government Digital Service,Cabinet Office,,Executive agency
 ```
 
-`Reference` is used only to match an existing organisation. WebCAF generates a reference when it creates a new
-organisation.
+`Reference` is used only to match an existing organisation by its id. A value that is not a number is ignored, and the
+organisation is matched by name instead.
 
 ## Legacy email columns
 

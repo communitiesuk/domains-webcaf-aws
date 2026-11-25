@@ -84,7 +84,7 @@ class Command(BaseCommand):
 
     Organisations and Systems are uploaded to:
     ``systems/<reference>.json``.
-    ``organisations/<reference>.json``.
+    ``organisations/<id>.json``.
 
     Usage::
 
@@ -259,10 +259,10 @@ class Command(BaseCommand):
         :return: None
         """
         for organisation in Organisation.objects.all():
-            self.stdout.write(f"File uploaded to s3://{bucket_name}/organisations/{organisation.reference}.json")
+            self.stdout.write(f"File uploaded to s3://{bucket_name}/organisations/{organisation.id}.json")
             s3.put_object(
                 Bucket=bucket_name,
-                Key=f"organisations/{organisation.reference}.json",
+                Key=f"organisations/{organisation.id}.json",
                 Body=json.dumps(
                     transform_organisation(
                         {

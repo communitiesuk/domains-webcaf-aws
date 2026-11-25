@@ -121,16 +121,6 @@ class OrganisationTest(TestCase):
         self.assertIsNone(first.gss_code)
         self.assertIsNone(second.gss_code)
 
-    def test_generated_reference_is_unchanged(self):
-        organisation = Organisation.objects.create(name="Test Organisation", gss_code="E06000001")
-        generated_reference = organisation.reference
-
-        organisation.name = "Renamed Organisation"
-        organisation.save()
-
-        self.assertIsNotNone(generated_reference)
-        self.assertEqual(organisation.reference, generated_reference)
-
     def test_records_gss_code_in_history(self):
         organisation = Organisation.objects.create(name="Test Organisation", gss_code="E06000001")
 
@@ -170,8 +160,8 @@ class OrganisationCouncilSubtypeTest(TestCase):
 
 
 class OrganisationRemovedFieldsTest(TestCase):
-    def test_contact_and_parent_fields_are_removed_from_the_model_and_its_history(self):
-        removed_fields = ["contact_name", "contact_email", "contact_role", "parent_organisation"]
+    def test_contact_parent_and_reference_fields_are_removed_from_the_model_and_its_history(self):
+        removed_fields = ["contact_name", "contact_email", "contact_role", "parent_organisation", "reference"]
 
         for model in [Organisation, Organisation.history.model]:
             field_names = {field.name for field in model._meta.get_fields()}

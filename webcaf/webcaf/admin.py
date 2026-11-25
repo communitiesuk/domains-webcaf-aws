@@ -366,10 +366,9 @@ class OrganisationEmailDomainAdmin(SimpleHistoryAdmin):
 @admin.register(Organisation)
 class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: ignore
     model = Organisation
-    search_fields = ["name", "systems__name", "reference", "gss_code"]
-    list_display = ["name", "reference", "gss_code", "council_subtype"]
-    readonly_fields = ["reference", "council_subtype"]
-    optional_fields = ["reference"]
+    search_fields = ["name", "systems__name", "gss_code"]
+    list_display = ["name", "id", "gss_code", "council_subtype"]
+    readonly_fields = ["council_subtype"]
     inlines = [OrganisationEmailDomainInline]
 
     def get_formset_kwargs(self, request, obj, inline, prefix):
@@ -536,17 +535,18 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
         Finds and returns an Organisation instance based on the provided row data.
 
         This method attempts to retrieve an Organisation object by first using the
-        `Reference` field. If the organisation cannot be found using the reference,
-        it falls back to searching by the organisation's name.
+        `Reference` field, which holds the organisation id. If the organisation cannot
+        be found that way, it falls back to searching by the organisation's name.
 
         :param row: A dictionary containing data for finding an organisation. Keys
             include `Reference` and `Organisation`.
         :return: An Organisation object if found, otherwise None.
         """
         organisation: Organisation | None = None
-        # first try to get the organisation by reference
-        if row["Reference"]:
-            organisation = Organisation.objects.filter(Q(reference=row["Reference"])).first()
+        # first try to get the organisation by id
+        reference = (row.get("Reference") or "").strip()
+        if reference.isdigit():
+            organisation = Organisation.objects.filter(pk=int(reference)).first()
 
         # If fails try to get the organisation by name
         if not organisation and row["Organisation"]:

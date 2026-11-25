@@ -60,7 +60,7 @@ class ReferenceGeneratorMixin:
         super().save(*args, **kwargs)
 
 
-class Organisation(ReferenceGeneratorMixin, models.Model):
+class Organisation(models.Model):
     GSS_CODE_REQUIRED_ORGANISATION_TYPES = frozenset({"council"})
     GSS_CODE_VALIDATOR = RegexValidator(
         regex=r"\A[A-Z][0-9]{8}\Z",
@@ -84,7 +84,6 @@ class Organisation(ReferenceGeneratorMixin, models.Model):
         ("independent-assurer", "Independent assurer"),
     ]
     name = models.CharField(max_length=255, unique=True)
-    reference = models.CharField(max_length=20, null=True, unique=True)
     gss_code = models.CharField(
         "GSS code",
         max_length=9,

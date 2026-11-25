@@ -26,3 +26,23 @@ A council's subtype is not stored. It is worked out from the first three charact
 
 A council whose GSS code has any other prefix has no subtype. The subtype is read-only: it is shown in Django Admin
 (the organisation list and form) and on My organisation, and changes only when the GSS code changes.
+
+## Organisation identifier
+
+Organisations have no generated reference. The organisation id (the database primary key) identifies an organisation
+wherever an identifier is needed: in the Django Admin list, in the `Reference` column of the organisation CSV import, and
+in the data export file name.
+
+## Data export changes (CS-680)
+
+`python manage.py export_data` writes one file per organisation. Compared with the format before CS-680:
+
+| What | Before | Now |
+|---|---|---|
+| File name | `organisations/<reference>.json`, using the generated 5-character reference | `organisations/<id>.json`, using the organisation id |
+| `organisation_type` | One of the inherited central-government type labels, Council, Combined authority or Other | `Council`, `MHCLG` or `Independent assurer`, or `null` if no type is set |
+| `parent_organisation_id`, `parent_organisation_name` | Present | Removed |
+
+The other fields (`organisation_name`, `organisation_id`, `app_version`, `legacy_organisation_id`) are unchanged. The
+contact name, email and role were never exported. The analysis data built from the export
+(`webcaf/webcaf/utils/data_analysis.py`) no longer has the parent organisation fields.
