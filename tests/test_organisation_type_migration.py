@@ -73,13 +73,7 @@ class OrganisationTypeMigrationTest(TestCase):
         self.assertEqual(organisation.history.earliest().organisation_type, "ministerial-department")
 
     def test_keeps_other_fields(self):
-        organisation = self.create_organisation(
-            "Cabinet Office",
-            "ministerial-department",
-            contact_name="Test Contact",
-            contact_role="Test Role",
-            contact_email="contact@example.gov.uk",
-        )
+        organisation = self.create_organisation("Cabinet Office", "ministerial-department", gss_code="E06000001")
         before = Organisation.objects.values().get(pk=organisation.pk)
 
         migration.replace_organisation_types(apps, None)

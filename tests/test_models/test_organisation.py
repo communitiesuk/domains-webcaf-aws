@@ -167,3 +167,14 @@ class OrganisationCouncilSubtypeTest(TestCase):
                 )
 
                 self.assertIsNone(organisation.council_subtype)
+
+
+class OrganisationRemovedFieldsTest(TestCase):
+    def test_contact_and_parent_fields_are_removed_from_the_model_and_its_history(self):
+        removed_fields = ["contact_name", "contact_email", "contact_role", "parent_organisation"]
+
+        for model in [Organisation, Organisation.history.model]:
+            field_names = {field.name for field in model._meta.get_fields()}
+            for field_name in removed_fields:
+                with self.subTest(model=model.__name__, field_name=field_name):
+                    self.assertNotIn(field_name, field_names)

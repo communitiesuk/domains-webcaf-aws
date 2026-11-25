@@ -9,40 +9,6 @@ from django.views.generic import FormView, TemplateView
 from webcaf.webcaf.models import Organisation, UserProfile
 
 
-class OrganisationContactForm(ModelForm):
-    """
-    Update the contact details of an organisation
-    """
-
-    class Meta:
-        model = Organisation
-        fields = ["contact_name", "contact_role", "contact_email"]
-
-
-class OrganisationTypeForm(ModelForm):
-    """
-    Update organisation type of organisation
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        current_type = self.instance.organisation_type
-        admin_managed_types = Organisation.GSS_CODE_REQUIRED_ORGANISATION_TYPES
-
-        if current_type in admin_managed_types:
-            choices = [choice for choice in Organisation.ORGANISATION_TYPE_CHOICES if choice[0] == current_type]
-        else:
-            choices = [
-                choice for choice in Organisation.ORGANISATION_TYPE_CHOICES if choice[0] not in admin_managed_types
-            ]
-
-        self.fields["organisation_type"].choices = choices
-
-    class Meta:
-        model = Organisation
-        fields = ["organisation_type"]
-
-
 class OrganisationForm(ModelForm):
     """
     Update all the information of an organisation
@@ -94,53 +60,6 @@ class OrganisationView(LoginRequiredMixin, FormView):
     def form_valid(self, form):
         form.save()
         return super().form_valid(form)
-
-
-class OrganisationTypeView(OrganisationView):
-    """
-    A Django view class for handling the organisation type page.
-
-    This view is used to display and process forms related to the organisation
-    type. It inherits from OrganisationView and includes additional
-    functionality for handling success URLs.
-
-    :ivar template_name: Path to the template used for rendering the page.
-    :type template_name: str
-    :ivar form_class: The form class associated with the view.
-    :type form_class: type
-    """
-
-    template_name = "user-pages/organisation-type.html"
-    form_class = OrganisationTypeForm
-
-    def get_success_url(self):
-        return reverse("edit-my-organisation-contact", kwargs={"id": self.kwargs["id"]})
-
-
-class OrganisationContactView(OrganisationView):
-    """
-    Represents a view for handling the organisation contact form in a web
-    application.
-
-    This class provides functionality specific to the "organisation contact"
-    page, such as rendering the contact form using a template and determining
-    the URL to redirect to upon successful form submission. It extends the
-    base class `OrganisationView` to include additional methods and attributes
-    for contact-specific functionality.
-
-    :ivar template_name: Path to the HTML template used for rendering the
-        "organisation contact" page.
-    :type template_name: str
-    :ivar form_class: The Django form class used for handling contact
-        information in the organisation contact page.
-    :type form_class: type
-    """
-
-    template_name = "user-pages/organisation-contact.html"
-    form_class = OrganisationContactForm
-
-    def get_success_url(self):
-        return reverse("my-organisation", kwargs={"id": self.kwargs["id"]})
 
 
 class MyOrganisationView(OrganisationView):

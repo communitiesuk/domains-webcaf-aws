@@ -27,3 +27,18 @@ class MyOrganisationViewTest(BaseViewTest):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Council subtype")
+
+    def test_does_not_show_contact_details_or_change_links(self):
+        response = self.get_my_organisation()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Additional contact information")
+        self.assertNotContains(response, "Parent organisation")
+        self.assertNotContains(response, "Change")
+
+    def test_contact_and_type_edit_pages_are_removed(self):
+        client, profile = self._login_with_role("organisation_lead", self.test_organisation)
+
+        for path in [f"/my-organisation/{profile.id}/contact", f"/my-organisation/{profile.id}/type"]:
+            with self.subTest(path=path):
+                self.assertEqual(client.get(path).status_code, 404)

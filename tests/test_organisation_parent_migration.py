@@ -31,7 +31,10 @@ class RemoveParentOrganisationMigrationTest(TransactionTestCase):
         self.without_parent = Organisation.objects.create(name="Test Company", reference="ORG03")
 
     def tearDown(self):
-        self.migrate(AFTER)
+        # Return to the latest migration so later tests run on the current schema.
+        executor = MigrationExecutor(connection)
+        executor.loader.build_graph()
+        executor.migrate(executor.loader.graph.leaf_nodes())
 
     def test_removes_the_field_and_records_the_parent_in_history(self):
         new_apps = self.migrate(AFTER)

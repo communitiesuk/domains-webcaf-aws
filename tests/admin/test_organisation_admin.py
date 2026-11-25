@@ -141,6 +141,19 @@ class OrganisationAdminCouncilSubtypeTest(TestCase):
         self.assertEqual(self.admin.council_subtype(assurer), "-")
 
 
+class OrganisationAdminRemovedFieldsTest(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.admin = OrganisationAdmin(Organisation, AdminSite())
+
+    def test_form_has_no_contact_or_parent_fields(self):
+        form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
+
+        for field_name in ["contact_name", "contact_email", "contact_role", "parent_organisation"]:
+            with self.subTest(field_name=field_name):
+                self.assertNotIn(field_name, form_class.base_fields)
+
+
 class OrganisationAdminImportCSVTest(TestCase):
     """Tests for the OrganisationAdmin import_csv method."""
 
@@ -328,7 +341,6 @@ class OrganisationAdminImportCSVTest(TestCase):
         )
         self.assertEqual(list(Organisation.objects.values_list("id", flat=True)), organisation_ids_before)
         self.assertFalse(Organisation.objects.filter(name="Rejected Organisation").exists())
-        self.assertFalse(Organisation.objects.filter(contact_email__in=legacy_emails).exists())
         self.assertFalse(User.objects.filter(email__in=legacy_emails).exists())
         self.assertEqual(User.objects.values("username", "email", "is_active").get(pk=member.pk), user_before)
         self.assertEqual(

@@ -96,9 +96,6 @@ class Organisation(ReferenceGeneratorMixin, models.Model):
     organisation_type = models.CharField(
         max_length=255, null=True, blank=True, choices=ORGANISATION_TYPE_CHOICES, default=None
     )
-    contact_name = models.CharField(max_length=255, null=True, blank=True)
-    contact_email = models.EmailField(null=True, blank=True)
-    contact_role = models.CharField(max_length=255, null=True, blank=True)
 
     history = HistoricalRecords()
 
