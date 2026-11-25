@@ -12,7 +12,7 @@ _LOREM_IPSUM = "Lorem ipsum."
 
 class TestExportDataCommand(TestCase):
     def setUp(self):
-        self.org = Organisation.objects.create(name="Test Org", organisation_type="other")
+        self.org = Organisation.objects.create(name="Test Org", organisation_type="mhclg")
         self.system = System.objects.create(name="Test System", organisation=self.org)
         self.assessment = Assessment.objects.create(
             system=self.system,
@@ -97,7 +97,7 @@ class TestExportReviews(TestCase):
     """Comprehensive tests for Command.export_reviews."""
 
     def setUp(self):
-        self.org = Organisation.objects.create(name="Test Org", organisation_type="other")
+        self.org = Organisation.objects.create(name="Test Org", organisation_type="mhclg")
         self.system = System.objects.create(name="Test System", organisation=self.org)
         self.assessment = Assessment.objects.create(
             system=self.system,
@@ -308,7 +308,7 @@ class TestExportReviewsIntegration(TestCase):
     def setUpTestData(cls):
         cls.org = Organisation.objects.create(
             name="Ministry of Transport",
-            organisation_type="other",
+            organisation_type="mhclg",
         )
         cls.system = System.objects.create(
             name="National Traffic Management System",
@@ -631,7 +631,7 @@ class TestExportSystemsIntegration(TestCase):
     def setUpTestData(cls):
         cls.parent_org = Organisation.objects.create(
             name="Cabinet Office",
-            organisation_type="other",
+            organisation_type="mhclg",
         )
         cls.child_org = Organisation.objects.create(
             name="HMRC",
@@ -673,7 +673,7 @@ class TestExportSystemsIntegration(TestCase):
             {
                 "app_version": "webcaf-2",
                 "organisation_name": "Cabinet Office",
-                "organisation_type": "Other",
+                "organisation_type": "MHCLG",
                 "organisation_id": self.parent_org.id,
                 "legacy_organisation_id": None,
             },

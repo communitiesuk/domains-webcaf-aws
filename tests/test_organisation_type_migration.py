@@ -5,41 +5,51 @@ from django.test import TestCase
 
 from webcaf.webcaf.models import Organisation
 
-migration = importlib.import_module("webcaf.webcaf.migrations.0038_organisation_types_council_combined_authority_other")
+migration = importlib.import_module(
+    "webcaf.webcaf.migrations.0040_organisation_types_council_mhclg_independent_assurer"
+)
 
 
 class OrganisationTypeMigrationTest(TestCase):
     """
-    Exercises the data step of migration 0038 against the current models.
+    Exercises the data step of migration 0040 against the current models.
     Organisation.objects.create() validates only the GSS code, so rows with a
-    removed type can still be created here, as they exist in deployed databases.
+    removed type can still be created here, as they exist in databases that
+    were not reset.
     """
 
     def create_organisation(self, name, organisation_type, **kwargs):
         return Organisation.objects.create(name=name, organisation_type=organisation_type, **kwargs)
 
-    def test_moves_every_removed_type_to_other(self):
-        for index, removed_type in enumerate(migration.REMOVED_ORGANISATION_TYPES):
+    def test_moves_combined_authorities_to_council(self):
+        organisation = self.create_organisation("Test Combined Authority", "combined-authority", gss_code="E47000001")
+
+        migration.replace_organisation_types(apps, None)
+
+        organisation.refresh_from_db()
+        self.assertEqual(organisation.organisation_type, "council")
+        self.assertEqual(organisation.gss_code, "E47000001")
+
+    def test_clears_every_removed_type(self):
+        for index, removed_type in enumerate(sorted(migration.REMOVED_ORGANISATION_TYPES)):
             self.create_organisation(f"Organisation {index}", removed_type)
 
-        migration.set_removed_types_to_other(apps, None)
+        migration.replace_organisation_types(apps, None)
 
-        self.assertSetEqual(set(Organisation.objects.values_list("organisation_type", flat=True)), {"other"})
+        self.assertSetEqual(set(Organisation.objects.values_list("organisation_type", flat=True)), {None})
 
-    def test_keeps_retained_and_empty_types(self):
+    def test_keeps_new_and_empty_types(self):
         council = self.create_organisation("Test Council", "council", gss_code="E06000001")
-        combined_authority = self.create_organisation(
-            "Test Combined Authority", "combined-authority", gss_code="E47000001"
-        )
-        other = self.create_organisation("Test Company", "other")
+        mhclg = self.create_organisation("MHCLG", "mhclg")
+        assurer = self.create_organisation("Test Assurer", "independent-assurer")
         no_type = self.create_organisation("Untyped Organisation", None)
 
-        migration.set_removed_types_to_other(apps, None)
+        migration.replace_organisation_types(apps, None)
 
         for organisation, expected_type in [
             (council, "council"),
-            (combined_authority, "combined-authority"),
-            (other, "other"),
+            (mhclg, "mhclg"),
+            (assurer, "independent-assurer"),
             (no_type, None),
         ]:
             with self.subTest(organisation=organisation.name):
@@ -51,18 +61,18 @@ class OrganisationTypeMigrationTest(TestCase):
                     ).exists()
                 )
 
-    def test_records_the_removed_type_in_history(self):
+    def test_records_the_old_type_in_history(self):
         organisation = self.create_organisation("Cabinet Office", "ministerial-department")
 
-        migration.set_removed_types_to_other(apps, None)
+        migration.replace_organisation_types(apps, None)
 
         latest = organisation.history.latest()
-        self.assertEqual(latest.organisation_type, "other")
+        self.assertIsNone(latest.organisation_type)
         self.assertEqual(latest.history_type, "~")
         self.assertEqual(latest.history_change_reason, "CS-680 removed organisation type: ministerial-department")
         self.assertEqual(organisation.history.earliest().organisation_type, "ministerial-department")
 
-    def test_keeps_reference_and_other_fields(self):
+    def test_keeps_other_fields(self):
         organisation = self.create_organisation(
             "Cabinet Office",
             "ministerial-department",
@@ -72,31 +82,39 @@ class OrganisationTypeMigrationTest(TestCase):
         )
         before = Organisation.objects.values().get(pk=organisation.pk)
 
-        migration.set_removed_types_to_other(apps, None)
+        migration.replace_organisation_types(apps, None)
 
         after = Organisation.objects.values().get(pk=organisation.pk)
-        self.assertIsNotNone(before["reference"])
-        self.assertEqual(after, {**before, "organisation_type": "other"})
-        self.assertEqual(organisation.history.latest().reference, before["reference"])
+        self.assertEqual(after, {**before, "organisation_type": None})
 
-    def test_reverse_restores_removed_types_and_removes_its_history(self):
-        organisation = self.create_organisation("Cabinet Office", "ministerial-department")
-        migration.set_removed_types_to_other(apps, None)
-
-        migration.restore_removed_types(apps, None)
-
-        organisation.refresh_from_db()
-        self.assertEqual(organisation.organisation_type, "ministerial-department")
-        self.assertFalse(
-            organisation.history.filter(history_change_reason__startswith=migration.CHANGE_REASON_PREFIX).exists()
+    def test_reverse_restores_old_types_and_removes_its_history(self):
+        combined_authority = self.create_organisation(
+            "Test Combined Authority", "combined-authority", gss_code="E47000001"
         )
+        ministry = self.create_organisation("Cabinet Office", "ministerial-department")
+        migration.replace_organisation_types(apps, None)
+
+        migration.restore_organisation_types(apps, None)
+
+        for organisation, expected_type in [
+            (combined_authority, "combined-authority"),
+            (ministry, "ministerial-department"),
+        ]:
+            with self.subTest(organisation=organisation.name):
+                organisation.refresh_from_db()
+                self.assertEqual(organisation.organisation_type, expected_type)
+                self.assertFalse(
+                    organisation.history.filter(
+                        history_change_reason__startswith=migration.CHANGE_REASON_PREFIX
+                    ).exists()
+                )
 
     def test_reverse_keeps_a_type_changed_after_the_migration(self):
         organisation = self.create_organisation("Cabinet Office", "ministerial-department")
-        migration.set_removed_types_to_other(apps, None)
-        Organisation.objects.filter(pk=organisation.pk).update(organisation_type="council", gss_code="E06000001")
+        migration.replace_organisation_types(apps, None)
+        Organisation.objects.filter(pk=organisation.pk).update(organisation_type="mhclg")
 
-        migration.restore_removed_types(apps, None)
+        migration.restore_organisation_types(apps, None)
 
         organisation.refresh_from_db()
-        self.assertEqual(organisation.organisation_type, "council")
+        self.assertEqual(organisation.organisation_type, "mhclg")

@@ -6,15 +6,15 @@ from webcaf.webcaf.views.organisation import OrganisationContactForm, Organisati
 
 class OrganisationTypeFormTest(TestCase):
     def test_does_not_offer_admin_managed_types_to_other_organisations(self):
-        organisation = Organisation.objects.create(name="Test Organisation", organisation_type="other")
+        organisation = Organisation.objects.create(name="Test Organisation", organisation_type="mhclg")
 
         form = OrganisationTypeForm(instance=organisation)
         choice_ids = {choice[0] for choice in form.fields["organisation_type"].choices}
 
         self.assertTrue(choice_ids.isdisjoint(Organisation.GSS_CODE_REQUIRED_ORGANISATION_TYPES))
 
-    def test_offers_only_other_to_organisations_that_are_not_councils(self):
-        for organisation_type in ["other", None]:
+    def test_offers_only_non_council_types_to_organisations_that_are_not_councils(self):
+        for organisation_type in ["mhclg", "independent-assurer", None]:
             with self.subTest(organisation_type=organisation_type):
                 organisation = Organisation.objects.create(
                     name=f"Test Organisation {organisation_type}", organisation_type=organisation_type
@@ -22,7 +22,10 @@ class OrganisationTypeFormTest(TestCase):
 
                 form = OrganisationTypeForm(instance=organisation)
 
-                self.assertEqual(list(form.fields["organisation_type"].choices), [("other", "Other")])
+                self.assertEqual(
+                    list(form.fields["organisation_type"].choices),
+                    [("mhclg", "MHCLG"), ("independent-assurer", "Independent assurer")],
+                )
 
     def test_existing_council_can_only_retain_its_admin_managed_type(self):
         organisation = Organisation.objects.create(
@@ -51,5 +54,5 @@ class OrganisationTypeFormTest(TestCase):
         self.assertFalse(form.is_valid())
         self.assertEqual(
             form.non_field_errors(),
-            ["Councils and combined authorities must have a GSS code."],
+            ["Councils must have a GSS code."],
         )

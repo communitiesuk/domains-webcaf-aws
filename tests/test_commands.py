@@ -24,7 +24,7 @@ class AddOrganisationsCommandTest(TestCase):
             cmd_mod.CSV_PATH = self._orig_csv_path
 
     def test_does_nothing_if_table_not_empty(self):
-        Organisation.objects.create(pk=999, name="Dummy Org", organisation_type="other")
+        Organisation.objects.create(pk=999, name="Dummy Org", organisation_type="mhclg")
         call_command("add_organisations")
         self.assertEqual(Organisation.objects.count(), 1)
         self.assertTrue(Organisation.objects.filter(pk=999).exists())
@@ -45,10 +45,10 @@ class AddOrganisationsCommandTest(TestCase):
             },
         )
 
-    def test_seeds_organisations_with_other_type(self):
+    def test_seeds_organisations_with_unknown_type_without_a_type(self):
         call_command("add_organisations")
         organisation_types = set(Organisation.objects.values_list("organisation_type", flat=True))
-        self.assertSetEqual(organisation_types, {"other"})
+        self.assertSetEqual(organisation_types, {None})
 
     def test_seed_csv_has_no_organisations(self):
         cmd_mod = importlib.import_module("webcaf.webcaf.management.commands.add_organisations")
@@ -82,7 +82,8 @@ class TestAddLocalUsers(TestCase):
 
         organisation = Organisation.objects.get()
         self.assertEqual(organisation.name, "An Organisation")
-        self.assertEqual(organisation.organisation_type, "other")
+        self.assertEqual(organisation.organisation_type, "council")
+        self.assertEqual(organisation.gss_code, "E06000001")
         self.assertEqual(organisation.systems.count(), 2)
 
     def test_command_uses_an_existing_organisation(self):

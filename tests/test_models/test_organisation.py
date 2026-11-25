@@ -5,11 +5,14 @@ from webcaf.webcaf.models import Organisation
 
 
 class OrganisationTest(TestCase):
-    def test_offers_only_council_combined_authority_and_other_types(self):
+    def test_offers_only_council_mhclg_and_independent_assurer_types(self):
         self.assertEqual(
             Organisation.ORGANISATION_TYPE_CHOICES,
-            [("combined-authority", "Combined authority"), ("council", "Council"), ("other", "Other")],
+            [("council", "Council"), ("mhclg", "MHCLG"), ("independent-assurer", "Independent assurer")],
         )
+
+    def test_requires_gss_code_only_for_councils(self):
+        self.assertEqual(Organisation.GSS_CODE_REQUIRED_ORGANISATION_TYPES, frozenset({"council"}))
 
     def test_saves_valid_gss_code(self):
         organisation = Organisation.objects.create(
@@ -44,7 +47,7 @@ class OrganisationTest(TestCase):
             ["Organisation with this GSS code already exists."],
         )
 
-    def test_requires_gss_code_for_councils_and_combined_authorities(self):
+    def test_requires_gss_code_for_councils(self):
         for organisation_type in Organisation.GSS_CODE_REQUIRED_ORGANISATION_TYPES:
             with self.subTest(organisation_type=organisation_type):
                 with self.assertRaises(ValidationError) as context:
@@ -55,16 +58,18 @@ class OrganisationTest(TestCase):
 
                 self.assertEqual(
                     context.exception.messages,
-                    ["Councils and combined authorities must have a GSS code."],
+                    ["Councils must have a GSS code."],
                 )
 
-    def test_allows_other_organisation_types_without_gss_code(self):
-        organisation = Organisation.objects.create(
-            name="Assurance Company",
-            organisation_type="other",
-        )
+    def test_allows_mhclg_and_independent_assurers_without_gss_code(self):
+        for organisation_type in ["mhclg", "independent-assurer"]:
+            with self.subTest(organisation_type=organisation_type):
+                organisation = Organisation.objects.create(
+                    name=f"Organisation {organisation_type}",
+                    organisation_type=organisation_type,
+                )
 
-        self.assertIsNone(organisation.gss_code)
+                self.assertIsNone(organisation.gss_code)
 
     def test_rejects_existing_council_without_gss_code_on_next_save(self):
         organisation = Organisation(name="Existing Council", organisation_type="council")
@@ -77,7 +82,7 @@ class OrganisationTest(TestCase):
 
         self.assertEqual(
             context.exception.messages,
-            ["Councils and combined authorities must have a GSS code."],
+            ["Councils must have a GSS code."],
         )
 
     def test_partial_save_requires_gss_code_to_be_saved_with_unrelated_changes(self):
@@ -92,7 +97,7 @@ class OrganisationTest(TestCase):
 
         self.assertEqual(
             context.exception.messages,
-            ["Councils and combined authorities must save their GSS code in the same operation."],
+            ["Councils must save their GSS code in the same operation."],
         )
         organisation.refresh_from_db()
         self.assertEqual(organisation.name, "Existing Council")

@@ -520,7 +520,7 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
 
         if unsupported_rows:
             return [], (
-                "Council and Combined authority rows are not supported by this legacy import because they require a "
+                "Council rows are not supported by this legacy import because they require a "
                 "GSS code. Use the dedicated council import when it is available. Affected rows: "
                 f"{', '.join(unsupported_rows)}."
             )

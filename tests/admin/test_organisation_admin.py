@@ -62,7 +62,7 @@ class OrganisationAdminTest(TestCase):
         form = form_class(
             data={
                 "name": "Test Organisation",
-                "organisation_type": "other",
+                "organisation_type": "mhclg",
                 "gss_code": "invalid",
             }
         )
@@ -86,22 +86,43 @@ class OrganisationAdminTest(TestCase):
         self.assertFalse(form.is_valid())
         self.assertEqual(
             form.non_field_errors(),
-            ["Councils and combined authorities must have a GSS code."],
+            ["Councils must have a GSS code."],
         )
 
-    def test_form_saves_combined_authority_with_gss_code(self):
+    def test_form_saves_combined_authority_as_council_with_gss_code(self):
         form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
         form = form_class(
             data={
                 "name": "Test Combined Authority",
-                "organisation_type": "combined-authority",
+                "organisation_type": "council",
                 "gss_code": "E47000001",
             }
         )
 
         self.assertTrue(form.is_valid(), form.errors)
         organisation = form.save()
+        self.assertEqual(organisation.organisation_type, "council")
         self.assertEqual(organisation.gss_code, "E47000001")
+
+    def test_form_offers_only_the_three_organisation_types(self):
+        form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
+
+        self.assertEqual(
+            [choice[0] for choice in form_class.base_fields["organisation_type"].choices if choice[0]],
+            ["council", "mhclg", "independent-assurer"],
+        )
+
+    def test_form_saves_mhclg_and_independent_assurer_without_gss_code(self):
+        form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
+
+        for organisation_type in ["mhclg", "independent-assurer"]:
+            with self.subTest(organisation_type=organisation_type):
+                form = form_class(
+                    data={"name": f"Test {organisation_type}", "organisation_type": organisation_type, "gss_code": ""}
+                )
+
+                self.assertTrue(form.is_valid(), form.errors)
+                self.assertIsNone(form.save().gss_code)
 
 
 class OrganisationAdminImportCSVTest(TestCase):
@@ -185,13 +206,8 @@ class OrganisationAdminImportCSVTest(TestCase):
     def test_import_csv_rejects_council_types_before_writing_records(self):
         response, admin_messages = self.import_rows(
             [
-                self.row(organisation="Other Organisation", reference="ORG001", organisation_type="Other"),
+                self.row(organisation="MHCLG", reference="ORG001", organisation_type="MHCLG"),
                 self.row(organisation="Test Council", reference="ORG002", organisation_type="Council"),
-                self.row(
-                    organisation="Test Combined Authority",
-                    reference="ORG003",
-                    organisation_type="Combined authority",
-                ),
             ]
         )
 
@@ -202,7 +218,6 @@ class OrganisationAdminImportCSVTest(TestCase):
         message_text = " ".join(admin_messages)
         self.assertIn("not supported by this legacy import", message_text)
         self.assertIn("row 3 (Council)", message_text)
-        self.assertIn("row 4 (Combined authority)", message_text)
 
     def test_import_csv_rejects_existing_council_when_type_column_is_blank(self):
         existing_council = Organisation.objects.create(
@@ -414,9 +429,9 @@ class OrganisationAdminImportCSVTest(TestCase):
         self.assertEqual(found_organisation, organisation_by_reference)
 
     def test_import_csv_sets_organisation_type_when_provided(self):
-        self.import_rows([self.row(organisation="Test Company", organisation_type="Other")])
+        self.import_rows([self.row(organisation="Test Assurer", organisation_type="Independent assurer")])
 
-        self.assertEqual(Organisation.objects.get(name="Test Company").organisation_type, "other")
+        self.assertEqual(Organisation.objects.get(name="Test Assurer").organisation_type, "independent-assurer")
 
     def test_import_csv_ignores_removed_organisation_type(self):
         self.import_rows([self.row(organisation="Test Ministry", organisation_type="Ministerial department")])
@@ -434,6 +449,6 @@ class OrganisationAdminImportCSVTest(TestCase):
         self.assertIsNone(Organisation.objects.get(name="Test Organisation").organisation_type)
 
     def test_import_csv_handles_whitespace_in_type(self):
-        self.import_rows([self.row(organisation="Test Company", organisation_type="  Other  ")])
+        self.import_rows([self.row(organisation="MHCLG", organisation_type="  MHCLG  ")])
 
-        self.assertEqual(Organisation.objects.get(name="Test Company").organisation_type, "other")
+        self.assertEqual(Organisation.objects.get(name="MHCLG").organisation_type, "mhclg")

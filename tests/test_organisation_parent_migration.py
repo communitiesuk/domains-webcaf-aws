@@ -2,14 +2,14 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
-BEFORE = ("webcaf", "0038_organisation_types_council_combined_authority_other")
-AFTER = ("webcaf", "0040_remove_organisation_parent_organisation")
+BEFORE = ("webcaf", "0040_organisation_types_council_mhclg_independent_assurer")
+AFTER = ("webcaf", "0042_remove_organisation_parent_organisation")
 
 
 class RemoveParentOrganisationMigrationTest(TransactionTestCase):
     """
-    Runs migrations 0039 and 0040 forwards and backwards on organisations created in the
-    0038 schema, where the parent organisation field still exists.
+    Runs migrations 0041 and 0042 forwards and backwards on organisations created in the
+    0040 schema, where the parent organisation field still exists.
     """
 
     def migrate(self, target):
@@ -21,11 +21,11 @@ class RemoveParentOrganisationMigrationTest(TransactionTestCase):
     def setUp(self):
         old_apps = self.migrate(BEFORE)
         Organisation = old_apps.get_model("webcaf", "Organisation")
-        self.parent = Organisation.objects.create(name="Cabinet Office", reference="ORG01", organisation_type="other")
+        self.parent = Organisation.objects.create(name="Cabinet Office", reference="ORG01", organisation_type="mhclg")
         self.child = Organisation.objects.create(
             name="Government Digital Service",
             reference="ORG02",
-            organisation_type="other",
+            organisation_type="mhclg",
             parent_organisation=self.parent,
         )
         self.without_parent = Organisation.objects.create(name="Test Company", reference="ORG03")

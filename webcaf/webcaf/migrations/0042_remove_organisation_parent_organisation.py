@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("webcaf", "0039_record_organisation_parent_organisations"),
+        ("webcaf", "0041_record_organisation_parent_organisations"),
     ]
 
     operations = [

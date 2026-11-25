@@ -49,10 +49,10 @@ def restore_parent_organisations(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("webcaf", "0038_organisation_types_council_combined_authority_other"),
+        ("webcaf", "0040_organisation_types_council_mhclg_independent_assurer"),
     ]
 
-    # The field is removed in 0040. PostgreSQL cannot alter the history table in
+    # The field is removed in 0042. PostgreSQL cannot alter the history table in
     # the same transaction that inserted rows into it, so the two steps are
     # separate migrations.
     operations = [

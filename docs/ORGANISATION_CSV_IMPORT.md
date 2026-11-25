@@ -59,31 +59,20 @@ Existing users and profiles, including records created by earlier imports, are n
 
 The `Type` column accepts these case-sensitive labels:
 
-- Ad-hoc advisory group
-- Advisory non-departmental public body
-- Agency or other public body
-- Devolved administration
-- Executive agency
-- Executive non-departmental public body
-- Executive office
-- High profile group
-- Ministerial department
-- Non-ministerial department
-- Public corporation
-- Tribunal
-- Other
+- MHCLG
+- Independent assurer
 
 An invalid or empty type is ignored and a new organisation is created without a type.
 
-Council and Combined authority records are not supported by this organisation import because they require a GSS code.
-If a row specifies either type, or matches an existing organisation with either type, the entire file is rejected before
-any records are written. These records must be managed through the dedicated council import or Django Admin.
+Council records, including combined authorities, are not supported by this organisation import because they require a
+GSS code. If a row specifies the Council type, or matches an existing council, the entire file is rejected before any
+records are written. These records must be managed through the dedicated council import or Django Admin.
 
 ## Validation
 
 - The header must match the current organisation import headers exactly, although column order may differ.
 - Duplicate headers are rejected before any rows are imported.
 - Legacy `Email1` to `Email6` columns produce a specific unsupported-column error.
-- Council and Combined authority rows are rejected before any rows are imported.
+- Council rows are rejected before any rows are imported.
 - Validation failures reject the file before organisation processing begins.
 - A successful import reports the number of organisation rows processed.

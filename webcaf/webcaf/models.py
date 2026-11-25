@@ -61,16 +61,17 @@ class ReferenceGeneratorMixin:
 
 
 class Organisation(ReferenceGeneratorMixin, models.Model):
-    GSS_CODE_REQUIRED_ORGANISATION_TYPES = frozenset({"council", "combined-authority"})
+    GSS_CODE_REQUIRED_ORGANISATION_TYPES = frozenset({"council"})
     GSS_CODE_VALIDATOR = RegexValidator(
         regex=r"\A[A-Z][0-9]{8}\Z",
         message="Enter a valid GSS code: one uppercase letter followed by eight digits (for example, E06000001).",
         code="invalid_gss_code",
     )
+    # Combined authorities are stored as councils; their GSS code identifies them.
     ORGANISATION_TYPE_CHOICES = [
-        ("combined-authority", "Combined authority"),
         ("council", "Council"),
-        ("other", "Other"),
+        ("mhclg", "MHCLG"),
+        ("independent-assurer", "Independent assurer"),
     ]
     name = models.CharField(max_length=255, unique=True)
     reference = models.CharField(max_length=20, null=True, unique=True)
@@ -98,7 +99,7 @@ class Organisation(ReferenceGeneratorMixin, models.Model):
             # Some user-facing forms intentionally expose only part of the model.
             # A non-field error lets those forms reject the save without raising
             # an error for a field they do not contain.
-            raise ValidationError("Councils and combined authorities must have a GSS code.")
+            raise ValidationError("Councils must have a GSS code.")
         super().clean()
 
     def save(self, *args, **kwargs):
@@ -120,9 +121,7 @@ class Organisation(ReferenceGeneratorMixin, models.Model):
             saved_gss_code = self.gss_code if "gss_code" in update_fields else stored_values["gss_code"]
 
             if saved_organisation_type in self.GSS_CODE_REQUIRED_ORGANISATION_TYPES and not saved_gss_code:
-                raise ValidationError(
-                    "Councils and combined authorities must save their GSS code in the same operation."
-                )
+                raise ValidationError("Councils must save their GSS code in the same operation.")
 
         super().save(*args, **kwargs)
 
