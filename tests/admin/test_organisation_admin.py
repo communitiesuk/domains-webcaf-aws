@@ -104,6 +104,14 @@ class OrganisationAdminTest(TestCase):
         self.assertEqual(organisation.organisation_type, "council")
         self.assertEqual(organisation.gss_code, "E47000001")
 
+    def test_form_requires_an_organisation_type(self):
+        form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
+        form = form_class(data={"name": "Untyped Organisation", "organisation_type": "", "gss_code": ""})
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(form.errors["organisation_type"], ["This field is required."])
+        self.assertFalse(Organisation.objects.filter(name="Untyped Organisation").exists())
+
     def test_form_offers_only_the_three_organisation_types(self):
         form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
 

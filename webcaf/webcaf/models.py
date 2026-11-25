@@ -92,8 +92,10 @@ class Organisation(models.Model):
         unique=True,
         validators=[GSS_CODE_VALIDATOR],
     )
+    # Required in forms. The column stays nullable for organisations whose inherited
+    # type was cleared by migration 0040 in databases that were not reset.
     organisation_type = models.CharField(
-        max_length=255, null=True, blank=True, choices=ORGANISATION_TYPE_CHOICES, default=None
+        max_length=255, null=True, blank=False, choices=ORGANISATION_TYPE_CHOICES, default=None
     )
 
     history = HistoricalRecords()
