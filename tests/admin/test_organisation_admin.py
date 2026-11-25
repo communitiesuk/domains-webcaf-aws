@@ -455,6 +455,13 @@ class OrganisationAdminImportCSVTest(TestCase):
 
         self.assertEqual(found_organisation, organisation)
 
+    def test_find_organisation_ignores_a_reference_with_non_ascii_digits(self):
+        organisation = Organisation.objects.create(name="Test Org")
+
+        found_organisation = self.admin.find_organisation({"Reference": "²", "Organisation": "Test Org"})
+
+        self.assertEqual(found_organisation, organisation)
+
     def test_find_organisation_by_name_when_no_reference(self):
         organisation = Organisation.objects.create(name="Test Org")
 

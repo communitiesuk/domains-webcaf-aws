@@ -545,7 +545,8 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
         organisation: Organisation | None = None
         # first try to get the organisation by id
         reference = (row.get("Reference") or "").strip()
-        if reference.isdigit():
+        # isdigit() alone accepts characters such as "²" that int() cannot parse.
+        if reference.isascii() and reference.isdigit():
             organisation = Organisation.objects.filter(pk=int(reference)).first()
 
         # If fails try to get the organisation by name
