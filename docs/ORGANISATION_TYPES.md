@@ -35,7 +35,10 @@ in the data export file name.
 
 ## Data export changes (CS-680)
 
-`python manage.py export_data` writes one file per organisation. Compared with the format before CS-680:
+`python manage.py export_data` writes one JSON file per organisation, for every organisation type, to
+`organisations/<id>.json`, where `<id>` is the organisation id (the same value as `organisation_id` in the file). This is
+the LG WebCAF export format; the file names of the inherited central-government WebCAF export do not apply. Compared
+with the format before CS-680:
 
 | What | Before | Now |
 |---|---|---|
