@@ -135,3 +135,35 @@ class OrganisationTest(TestCase):
         organisation = Organisation.objects.create(name="Test Organisation", gss_code="E06000001")
 
         self.assertEqual(organisation.history.latest().gss_code, "E06000001")
+
+
+class OrganisationCouncilSubtypeTest(TestCase):
+    def test_works_out_subtype_from_gss_prefix(self):
+        for prefix, subtype in Organisation.COUNCIL_SUBTYPES_BY_GSS_PREFIX.items():
+            with self.subTest(prefix=prefix):
+                organisation = Organisation(
+                    name=f"Council {prefix}", organisation_type="council", gss_code=f"{prefix}000001"
+                )
+
+                self.assertEqual(organisation.council_subtype, subtype)
+
+    def test_combined_authority_council_has_combined_authority_subtype(self):
+        organisation = Organisation.objects.create(
+            name="West Yorkshire Combined Authority", organisation_type="council", gss_code="E47000003"
+        )
+
+        self.assertEqual(organisation.council_subtype, "Combined authority")
+
+    def test_has_no_subtype_for_an_unknown_prefix(self):
+        organisation = Organisation(name="Council", organisation_type="council", gss_code="E99000001")
+
+        self.assertIsNone(organisation.council_subtype)
+
+    def test_has_no_subtype_for_organisations_that_are_not_councils(self):
+        for organisation_type in ["mhclg", "independent-assurer", None]:
+            with self.subTest(organisation_type=organisation_type):
+                organisation = Organisation(
+                    name="Organisation", organisation_type=organisation_type, gss_code="E06000001"
+                )
+
+                self.assertIsNone(organisation.council_subtype)

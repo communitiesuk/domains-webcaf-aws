@@ -67,6 +67,16 @@ class Organisation(ReferenceGeneratorMixin, models.Model):
         message="Enter a valid GSS code: one uppercase letter followed by eight digits (for example, E06000001).",
         code="invalid_gss_code",
     )
+    # A council's subtype comes from the first three characters of its GSS code.
+    # This is the only place the mapping is kept (see docs/ORGANISATION_TYPES.md).
+    COUNCIL_SUBTYPES_BY_GSS_PREFIX = {
+        "E06": "Unitary authority",
+        "E07": "Non-metropolitan district",
+        "E08": "Metropolitan district",
+        "E09": "London borough",
+        "E10": "County council",
+        "E47": "Combined authority",
+    }
     # Combined authorities are stored as councils; their GSS code identifies them.
     ORGANISATION_TYPE_CHOICES = [
         ("council", "Council"),
@@ -127,6 +137,13 @@ class Organisation(ReferenceGeneratorMixin, models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def council_subtype(self):
+        """The council subtype worked out from the GSS code, or None if it is not a council or the prefix is unknown."""
+        if self.organisation_type != "council" or not self.gss_code:
+            return None
+        return self.COUNCIL_SUBTYPES_BY_GSS_PREFIX.get(self.gss_code[:3])
 
     @classmethod
     def get_type_id(cls, label):

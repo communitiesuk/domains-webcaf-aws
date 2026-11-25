@@ -46,6 +46,16 @@
                                    href="{% url 'edit-my-organisation-type' id=profile.id %}">Change</a>
                             </dd>
                         </div>
+                        {% if profile.organisation.council_subtype %}
+                            <div class="govuk-summary-list__row">
+                                <dt class="govuk-summary-list__key">
+                                    Council subtype
+                                </dt>
+                                <dd class="govuk-summary-list__value">
+                                    {{ profile.organisation.council_subtype }}
+                                </dd>
+                            </div>
+                        {% endif %}
                     </dl>
                 </div>
             </div>

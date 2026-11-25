@@ -125,6 +125,22 @@ class OrganisationAdminTest(TestCase):
                 self.assertIsNone(form.save().gss_code)
 
 
+class OrganisationAdminCouncilSubtypeTest(TestCase):
+    def setUp(self):
+        self.admin = OrganisationAdmin(Organisation, AdminSite())
+
+    def test_shows_council_subtype_read_only(self):
+        self.assertIn("council_subtype", self.admin.readonly_fields)
+        self.assertIn("council_subtype", self.admin.list_display)
+
+    def test_displays_council_subtype_or_a_dash(self):
+        council = Organisation(name="Kent County Council", organisation_type="council", gss_code="E10000016")
+        assurer = Organisation(name="Test Assurer", organisation_type="independent-assurer")
+
+        self.assertEqual(self.admin.council_subtype(council), "County council")
+        self.assertEqual(self.admin.council_subtype(assurer), "-")
+
+
 class OrganisationAdminImportCSVTest(TestCase):
     """Tests for the OrganisationAdmin import_csv method."""
 

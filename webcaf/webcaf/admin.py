@@ -367,8 +367,8 @@ class OrganisationEmailDomainAdmin(SimpleHistoryAdmin):
 class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: ignore
     model = Organisation
     search_fields = ["name", "systems__name", "reference", "gss_code"]
-    list_display = ["name", "reference", "gss_code"]
-    readonly_fields = ["reference"]
+    list_display = ["name", "reference", "gss_code", "council_subtype"]
+    readonly_fields = ["reference", "council_subtype"]
     optional_fields = ["reference"]
     inlines = [OrganisationEmailDomainInline]
 
@@ -377,6 +377,10 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
         if isinstance(inline, OrganisationEmailDomainInline):
             kwargs["can_change_existing_links"] = inline.has_change_permission(request, obj)
         return kwargs
+
+    @admin.display(description="Council subtype")
+    def council_subtype(self, obj):
+        return obj.council_subtype or "-"
 
     logger = logging.getLogger("OrganisationAdmin")
     csv_headers = [
