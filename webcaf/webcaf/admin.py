@@ -385,10 +385,13 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
     csv_headers = [
         "Organisation",
         "Lead Government Department",
-        "Reference",
+        "Organisation ID",
         "Type",
     ]
     legacy_email_headers = ["Email1", "Email2", "Email3", "Email4", "Email5", "Email6"]
+    # The generated reference was removed in CS-680. Old references can be all digits, so a legacy
+    # Reference column must not be read as an organisation id.
+    legacy_reference_header = "Reference"
 
     # Add custom URL for the import view
     def get_urls(self):
@@ -430,7 +433,7 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
         """
         Handles the import of a CSV file through a POST request and processes its data to create organisations.
         The "Lead Government Department" column is accepted but ignored, because organisations no longer
-        have a parent organisation.
+        have a parent organisation. Every row needs a supported Type, and a legacy Reference column is rejected.
 
         User creation, organisation membership, and role assignment are handled separately through council
         onboarding and are not part of this import.
@@ -461,19 +464,17 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
                 if not organisation:
                     self.logger.info(
                         f"Creating {row['Organisation']} as not found in the database"
-                        f"reference: {row['Reference']}"
+                        f"organisation id: {row['Organisation ID']}"
                         f"name: {row['Organisation']}."
                     )
                     self.message_user(
                         request, f"Creating {row['Organisation']} as not found in the database", messages.WARNING
                     )
-                    organisation_type = row.get("Type", "").strip()
-                    if org_type_id := Organisation.get_type_id(organisation_type):
-                        organisation = Organisation.objects.create(
-                            name=row["Organisation"], organisation_type=org_type_id
-                        )
-                    else:
-                        organisation = Organisation.objects.create(name=row["Organisation"])
+                    # Every row has a supported type: _read_legacy_import_rows rejects the file otherwise.
+                    organisation = Organisation.objects.create(
+                        name=row["Organisation"],
+                        organisation_type=Organisation.get_type_id(row["Type"].strip()),
+                    )
 
             self.message_user(request, f"✅ Imported {count} Organisations.", messages.SUCCESS)
             return redirect("..")
@@ -497,6 +498,13 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
                 f"Use the current organisation import headers: {', '.join(self.csv_headers)}."
             )
 
+        if self.legacy_reference_header in headers:
+            return [], (
+                "The Reference column is no longer supported: organisation references were removed. "
+                "Match existing organisations by the Organisation ID column (the ID shown in Django Admin) or by name. "
+                f"Use the current organisation import headers: {', '.join(self.csv_headers)}."
+            )
+
         duplicate_headers = list(dict.fromkeys(header for header in headers if headers.count(header) > 1))
         if duplicate_headers:
             return [], (
@@ -511,22 +519,50 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
 
         rows = list(reader)
         unsupported_rows = []
+        invalid_id_rows = []
+        invalid_type_rows = []
+        admin_managed_types = Organisation.GSS_CODE_REQUIRED_ORGANISATION_TYPES
         for row_number, row in enumerate(rows, start=2):
-            organisation_type = row.get("Type", "").strip()
+            organisation_id = (row.get("Organisation ID") or "").strip()
+            if organisation_id and not (
+                organisation_id.isascii()
+                and organisation_id.isdigit()
+                and Organisation.objects.filter(pk=int(organisation_id)).exists()
+            ):
+                invalid_id_rows.append(f"row {row_number} ({organisation_id})")
+                continue
+
+            organisation_type = (row.get("Type") or "").strip()
             organisation_type_id = Organisation.get_type_id(organisation_type)
             existing_organisation = self.find_organisation(row)
             existing_type_id = existing_organisation.organisation_type if existing_organisation else None
-            admin_managed_types = Organisation.GSS_CODE_REQUIRED_ORGANISATION_TYPES
             if organisation_type_id in admin_managed_types or existing_type_id in admin_managed_types:
                 type_label = organisation_type or existing_organisation.get_organisation_type_display()
                 unsupported_rows.append(f"row {row_number} ({type_label})")
+            elif organisation_type_id is None:
+                invalid_type_rows.append(f"row {row_number} ({organisation_type or 'blank'})")
 
+        errors = []
         if unsupported_rows:
-            return [], (
+            errors.append(
                 "Council rows are not supported by this legacy import because they require a "
                 "GSS code. Use the dedicated council import when it is available. Affected rows: "
                 f"{', '.join(unsupported_rows)}."
             )
+        if invalid_type_rows:
+            supported_types = [
+                label for value, label in Organisation.ORGANISATION_TYPE_CHOICES if value not in admin_managed_types
+            ]
+            errors.append(
+                f"Type must be one of: {', '.join(supported_types)}. Rows to correct: {', '.join(invalid_type_rows)}."
+            )
+        if invalid_id_rows:
+            errors.append(
+                "Organisation ID must be the ID of an existing organisation, as shown in Django Admin, or left blank. "
+                f"Rows to correct: {', '.join(invalid_id_rows)}."
+            )
+        if errors:
+            return [], " ".join(errors)
 
         return rows, None
 
@@ -535,19 +571,19 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
         Finds and returns an Organisation instance based on the provided row data.
 
         This method attempts to retrieve an Organisation object by first using the
-        `Reference` field, which holds the organisation id. If the organisation cannot
-        be found that way, it falls back to searching by the organisation's name.
+        `Organisation ID` field. If the organisation cannot be found that way, it falls
+        back to searching by the organisation's name.
 
         :param row: A dictionary containing data for finding an organisation. Keys
-            include `Reference` and `Organisation`.
+            include `Organisation ID` and `Organisation`.
         :return: An Organisation object if found, otherwise None.
         """
         organisation: Organisation | None = None
         # first try to get the organisation by id
-        reference = (row.get("Reference") or "").strip()
+        organisation_id = (row.get("Organisation ID") or "").strip()
         # isdigit() alone accepts characters such as "²" that int() cannot parse.
-        if reference.isascii() and reference.isdigit():
-            organisation = Organisation.objects.filter(pk=int(reference)).first()
+        if organisation_id.isascii() and organisation_id.isdigit():
+            organisation = Organisation.objects.filter(pk=int(organisation_id)).first()
 
         # If fails try to get the organisation by name
         if not organisation and row["Organisation"]:

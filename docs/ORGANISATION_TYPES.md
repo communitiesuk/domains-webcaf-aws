@@ -30,8 +30,8 @@ A council whose GSS code has any other prefix has no subtype. The subtype is rea
 ## Organisation identifier
 
 Organisations have no generated reference. The organisation id (the database primary key) identifies an organisation
-wherever an identifier is needed: in the Django Admin list, in the `Reference` column of the organisation CSV import, and
-in the data export file name.
+wherever an identifier is needed: in the Django Admin list, in the `Organisation ID` column of the organisation CSV
+import, and in the data export file name.
 
 ## Data export changes (CS-680)
 

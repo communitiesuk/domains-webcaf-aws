@@ -16,24 +16,28 @@ the import page or `/admin/webcaf/organisation/import-org-csv-template/`.
 The CSV must contain exactly these headers. Their order does not matter:
 
 ```csv
-Organisation,Lead Government Department,Reference,Type
+Organisation,Lead Government Department,Organisation ID,Type
 ```
 
 - `Organisation` (required): name of the organisation.
 - `Lead Government Department` (optional): accepted but ignored. Organisations no longer have a parent organisation.
-- `Reference` (optional): the id of an existing WebCAF organisation, used for matching.
-- `Type` (optional): organisation type label.
+- `Organisation ID` (optional): the ID of an existing WebCAF organisation, as shown in the Django Admin organisation
+  list, used for matching. Leave it blank for a new organisation.
+- `Type` (required): organisation type label (see below).
 
 Example:
 
 ```csv
-Organisation,Lead Government Department,Reference,Type
-Cabinet Office,,,Ministerial department
-Government Digital Service,Cabinet Office,,Executive agency
+Organisation,Lead Government Department,Organisation ID,Type
+"Ministry of Housing, Communities and Local Government",,,MHCLG
+Example Assurance Ltd,,,Independent assurer
 ```
 
-`Reference` is used only to match an existing organisation by its id. A value that is not a number is ignored, and the
-organisation is matched by name instead.
+## Legacy Reference column
+
+Organisations no longer have a generated reference (CS-680). A file with a `Reference` column is rejected before any
+rows are processed, with a message pointing to the `Organisation ID` column. Old references can be all digits, so they
+are never read as organisation IDs.
 
 ## Legacy email columns
 
@@ -48,10 +52,10 @@ Email addresses in legacy columns are not stored. The import does not use them t
 
 For each valid row, the importer:
 
-1. Looks for an existing organisation by `Reference`, when supplied.
+1. Looks for an existing organisation by `Organisation ID`, when supplied.
 2. Falls back to matching by `Organisation` name.
 3. Creates the organisation when no match is found.
-4. Sets a recognised organisation type on new records.
+4. Sets the organisation type on new records.
 
 Existing users and profiles, including records created by earlier imports, are not changed or removed.
 
@@ -62,7 +66,8 @@ The `Type` column accepts these case-sensitive labels:
 - MHCLG
 - Independent assurer
 
-An invalid or empty type is ignored and a new organisation is created without a type.
+A row with a blank, removed or unrecognised type is rejected. The whole file is rejected before any records are written,
+and the message lists each row to correct.
 
 Council records, including combined authorities, are not supported by this organisation import because they require a
 GSS code. If a row specifies the Council type, or matches an existing council, the entire file is rejected before any
@@ -73,6 +78,9 @@ records are written. These records must be managed through the dedicated council
 - The header must match the current organisation import headers exactly, although column order may differ.
 - Duplicate headers are rejected before any rows are imported.
 - Legacy `Email1` to `Email6` columns produce a specific unsupported-column error.
+- A `Reference` column produces a specific unsupported-column error.
 - Council rows are rejected before any rows are imported.
+- Rows with a blank, removed or unrecognised `Type` are rejected, with each row listed.
+- An `Organisation ID` that is not the ID of an existing organisation is rejected, with each row listed.
 - Validation failures reject the file before organisation processing begins.
 - A successful import reports the number of organisation rows processed.

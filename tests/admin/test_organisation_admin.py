@@ -170,7 +170,7 @@ class OrganisationAdminRemovedFieldsTest(TestCase):
 class OrganisationAdminImportCSVTest(TestCase):
     """Tests for the OrganisationAdmin import_csv method."""
 
-    supported_headers = ["Organisation", "Lead Government Department", "Reference", "Type"]
+    supported_headers = ["Organisation", "Lead Government Department", "Organisation ID", "Type"]
     legacy_email_headers = ["Email1", "Email2", "Email3", "Email4", "Email5", "Email6"]
 
     def setUp(self):
@@ -211,13 +211,13 @@ class OrganisationAdminImportCSVTest(TestCase):
     def row(
         organisation="Test Organisation",
         lead_government_department="",
-        reference="",
-        organisation_type="",
+        organisation_id="",
+        organisation_type="Independent assurer",
     ):
         return {
             "Organisation": organisation,
             "Lead Government Department": lead_government_department,
-            "Reference": reference,
+            "Organisation ID": organisation_id,
             "Type": organisation_type,
         }
 
@@ -228,7 +228,7 @@ class OrganisationAdminImportCSVTest(TestCase):
         response = self.admin.import_csv(add_middleware(request))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Organisation, Lead Government Department, Reference, Type")
+        self.assertContains(response, "Organisation, Lead Government Department, Organisation ID, Type")
         self.assertNotContains(response, "Email1")
         self.assertContains(response, "managed separately through council onboarding")
 
@@ -242,14 +242,14 @@ class OrganisationAdminImportCSVTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.content.decode(),
-            '"Organisation","Lead Government Department","Reference","Type"\r\n',
+            '"Organisation","Lead Government Department","Organisation ID","Type"\r\n',
         )
 
     def test_import_csv_rejects_council_types_before_writing_records(self):
         response, admin_messages = self.import_rows(
             [
-                self.row(organisation="MHCLG", reference="ORG001", organisation_type="MHCLG"),
-                self.row(organisation="Test Council", reference="ORG002", organisation_type="Council"),
+                self.row(organisation="MHCLG", organisation_type="MHCLG"),
+                self.row(organisation="Test Council", organisation_type="Council"),
             ]
         )
 
@@ -268,7 +268,7 @@ class OrganisationAdminImportCSVTest(TestCase):
             gss_code="E06000001",
         )
         response, admin_messages = self.import_rows(
-            [self.row(organisation=existing_council.name, reference=str(existing_council.pk))]
+            [self.row(organisation=existing_council.name, organisation_id=str(existing_council.pk), organisation_type="")]
         )
 
         self.assertEqual(response.status_code, 302)
@@ -308,7 +308,7 @@ class OrganisationAdminImportCSVTest(TestCase):
         user_count_before = User.objects.count()
         profile_count_before = UserProfile.objects.count()
 
-        self.import_rows([self.row(organisation="Existing Organisation", reference=str(organisation.pk))])
+        self.import_rows([self.row(organisation="Existing Organisation", organisation_id=str(organisation.pk))])
 
         self.assertEqual(User.objects.count(), user_count_before)
         self.assertEqual(UserProfile.objects.count(), profile_count_before)
@@ -333,7 +333,7 @@ class OrganisationAdminImportCSVTest(TestCase):
         )
         legacy_emails = [f"legacy{i}@test.gov.uk" for i in range(1, 7)]
         headers = self.supported_headers + self.legacy_email_headers
-        legacy_row = self.row(organisation="Rejected Organisation", reference="ORG999")
+        legacy_row = self.row(organisation="Rejected Organisation")
         legacy_row.update(dict(zip(self.legacy_email_headers, legacy_emails, strict=True)))
         organisation_ids_before = list(Organisation.objects.values_list("id", flat=True))
         user_before = User.objects.values("username", "email", "is_active").get(pk=member.pk)
@@ -348,7 +348,7 @@ class OrganisationAdminImportCSVTest(TestCase):
             admin_messages[0],
         )
         self.assertIn(
-            "Use the current organisation import headers: Organisation, Lead Government Department, Reference, Type.",
+            "Use the current organisation import headers: Organisation, Lead Government Department, Organisation ID, Type.",
             admin_messages[0],
         )
         self.assertEqual(list(Organisation.objects.values_list("id", flat=True)), organisation_ids_before)
@@ -375,14 +375,14 @@ class OrganisationAdminImportCSVTest(TestCase):
                 self.assertEqual(UserProfile.objects.count(), 0)
 
     def test_other_invalid_headers_are_rejected_against_current_headers(self):
-        headers = ["Organisation", "Reference"]
-        row = {"Organisation": "Rejected Organisation", "Reference": "ORG999"}
+        headers = ["Organisation", "Code"]
+        row = {"Organisation": "Rejected Organisation", "Code": "ORG999"}
 
         _response, admin_messages = self.import_rows([row], headers=headers)
 
         self.assertIn(
             "The CSV headers must match the current organisation import headers: "
-            "Organisation, Lead Government Department, Reference, Type.",
+            "Organisation, Lead Government Department, Organisation ID, Type.",
             admin_messages[0],
         )
         self.assertEqual(Organisation.objects.count(), 0)
@@ -394,32 +394,31 @@ class OrganisationAdminImportCSVTest(TestCase):
 
         self.assertIn("The CSV contains duplicate headers: Organisation, Type.", admin_messages[0])
         self.assertIn(
-            "Use the current organisation import headers: Organisation, Lead Government Department, Reference, Type.",
+            "Use the current organisation import headers: Organisation, Lead Government Department, Organisation ID, Type.",
             admin_messages[0],
         )
         self.assertEqual(Organisation.objects.count(), 0)
 
-    def test_import_csv_finds_existing_organisation_by_id_in_reference(self):
+    def test_import_csv_finds_existing_organisation_by_organisation_id(self):
         organisation = Organisation.objects.create(name="Existing Org")
 
-        self.import_rows([self.row(organisation="Different Name", reference=str(organisation.pk))])
+        self.import_rows([self.row(organisation="Different Name", organisation_id=str(organisation.pk))])
 
         self.assertEqual(Organisation.objects.count(), 1)
 
     def test_import_csv_finds_existing_organisation_by_name(self):
         Organisation.objects.create(name="Existing Org")
 
-        self.import_rows([self.row(organisation="Existing Org", reference="")])
+        self.import_rows([self.row(organisation="Existing Org", organisation_id="")])
 
         self.assertEqual(Organisation.objects.count(), 1)
 
     def test_import_csv_ignores_lead_government_department(self):
         rows = [
-            self.row(organisation="Parent Organisation", reference="PARENT001"),
+            self.row(organisation="Parent Organisation"),
             self.row(
                 organisation="Child Organisation",
                 lead_government_department="Parent Organisation",
-                reference="CHILD001",
             ),
         ]
 
@@ -431,7 +430,7 @@ class OrganisationAdminImportCSVTest(TestCase):
         self.assertNotIn("parent_organisation", {field.name for field in Organisation._meta.get_fields()})
 
     def test_import_csv_processes_multiple_rows(self):
-        rows = [self.row(organisation=f"Organisation {number}", reference=f"ORG00{number}") for number in range(1, 4)]
+        rows = [self.row(organisation=f"Organisation {number}", organisation_type="MHCLG") for number in range(1, 4)]
 
         self.import_rows(rows)
 
@@ -439,39 +438,39 @@ class OrganisationAdminImportCSVTest(TestCase):
         self.assertEqual(User.objects.count(), 1)
         self.assertEqual(UserProfile.objects.count(), 0)
 
-    def test_find_organisation_by_id_in_reference(self):
+    def test_find_organisation_by_organisation_id(self):
         organisation = Organisation.objects.create(name="Test Org")
 
         found_organisation = self.admin.find_organisation(
-            {"Reference": str(organisation.pk), "Organisation": "Test Org"}
+            {"Organisation ID": str(organisation.pk), "Organisation": "Test Org"}
         )
 
         self.assertEqual(found_organisation, organisation)
 
-    def test_find_organisation_ignores_a_reference_that_is_not_an_id(self):
+    def test_find_organisation_ignores_an_organisation_id_that_is_not_a_number(self):
         organisation = Organisation.objects.create(name="Test Org")
 
-        found_organisation = self.admin.find_organisation({"Reference": "K7Q2M", "Organisation": "Test Org"})
+        found_organisation = self.admin.find_organisation({"Organisation ID": "K7Q2M", "Organisation": "Test Org"})
 
         self.assertEqual(found_organisation, organisation)
 
-    def test_find_organisation_ignores_a_reference_with_non_ascii_digits(self):
+    def test_find_organisation_ignores_an_organisation_id_with_non_ascii_digits(self):
         organisation = Organisation.objects.create(name="Test Org")
 
-        found_organisation = self.admin.find_organisation({"Reference": "²", "Organisation": "Test Org"})
+        found_organisation = self.admin.find_organisation({"Organisation ID": "²", "Organisation": "Test Org"})
 
         self.assertEqual(found_organisation, organisation)
 
-    def test_find_organisation_by_name_when_no_reference(self):
+    def test_find_organisation_by_name_when_no_organisation_id(self):
         organisation = Organisation.objects.create(name="Test Org")
 
-        found_organisation = self.admin.find_organisation({"Reference": "", "Organisation": "Test Org"})
+        found_organisation = self.admin.find_organisation({"Organisation ID": "", "Organisation": "Test Org"})
 
         self.assertEqual(found_organisation, organisation)
 
     def test_find_organisation_returns_none_when_not_found(self):
         found_organisation = self.admin.find_organisation(
-            {"Reference": "NONEXISTENT", "Organisation": "Nonexistent Org"}
+            {"Organisation ID": "NONEXISTENT", "Organisation": "Nonexistent Org"}
         )
 
         self.assertIsNone(found_organisation)
@@ -481,7 +480,7 @@ class OrganisationAdminImportCSVTest(TestCase):
         Organisation.objects.create(name="Org By Name")
 
         found_organisation = self.admin.find_organisation(
-            {"Reference": str(organisation_by_id.pk), "Organisation": "Org By Name"}
+            {"Organisation ID": str(organisation_by_id.pk), "Organisation": "Org By Name"}
         )
 
         self.assertEqual(found_organisation, organisation_by_id)
@@ -491,20 +490,58 @@ class OrganisationAdminImportCSVTest(TestCase):
 
         self.assertEqual(Organisation.objects.get(name="Test Assurer").organisation_type, "independent-assurer")
 
-    def test_import_csv_ignores_removed_organisation_type(self):
-        self.import_rows([self.row(organisation="Test Ministry", organisation_type="Ministerial department")])
+    def test_import_csv_rejects_rows_with_a_removed_blank_or_unknown_type(self):
+        rows = [
+            self.row(organisation="Test Ministry", organisation_type="Ministerial department"),
+            self.row(organisation="Blank Type", organisation_type=""),
+            self.row(organisation="Unknown Type", organisation_type="Invalid Type"),
+            self.row(organisation="Valid Assurer"),
+        ]
 
-        self.assertIsNone(Organisation.objects.get(name="Test Ministry").organisation_type)
+        response, admin_messages = self.import_rows(rows)
 
-    def test_import_csv_ignores_invalid_organisation_type(self):
-        self.import_rows([self.row(organisation_type="Invalid Type")])
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Organisation.objects.count(), 0)
+        self.assertIn(
+            "Type must be one of: MHCLG, Independent assurer. Rows to correct: "
+            "row 2 (Ministerial department), row 3 (blank), row 4 (Invalid Type).",
+            " ".join(admin_messages),
+        )
 
-        self.assertIsNone(Organisation.objects.get(name="Test Organisation").organisation_type)
+    def test_import_csv_rejects_a_legacy_reference_column(self):
+        organisation = Organisation.objects.create(name="Existing Organisation", organisation_type="mhclg")
+        headers = ["Organisation", "Lead Government Department", "Reference", "Type"]
+        # An old all-digit reference (organisation id 1273 generated 26150) must not be read as an id.
+        row = {
+            "Organisation": "Other",
+            "Lead Government Department": "",
+            "Reference": str(organisation.pk),
+            "Type": "MHCLG",
+        }
 
-    def test_import_csv_handles_empty_type_field(self):
-        self.import_rows([self.row()])
+        _response, admin_messages = self.import_rows([row], headers=headers)
 
-        self.assertIsNone(Organisation.objects.get(name="Test Organisation").organisation_type)
+        self.assertIn("The Reference column is no longer supported", admin_messages[0])
+        self.assertIn(
+            "Use the current organisation import headers: Organisation, Lead Government Department, Organisation ID, Type.",
+            admin_messages[0],
+        )
+        self.assertEqual(list(Organisation.objects.values_list("name", flat=True)), ["Existing Organisation"])
+
+    def test_import_csv_rejects_an_organisation_id_that_does_not_exist_or_is_not_a_number(self):
+        rows = [
+            self.row(organisation="Unknown Id", organisation_id="999999"),
+            self.row(organisation="Old Reference", organisation_id="K7Q2M"),
+        ]
+
+        _response, admin_messages = self.import_rows(rows)
+
+        self.assertIn(
+            "Organisation ID must be the ID of an existing organisation, as shown in Django Admin, or left blank. "
+            "Rows to correct: row 2 (999999), row 3 (K7Q2M).",
+            " ".join(admin_messages),
+        )
+        self.assertEqual(Organisation.objects.count(), 0)
 
     def test_import_csv_handles_whitespace_in_type(self):
         self.import_rows([self.row(organisation="MHCLG", organisation_type="  MHCLG  ")])
