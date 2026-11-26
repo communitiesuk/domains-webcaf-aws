@@ -622,6 +622,7 @@ class TestExportSystemsIntegration(TestCase):
       - Organisation body: name, type display, id, and no parent organisation fields
       - System body: name, type display, multi-select fields correctly split into lists,
                      organisation_id, system_id, last_assessed
+      - Organisation files for all three types, each named by its payload organisation_id
       - Total call count: one upload per organisation + one per system
     """
 
@@ -638,6 +639,10 @@ class TestExportSystemsIntegration(TestCase):
             organisation_type="council",
             gss_code="E06000001",
         )
+        cls.assurer_org = Organisation.objects.create(
+            name="Example Assurance Ltd",
+            organisation_type="independent-assurer",
+        )
         cls.system = System.objects.create(
             name="Tax Filing Portal",
             organisation=cls.child_org,
@@ -652,8 +657,8 @@ class TestExportSystemsIntegration(TestCase):
         s3 = MagicMock()
         Command().export_organisation_and_systems("analytics-bucket", s3)
 
-        # 2 organisations + 1 system = 3 put_object calls
-        self.assertEqual(3, s3.put_object.call_count)
+        # 3 organisations (one of each type) + 1 system = 4 put_object calls
+        self.assertEqual(4, s3.put_object.call_count)
 
         # Index all calls by S3 key for order-independent assertions
         calls_by_key = {call.kwargs["Key"]: json.loads(call.kwargs["Body"]) for call in s3.put_object.call_args_list}
@@ -661,7 +666,15 @@ class TestExportSystemsIntegration(TestCase):
         # --- S3 key format ---
         self.assertIn(f"organisations/{self.parent_org.id}.json", calls_by_key)
         self.assertIn(f"organisations/{self.child_org.id}.json", calls_by_key)
+        self.assertIn(f"organisations/{self.assurer_org.id}.json", calls_by_key)
         self.assertIn(f"systems/{self.system.reference}.json", calls_by_key)
+
+        # --- Every organisation file is named by the organisation_id in its own payload ---
+        organisation_files = {key: body for key, body in calls_by_key.items() if key.startswith("organisations/")}
+        self.assertEqual(3, len(organisation_files))
+        for key, body in organisation_files.items():
+            with self.subTest(key=key):
+                self.assertEqual(f"organisations/{body['organisation_id']}.json", key)
 
         # --- Correct bucket on every call ---
         for call in s3.put_object.call_args_list:
@@ -690,6 +703,18 @@ class TestExportSystemsIntegration(TestCase):
                 "legacy_organisation_id": None,
             },
             child_body,
+        )
+
+        assurer_body = calls_by_key[f"organisations/{self.assurer_org.id}.json"]
+        self.assertEqual(
+            {
+                "app_version": "webcaf-2",
+                "organisation_name": "Example Assurance Ltd",
+                "organisation_type": "Independent assurer",
+                "organisation_id": self.assurer_org.id,
+                "legacy_organisation_id": None,
+            },
+            assurer_body,
         )
 
         # --- System: display values, multi-select fields split into lists ---
