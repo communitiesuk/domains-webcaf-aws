@@ -2,6 +2,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from webcaf.webcaf.models import Organisation
+from webcaf.webcaf.utils.council_codes import official_council_gss_codes
 
 
 class OrganisationTest(TestCase):
@@ -168,3 +169,43 @@ class OrganisationRemovedFieldsTest(TestCase):
             for field_name in removed_fields:
                 with self.subTest(model=model.__name__, field_name=field_name):
                     self.assertNotIn(field_name, field_names)
+
+
+class OrganisationOfficialGssCodeTest(TestCase):
+    def test_accepts_an_official_code_for_each_council_prefix(self):
+        for gss_code in ["E06000014", "E07000110", "E08000035", "E09000033", "E10000016", "E47000003"]:
+            with self.subTest(gss_code=gss_code):
+                organisation = Organisation.objects.create(
+                    name=f"Council {gss_code}", organisation_type="council", gss_code=gss_code
+                )
+
+                self.assertIsNotNone(organisation.council_subtype)
+
+    def test_rejects_a_council_code_with_an_unsupported_prefix(self):
+        with self.assertRaises(ValidationError) as context:
+            Organisation.objects.create(name="Unknown Council", organisation_type="council", gss_code="E99000001")
+
+        self.assertEqual(
+            context.exception.message_dict["gss_code"],
+            [
+                "E99000001 is not the GSS code of an English council or combined authority in the ONS list. Check the code."
+            ],
+        )
+
+    def test_rejects_an_unassigned_council_code_with_a_supported_prefix(self):
+        with self.assertRaises(ValidationError) as context:
+            Organisation.objects.create(name="Unassigned Council", organisation_type="council", gss_code="E08000099")
+
+        self.assertIn("E08000099 is not the GSS code", context.exception.message_dict["gss_code"][0])
+
+    def test_rejects_a_council_code_from_outside_england(self):
+        with self.assertRaises(ValidationError):
+            Organisation.objects.create(name="Welsh Council", organisation_type="council", gss_code="W06000015")
+
+    def test_every_official_code_has_a_council_subtype(self):
+        official_codes = official_council_gss_codes()
+
+        self.assertEqual(len(official_codes), 332)
+        for gss_code in official_codes:
+            with self.subTest(gss_code=gss_code):
+                self.assertIn(gss_code[:3], Organisation.COUNCIL_SUBTYPES_BY_GSS_PREFIX)

@@ -4,7 +4,7 @@ LG WebCAF has three organisation types, set in Django Admin:
 
 | Type | Stored value | GSS code |
 |---|---|---|
-| Council | `council` | Required: a unique GSS code, one uppercase letter followed by eight digits |
+| Council | `council` | Required: a unique GSS code from the official ONS list of English councils and combined authorities (see below) |
 | MHCLG | `mhclg` | Optional, usually blank |
 | Independent assurer | `independent-assurer` | Optional, usually blank |
 
@@ -24,8 +24,38 @@ A council's subtype is not stored. It is worked out from the first three charact
 | E10 | County council | E10000016 Kent |
 | E47 | Combined authority | E47000003 West Yorkshire |
 
-A council whose GSS code has any other prefix has no subtype. The subtype is read-only: it is shown in Django Admin
-(the organisation list and form) and on My organisation, and changes only when the GSS code changes.
+Every code in the official list has one of these prefixes, so every council has a subtype. The subtype is read-only: it
+is shown in Django Admin (the organisation list and form) and on My organisation, and changes only when the GSS code
+changes.
+
+## Official council GSS codes
+
+A council's GSS code must be in `webcaf/webcaf/data/council_gss_codes.csv`, the official ONS list of English councils
+and combined authorities. Any other code, including a code with an unsupported prefix (for example `E99000001`), an
+unassigned code with a supported prefix (for example `E08000099`) or a code from outside England, is refused with
+"<code> is not the GSS code of an English council or combined authority in the ONS list". The rule is checked whenever an
+organisation is saved, so it applies to Django Admin and imports alike. MHCLG and independent assurer organisations are
+not checked.
+
+The list has 332 codes, taken from the ONS Open Geography Portal names-and-codes datasets (English codes only):
+
+| ONS dataset | Codes | Count |
+|---|---|---|
+| `LAD_APR_2025_UK_NC_v2` (Local Authority Districts, April 2025) | E06, E07, E08, E09 | 63 + 164 + 36 + 33 |
+| `CTY_DEC_2025_EN_NC` (Counties, December 2025) | E10 | 21 |
+| `CAUTH_MAY_2025_EN_NC` (Combined Authorities, May 2025) | E47 | 15 |
+
+The file's `source` column records the dataset for each code.
+
+### Updating the list
+
+When ONS publishes new codes (usually each April, and after any local government reorganisation):
+
+1. Download the new names-and-codes datasets from the ONS Open Geography Portal
+   (`https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services`), keeping English (`E`) codes only.
+2. Replace the rows in `council_gss_codes.csv`, setting `source` to each dataset's name.
+3. Update the counts above and in `tests/test_models/test_organisation.py`.
+4. Check existing councils: a council whose code is no longer on the list cannot be saved until its code is updated.
 
 ## Organisation identifier
 

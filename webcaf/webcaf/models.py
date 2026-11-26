@@ -28,6 +28,7 @@ from simple_history.models import HistoricalRecords
 from webcaf.webcaf.abcs import FrameworkRouter
 from webcaf.webcaf.notification import send_notify_email
 from webcaf.webcaf.utils import mask_email
+from webcaf.webcaf.utils.council_codes import official_council_gss_codes
 from webcaf.webcaf.utils.references import generate_reference
 
 # Set up a logger for any Notify errors
@@ -108,6 +109,19 @@ class Organisation(models.Model):
             # A non-field error lets those forms reject the save without raising
             # an error for a field they do not contain.
             raise ValidationError("Councils must have a GSS code.")
+        if (
+            self.organisation_type in self.GSS_CODE_REQUIRED_ORGANISATION_TYPES
+            and self.GSS_CODE_VALIDATOR.regex.match(self.gss_code or "")
+            and self.gss_code not in official_council_gss_codes()
+        ):
+            raise ValidationError(
+                {
+                    "gss_code": (
+                        f"{self.gss_code} is not the GSS code of an English council or combined authority "
+                        "in the ONS list. Check the code."
+                    )
+                }
+            )
         super().clean()
 
     def save(self, *args, **kwargs):

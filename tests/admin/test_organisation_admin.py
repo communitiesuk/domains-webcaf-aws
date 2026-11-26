@@ -104,6 +104,18 @@ class OrganisationAdminTest(TestCase):
         self.assertEqual(organisation.organisation_type, "council")
         self.assertEqual(organisation.gss_code, "E47000001")
 
+    def test_form_rejects_a_council_code_not_in_the_ons_list(self):
+        form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
+        form = form_class(data={"name": "Test Council", "organisation_type": "council", "gss_code": "E08000099"})
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["gss_code"],
+            [
+                "E08000099 is not the GSS code of an English council or combined authority in the ONS list. Check the code."
+            ],
+        )
+
     def test_form_requires_an_organisation_type(self):
         form_class = self.admin.get_form(self.factory.get("/admin/webcaf/organisation/add/"))
         form = form_class(data={"name": "Untyped Organisation", "organisation_type": "", "gss_code": ""})
