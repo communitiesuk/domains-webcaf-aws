@@ -1,5 +1,5 @@
 from django.contrib.auth.models import User
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import TestCase
 
 from webcaf.webcaf.models import Organisation, System, UserProfile
@@ -100,3 +100,23 @@ class TestAddLocalUsers(TestCase):
 
         for system in systems:
             self.assertEqual(system.organisation, org)
+
+
+class LocalSeedOrganisationTest(TestCase):
+    """The supported local seed process leaves organisation ids to the database (CS-684)."""
+
+    def test_another_organisation_can_be_created_after_seeding(self):
+        call_command("add_local_seed_data")
+        council = Organisation.objects.get()
+
+        organisation = Organisation.objects.create(name="Another Organisation", organisation_type="mhclg")
+
+        self.assertEqual(
+            (council.name, council.organisation_type, council.gss_code), ("An Organisation", "council", "E06000001")
+        )
+        self.assertNotEqual(organisation.pk, council.pk)
+        self.assertEqual(Organisation.objects.count(), 2)
+
+    def test_add_organisations_command_is_retired(self):
+        with self.assertRaises(CommandError):
+            call_command("add_organisations")
