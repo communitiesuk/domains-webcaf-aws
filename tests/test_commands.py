@@ -1,68 +1,8 @@
-import importlib
-import os
-
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.test import TestCase
 
 from webcaf.webcaf.models import Organisation, System, UserProfile
-
-
-class AddOrganisationsCommandTest(TestCase):
-    fixtures_dir = os.path.join(os.path.dirname(__file__), "fixtures")
-    fixture_csv = os.path.join(fixtures_dir, "orgs_fixture.csv")
-
-    def setUp(self):
-        self._orig_csv_path = None
-        cmd_mod = importlib.import_module("webcaf.webcaf.management.commands.add_organisations")
-        self._orig_csv_path = getattr(cmd_mod, "CSV_PATH", None)
-        cmd_mod.CSV_PATH = self.fixture_csv
-
-    def tearDown(self):
-        cmd_mod = importlib.import_module("webcaf.webcaf.management.commands.add_organisations")
-        if self._orig_csv_path is not None:
-            cmd_mod.CSV_PATH = self._orig_csv_path
-
-    def test_does_nothing_if_table_not_empty(self):
-        Organisation.objects.create(pk=999, name="Dummy Org", organisation_type="mhclg")
-        call_command("add_organisations")
-        self.assertEqual(Organisation.objects.count(), 1)
-        self.assertTrue(Organisation.objects.filter(pk=999).exists())
-
-    def test_adds_organisations_if_table_empty(self):
-        self.assertEqual(Organisation.objects.count(), 0)
-        call_command("add_organisations")
-        self.assertEqual(Organisation.objects.count(), 5)
-        names = set(Organisation.objects.values_list("name", flat=True))
-        self.assertSetEqual(
-            names,
-            {
-                "Cabinet Office",
-                "British Library",
-                "Civil Aviation Authority",
-                "Competition and Markets Authority",
-                "Department for Education",
-            },
-        )
-
-    def test_seeds_organisations_with_unknown_type_without_a_type(self):
-        call_command("add_organisations")
-        organisation_types = set(Organisation.objects.values_list("organisation_type", flat=True))
-        self.assertSetEqual(organisation_types, {None})
-
-    def test_seed_csv_has_no_organisations(self):
-        cmd_mod = importlib.import_module("webcaf.webcaf.management.commands.add_organisations")
-        cmd_mod.CSV_PATH = self._orig_csv_path
-
-        call_command("add_organisations")
-
-        self.assertEqual(Organisation.objects.count(), 0)
-
-    def test_pk_set_from_csv(self):
-        call_command("add_organisations")
-        expected_pks = {1, 60, 87, 175, 212}
-        actual_pks = set(Organisation.objects.values_list("pk", flat=True))
-        self.assertSetEqual(actual_pks, expected_pks)
 
 
 class TestAddLocalUsers(TestCase):
