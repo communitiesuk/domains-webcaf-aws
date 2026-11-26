@@ -42,3 +42,20 @@ class MyOrganisationViewTest(BaseViewTest):
         for path in [f"/my-organisation/{profile.id}/contact", f"/my-organisation/{profile.id}/type"]:
             with self.subTest(path=path):
                 self.assertEqual(client.get(path).status_code, 404)
+
+    def test_post_is_refused_and_leaves_the_organisation_unchanged(self):
+        self.test_organisation.organisation_type = "council"
+        self.test_organisation.gss_code = "E08000035"
+        self.test_organisation.save()
+        client, profile = self._login_with_role("organisation_lead", self.test_organisation)
+
+        response = client.post(
+            reverse("my-organisation", kwargs={"id": profile.id}),
+            {"name": "Renamed", "organisation_type": "mhclg", "gss_code": ""},
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.test_organisation.refresh_from_db()
+        self.assertEqual(self.test_organisation.name, self.organisation_name)
+        self.assertEqual(self.test_organisation.organisation_type, "council")
+        self.assertEqual(self.test_organisation.gss_code, "E08000035")
