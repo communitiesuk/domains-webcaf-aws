@@ -268,7 +268,11 @@ class OrganisationAdminImportCSVTest(TestCase):
             gss_code="E06000001",
         )
         response, admin_messages = self.import_rows(
-            [self.row(organisation=existing_council.name, organisation_id=str(existing_council.pk), organisation_type="")]
+            [
+                self.row(
+                    organisation=existing_council.name, organisation_id=str(existing_council.pk), organisation_type=""
+                )
+            ]
         )
 
         self.assertEqual(response.status_code, 302)
