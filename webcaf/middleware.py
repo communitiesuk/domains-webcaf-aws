@@ -13,6 +13,15 @@ from webcaf.webcaf.utils.session import SessionUtil
 log_context: contextvars.ContextVar = contextvars.ContextVar("log_context", default={})
 
 
+def disable_dns_prefetch(get_response):
+    def middleware(request):
+        response = get_response(request)
+        response["X-DNS-Prefetch-Control"] = "off"
+        return response
+
+    return middleware
+
+
 class DisableCacheMiddleware:
     """
     Middleware that disables caching for all requests.
