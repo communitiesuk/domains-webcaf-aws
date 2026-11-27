@@ -369,7 +369,7 @@ class ConcurrentRoleGrantTest(TransactionTestCase):
         self.assertEqual([row.history_type for row in history], ["+", "-"])
         self.assertTrue(all(row.history_user_id == actor.pk for row in history))
 
-    def run_reclassification_race(self, grant_first, reconstructed=False):
+    def run_reclassification_race(self, grant_first, reconstructed=False, full_save=False):
         actor = User.objects.create_superuser(username="reclassification-operator", password=None)
         organisation = Organisation.objects.create(
             name="Reclassification council", organisation_type="council", gss_code="E06000001"
@@ -414,7 +414,7 @@ class ConcurrentRoleGrantTest(TransactionTestCase):
                             grant_role(profile.pk, role.pk, operator)
                         else:
                             current.organisation_type = "mhclg"
-                            if reconstructed:
+                            if reconstructed or full_save:
                                 current.save()
                             else:
                                 current.save(update_fields=["organisation_type"])
@@ -446,3 +446,9 @@ class ConcurrentRoleGrantTest(TransactionTestCase):
 
     def test_reconstructed_reclassification_blocks_concurrent_ineligible_grant(self):
         self.run_reclassification_race(grant_first=False, reconstructed=True)
+
+    def test_grant_blocks_a_normal_full_save_reclassification(self):
+        self.run_reclassification_race(grant_first=True, full_save=True)
+
+    def test_normal_full_save_reclassification_blocks_concurrent_ineligible_grant(self):
+        self.run_reclassification_race(grant_first=False, full_save=True)

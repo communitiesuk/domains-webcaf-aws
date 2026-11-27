@@ -5,7 +5,7 @@ from django import forms
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import QuerySet
 from django.db.transaction import atomic
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.generic import DeleteView, FormView, UpdateView
 
@@ -85,14 +85,13 @@ class UserProfileView(UserRoleCheckMixin, UpdateView):
 
     def get_object(self, queryset: QuerySet[Any, Any] | None = None) -> Any:
         current_profile = SessionUtil.get_current_user_profile(request=self.request)
-        if "user_profile_id" in self.kwargs and current_profile:
-            # When editing a profile
-            try:
-                return UserProfile.objects.get(
-                    id=self.kwargs["user_profile_id"], organisation=current_profile.organisation
-                )
-            except UserProfile.DoesNotExist:
-                return None
+        if "user_profile_id" in self.kwargs:
+            if current_profile is None:
+                raise PermissionDenied("You do not have an active user profile")
+            # An unavailable edit target must never fall through to creation.
+            return get_object_or_404(
+                UserProfile, id=self.kwargs["user_profile_id"], organisation_id=current_profile.organisation_id
+            )
         # Return None for new user creation
         return None
 

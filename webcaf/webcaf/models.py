@@ -147,7 +147,7 @@ class Organisation(models.Model):
         validation_instance = self
         if self.pk is not None:
             # A reconstructed instance may update an existing row even when
-            # _state.adding is True. A missing row is a genuine insert.
+            # _state.adding is True. Only a new instance may insert a missing row.
             stored = (
                 type(self)
                 .objects.select_for_update()
@@ -155,6 +155,10 @@ class Organisation(models.Model):
                 .values("organisation_type", "gss_code")
                 .first()
             )
+            if stored is None and not self._state.adding:
+                raise ValidationError(
+                    "This organisation no longer exists. Reload it before saving.", code="stale_organisation"
+                )
             if stored is not None and (update_fields is not None or self._state.adding):
                 # Validate a consistent snapshot of the fields being persisted,
                 # without discarding unsaved changes on the caller's instance.
@@ -498,7 +502,9 @@ class UserProfile(models.Model):
             if not update_fields:
                 return
 
-        if self.pk is not None and type(self).objects.filter(pk=self.pk).exists():
+        # Loaded instances must take the locking path even if deleted, so a
+        # stale save cannot fall back to inserting the membership again.
+        if self.pk is not None and (not self._state.adding or type(self).objects.filter(pk=self.pk).exists()):
             from webcaf.webcaf.utils.role_assignments import lock_profile
 
             # Respect both relation names and *_id names in update_fields, and

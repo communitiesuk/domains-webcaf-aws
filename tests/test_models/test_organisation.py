@@ -136,6 +136,24 @@ class OrganisationTest(TestCase):
 
         self.assertEqual(Organisation.objects.get(pk=98765).name, "Explicit primary key")
 
+    def test_stale_loaded_organisation_cannot_recreate_a_deleted_row(self):
+        for index, update_fields in enumerate([None, ["name"]]):
+            with self.subTest(update_fields=update_fields):
+                original = Organisation.objects.create(name=f"Deleted organisation {index}", organisation_type="mhclg")
+                stale = Organisation.objects.get(pk=original.pk)
+                organisation_id = original.pk
+                original.delete()
+                history_count = Organisation.history.filter(id=organisation_id).count()
+                self.assertFalse(stale._state.adding)
+                stale.name = f"Should not be recreated {index}"
+
+                with self.assertRaises(ValidationError) as raised:
+                    stale.save(update_fields=update_fields)
+
+                self.assertEqual(raised.exception.code, "stale_organisation")
+                self.assertFalse(Organisation.objects.filter(pk=organisation_id).exists())
+                self.assertEqual(Organisation.history.filter(id=organisation_id).count(), history_count)
+
     def test_reconstructed_organisation_can_update_its_own_unique_gss_code(self):
         original = Organisation.objects.create(
             name="Reconstructed council", organisation_type="council", gss_code="E06000001"

@@ -48,6 +48,37 @@ class TestUserProfileView(BaseViewTest):
         self.target_profile.refresh_from_db()
         self.assertEqual(self.target_profile.role, "organisation_user")
 
+    def test_missing_and_cross_organisation_edit_targets_cannot_create_memberships(self):
+        other_profile = UserProfile.objects.get(
+            organisation=self.org_map["Medium organisation"]["organisation"], role="organisation_user"
+        )
+        users_before = list(User.objects.order_by("pk").values())
+        profiles_before = list(UserProfile.objects.order_by("pk").values())
+        history_count = UserProfile.history.count()
+
+        for profile_id in [999999, other_profile.pk]:
+            for method in ["get", "post"]:
+                with self.subTest(profile_id=profile_id, method=method):
+                    url = reverse("edit-profile", kwargs={"user_profile_id": profile_id})
+                    if method == "get":
+                        response = self.client.get(url)
+                    else:
+                        response = self.client.post(
+                            url,
+                            {
+                                "email": "must-not-be-created@example.gov.uk",
+                                "first_name": "Unexpected",
+                                "last_name": "Member",
+                                "role": "organisation_user",
+                                "action": "confirm",
+                            },
+                        )
+
+                    self.assertEqual(response.status_code, 404)
+                    self.assertEqual(list(User.objects.order_by("pk").values()), users_before)
+                    self.assertEqual(list(UserProfile.objects.order_by("pk").values()), profiles_before)
+                    self.assertEqual(UserProfile.history.count(), history_count)
+
     def test_legacy_user_management_cannot_transfer_lg_assignments_by_email(self):
         self.test_organisation.organisation_type = "mhclg"
         self.test_organisation.save(update_fields=["organisation_type"])

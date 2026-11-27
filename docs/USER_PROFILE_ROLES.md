@@ -42,6 +42,8 @@ assignments. Revoke assignments before changing a profile's user or organisation
 normal model saves enforce this under the same locks as grants, including partial
 and reconstructed-instance saves. Forms retain early validation for friendly errors.
 Case-only email edits resolving to the same account remain allowed.
+Loaded organisations and memberships cannot recreate deleted rows through a stale
+save. Missing or cross-organisation edit targets return 404 rather than creating a membership.
 
 Direct membership deletion and the legacy/Admin removal paths require assignments
 to be explicitly revoked first. Deletion checks are locked against concurrent grants;

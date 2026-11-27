@@ -406,6 +406,28 @@ class UserProfileRoleTest(TestCase):
 
         self.assertTrue(UserProfile.objects.filter(pk=98765, user=self.granter).exists())
 
+    def test_stale_loaded_profile_cannot_recreate_a_deleted_membership(self):
+        cases = [(None, False), (["role"], False), (None, True)]
+        for index, (update_fields, deferred) in enumerate(cases):
+            with self.subTest(update_fields=update_fields, deferred=deferred):
+                user = User.objects.create_user(username=f"deleted-profile-member-{index}")
+                original = UserProfile.objects.create(
+                    user=user, organisation=self.organisation, role="organisation_user"
+                )
+                profiles = UserProfile.objects.only("role") if deferred else UserProfile.objects.all()
+                stale = profiles.get(pk=original.pk)
+                profile_id = original.pk
+                original.delete()
+                history_count = UserProfile.history.filter(id=profile_id).count()
+                self.assertFalse(stale._state.adding)
+                stale.role = "organisation_lead"
+
+                with self.assertRaisesMessage(ValidationError, "The profile changed."):
+                    stale.save(update_fields=update_fields)
+
+                self.assertFalse(UserProfile.objects.filter(pk=profile_id).exists())
+                self.assertEqual(UserProfile.history.filter(id=profile_id).count(), history_count)
+
     def test_database_rejects_duplicate_memberships_even_for_a_different_legacy_role(self):
         with self.assertRaises(IntegrityError), transaction.atomic():
             UserProfile.objects.create(user=self.user, organisation=self.organisation, role="organisation_lead")

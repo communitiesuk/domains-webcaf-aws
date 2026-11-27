@@ -1,11 +1,14 @@
+from unittest.mock import patch
+
 from django.contrib import admin
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.test import RequestFactory, TestCase
+from django.db import connection
+from django.test import RequestFactory, TestCase, TransactionTestCase
 from django.urls import reverse
 
 from webcaf.webcaf.models import Organisation, UserProfile, UserProfileRole, UserRole
-from webcaf.webcaf.utils.role_assignments import grant_role, revoke_role
+from webcaf.webcaf.utils.role_assignments import grant_role, revoke_role, validate_grant
 
 
 class UserProfileRoleAdminTest(TestCase):
@@ -209,3 +212,41 @@ class UserProfileRoleAdminTest(TestCase):
         self.assertEqual(history.count(), 2)
         self.assertEqual(history.latest().history_type, "-")
         self.assertEqual(history.latest().history_user_id, self.operator.pk)
+
+
+class UserProfileRoleAdminTransactionTest(TransactionTestCase):
+    def test_admin_validation_and_grant_share_the_request_transaction(self):
+        operator = User.objects.create_superuser(username="admin-transaction-operator", password=None)
+        organisation = Organisation.objects.create(name="Admin transaction organisation", organisation_type="mhclg")
+        profile = UserProfile.objects.create(user=operator, organisation=organisation)
+        role, _ = UserRole.objects.get_or_create(
+            code="mhclg_super_user", defaults={"role_name": "MHCLG Super User", "group": "mhclg"}
+        )
+        self.client.force_login(operator)
+        request_transactions = []
+
+        def check_validation(*args, **kwargs):
+            # TransactionTestCase does not supply a surrounding test transaction:
+            # this outer transaction must come from Django's Admin POST handler.
+            self.assertTrue(connection.in_atomic_block)
+            request_transactions.append(connection.atomic_blocks[0])
+            return validate_grant(*args, **kwargs)
+
+        def check_grant(*args, **kwargs):
+            self.assertTrue(connection.in_atomic_block)
+            self.assertIs(connection.atomic_blocks[0], request_transactions[0])
+            return grant_role(*args, **kwargs)
+
+        with (
+            patch("webcaf.webcaf.admin.validate_grant", side_effect=check_validation),
+            patch("webcaf.webcaf.admin.grant_role", side_effect=check_grant),
+        ):
+            response = self.client.post(
+                reverse("admin:webcaf_userprofilerole_add"),
+                {"user_profile": profile.pk, "user_role": role.pk, "_save": "Save"},
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(request_transactions), 1)
+        self.assertFalse(connection.in_atomic_block)
+        self.assertEqual(profile.role_assignments.count(), 1)
