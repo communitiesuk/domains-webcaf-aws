@@ -12,7 +12,13 @@ from webcaf.webcaf.forms.user_profile import UserProfileForm
 from webcaf.webcaf.models import Organisation, UserProfile
 
 
-def profile_form(email, instance=None):
+def profile_form(email, instance=None, organisation=None):
+    if organisation is None:
+        organisation = (
+            instance.organisation
+            if instance and instance.organisation_id
+            else Organisation.objects.get_or_create(name="Form target organisation")[0]
+        )
     return UserProfileForm(
         data={
             "email": email,
@@ -22,6 +28,7 @@ def profile_form(email, instance=None):
             "action": "confirm",
         },
         instance=instance,
+        organisation=organisation,
     )
 
 
@@ -87,7 +94,9 @@ class UserProfileFormTest(TestCase):
 
     def test_case_only_edit_keeps_the_same_user_and_profile(self):
         user = User.objects.create(username="Person@Example.gov.uk", email="Person@Example.gov.uk")
-        profile = UserProfile.objects.create(user=user, role="organisation_user")
+        profile = UserProfile.objects.create(
+            user=user, role="organisation_user", organisation=Organisation.objects.create(name="Existing organisation")
+        )
         form = profile_form("person@example.gov.uk", instance=profile)
         self.assertTrue(form.is_valid(), form.errors)
 
@@ -123,7 +132,9 @@ class UserProfileFormTest(TestCase):
     def test_existing_duplicates_are_not_merged_or_modified(self):
         first = User.objects.create_user(username="first", email="Person@example.gov.uk", first_name="First")
         second = User.objects.create_user(username="second", email="person@example.gov.uk", first_name="Second")
-        profile = UserProfile.objects.create(user=first, role="organisation_lead")
+        profile = UserProfile.objects.create(
+            user=first, role="organisation_lead", organisation=Organisation.objects.create(name="Existing organisation")
+        )
         users_before = list(User.objects.order_by("pk").values())
         profiles_before = list(UserProfile.objects.order_by("pk").values())
 
@@ -197,7 +208,9 @@ class UserProfileFormTest(TestCase):
 
     def test_two_prevalidated_forms_reuse_one_user(self):
         first = profile_form("Person@example.gov.uk")
-        second = profile_form("PERSON@example.gov.uk")
+        second = profile_form(
+            "PERSON@example.gov.uk", organisation=Organisation.objects.create(name="Second organisation")
+        )
         self.assertTrue(first.is_valid(), first.errors)
         self.assertTrue(second.is_valid(), second.errors)
 
@@ -207,21 +220,84 @@ class UserProfileFormTest(TestCase):
         self.assertEqual(User.objects.count(), 1)
         self.assertEqual(first_profile.user_id, second_profile.user_id)
 
+    def test_existing_membership_is_a_validation_error_without_modifying_it(self):
+        user = User.objects.create_user(
+            username="existing-member", email="Person@example.gov.uk", first_name="Original"
+        )
+        organisation = Organisation.objects.create(name="Existing membership organisation")
+        profile = UserProfile.objects.create(user=user, organisation=organisation, role="organisation_lead")
+        form = profile_form("PERSON@EXAMPLE.GOV.UK", organisation=organisation)
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(form.errors.as_data()["email"][0].code, "duplicate_membership")
+        profile.refresh_from_db()
+        user.refresh_from_db()
+        self.assertEqual(profile.role, "organisation_lead")
+        self.assertEqual(user.first_name, "Original")
+
+    def test_membership_created_after_validation_is_refused_without_overwriting(self):
+        form = profile_form("Person@example.gov.uk")
+        self.assertTrue(form.is_valid(), form.errors)
+        user = User.objects.create_user(username="existing-member", email="Person@example.gov.uk")
+        profile = UserProfile.objects.create(
+            user=user, organisation=form.instance.organisation, role="organisation_lead"
+        )
+
+        with self.assertRaises(ValidationError):
+            form.save()
+
+        profile.refresh_from_db()
+        self.assertEqual(profile.role, "organisation_lead")
+        self.assertEqual(UserProfile.objects.count(), 1)
+
 
 class ConcurrentUserProfileCreationTest(TransactionTestCase):
+    def test_simultaneous_membership_creation_returns_one_validation_error(self):
+        organisation = Organisation.objects.create(name="Concurrent membership organisation")
+        user = User.objects.create_user(username="existing-member", email="Person@example.gov.uk")
+        barrier = Barrier(2)
+        original_save = UserProfile.save
+
+        def synchronised_save(profile, *args, **kwargs):
+            if profile.pk is None:
+                barrier.wait(timeout=10)
+            return original_save(profile, *args, **kwargs)
+
+        def attempt(email):
+            close_old_connections()
+            try:
+                form = profile_form(email, organisation=organisation)
+                if not form.is_valid():
+                    raise AssertionError(form.errors)
+                try:
+                    form.save()
+                    return "created"
+                except ValidationError:
+                    return "refused"
+            finally:
+                close_old_connections()
+
+        with patch.object(UserProfile, "save", synchronised_save), ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(attempt, ["Person@example.gov.uk", "PERSON@example.gov.uk"]))
+
+        self.assertCountEqual(results, ["created", "refused"])
+        self.assertEqual(UserProfile.objects.filter(user=user, organisation=organisation).count(), 1)
+
     def test_simultaneous_case_variants_create_only_one_user(self):
         barrier = Barrier(2)
         original_create = QuerySet.create
+        organisations = [Organisation.objects.create(name=f"Concurrent organisation {index}") for index in range(2)]
 
         def synchronised_create(queryset, **kwargs):
             if queryset.model is User:
                 barrier.wait(timeout=10)
             return original_create(queryset, **kwargs)
 
-        def create_profile(email):
+        def create_profile(values):
+            email, organisation = values
             close_old_connections()
             try:
-                form = profile_form(email)
+                form = profile_form(email, organisation=organisation)
                 if not form.is_valid():
                     raise AssertionError(form.errors)
                 return form.save().user_id
@@ -229,7 +305,9 @@ class ConcurrentUserProfileCreationTest(TransactionTestCase):
                 close_old_connections()
 
         with patch.object(QuerySet, "create", synchronised_create), ThreadPoolExecutor(max_workers=2) as executor:
-            results = list(executor.map(create_profile, ("Person@example.gov.uk", "PERSON@example.gov.uk")))
+            results = list(
+                executor.map(create_profile, zip(("Person@example.gov.uk", "PERSON@example.gov.uk"), organisations))
+            )
 
         self.assertEqual(results[0], results[1])
         self.assertEqual(User.objects.filter(email__iexact="person@example.gov.uk").count(), 1)

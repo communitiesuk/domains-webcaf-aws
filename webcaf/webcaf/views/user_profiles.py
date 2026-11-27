@@ -47,6 +47,14 @@ class UserProfileView(UserRoleCheckMixin, UpdateView):
     form_class = UserProfileForm
     logger = logging.getLogger("UserProfileView")
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        profile = SessionUtil.get_current_user_profile(self.request)
+        if profile is None:
+            raise PermissionDenied("You do not have an active user profile")
+        kwargs["organisation"] = profile.organisation
+        return kwargs
+
     def get_allowed_roles(self) -> list[str]:
         return ["cyber_advisor", "organisation_lead"]
 

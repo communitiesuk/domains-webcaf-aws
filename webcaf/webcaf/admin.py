@@ -34,6 +34,8 @@ from webcaf.webcaf.models import (
     System,
     Tip,
     UserProfile,
+    UserProfileRole,
+    UserRole,
 )
 from webcaf.webcaf.tip.util import RecommendationService
 from webcaf.webcaf.utils.excel_importer import (
@@ -42,6 +44,7 @@ from webcaf.webcaf.utils.excel_importer import (
     excel_framework_id,
     excel_to_assessment_json_with_raw,
 )
+from webcaf.webcaf.utils.role_assignments import grant_role, revoke_role, validate_grant
 from webcaf.webcaf.views.system import SystemForm
 
 
@@ -248,6 +251,75 @@ class UserProfileAdmin(SimpleHistoryAdmin):
     @admin.display(ordering="organisation_name", description="Organisation")
     def organisation_name(self, obj):
         return obj.organisation_name
+
+
+@admin.register(UserRole)
+class UserRoleAdmin(admin.ModelAdmin):
+    list_display = ["code", "role_name", "group"]
+    search_fields = ["code", "role_name"]
+    readonly_fields = ["code", "group"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+class UserProfileRoleAdminForm(forms.ModelForm):
+    actor = None
+
+    class Meta:
+        model = UserProfileRole
+        fields = ["user_profile", "user_role"]
+
+    def clean(self):
+        data = super().clean()
+        profile = data.get("user_profile")
+        role = data.get("user_role")
+        if profile and role:
+            validate_grant(profile.pk, role.pk, self.actor)
+            self.instance.organisation = profile.organisation
+        return data
+
+
+@admin.register(UserProfileRole)
+class UserProfileRoleAdmin(SimpleHistoryAdmin):
+    form = UserProfileRoleAdminForm
+    list_display = ["user_profile", "user_role", "organisation", "granted_by", "granted_at"]
+    list_select_related = [
+        "user_profile__user",
+        "user_profile__organisation",
+        "user_role",
+        "organisation",
+        "granted_by",
+    ]
+    autocomplete_fields = ["user_profile", "user_role"]
+    readonly_fields = ["organisation", "granted_by", "granted_at"]
+    actions = None
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        form.actor = request.user
+        return form
+
+    def has_change_permission(self, request, obj=None):
+        # Revoke and grant instead of changing the identity of an existing grant.
+        return False
+
+    def save_model(self, request, obj, form, change):
+        saved = grant_role(obj.user_profile_id, obj.user_role_id, request.user)
+        obj.pk = saved.pk
+        obj.organisation = saved.organisation
+        obj.granted_by = saved.granted_by
+        obj.granted_at = saved.granted_at
+        obj._state = saved._state
+
+    def delete_model(self, request, obj):
+        revoke_role(obj.pk, request.user)
+
+    def history_form_view(self, request, object_id, version_id, extra_context=None):
+        raise PermissionDenied("Historical grants cannot be restored without current policy validation.")
 
 
 class OrganisationEmailDomainAdminForm(forms.ModelForm):

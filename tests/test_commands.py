@@ -131,13 +131,13 @@ class TestAddLocalUsers(TestCase):
             email="admin@example.gov.uk",
             password="password",  # pragma: allowlist secret
         )
-        profile_1 = UserProfile.objects.create(user=user_1)
+        profile_1 = UserProfile.objects.create(user=user_1, organisation=Organisation.objects.get(name="TestOrg"))
         user_2 = User.objects.create_user(
             username="alice@example.gov.uk",
             email="alice@example.gov.uk",
             password="password",  # pragma: allowlist secret
         )
-        profile_2 = UserProfile.objects.create(user=user_2)
+        profile_2 = UserProfile.objects.create(user=user_2, organisation=Organisation.objects.get(name="TestOrg"))
         profile_1_orig_pk = profile_1.pk
         profile_2_orig_pk = profile_2.pk
         call_command("add_local_seed_data")

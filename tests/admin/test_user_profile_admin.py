@@ -14,14 +14,13 @@ class UserProfileAdminListTest(TestCase):
         )
         self.client.force_login(self.admin)
 
-    def test_list_renders_with_a_profile_that_has_no_organisation(self):
+    def test_list_renders_valid_memberships_and_does_not_require_every_user_to_have_one(self):
         organisation = Organisation.objects.create(name="Test Council")
         UserProfile.objects.create(user=self.admin, organisation=organisation, role="cyber_advisor")
         orphan = User.objects.create_user(username="orphan@example.gov.uk", email="orphan@example.gov.uk")
-        UserProfile.objects.create(user=orphan)
 
         response = self.client.get(reverse("admin:webcaf_userprofile_changelist"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "No organisation")
-        self.assertContains(response, "orphan@example.gov.uk")
+        self.assertContains(response, "Test Council")
+        self.assertFalse(UserProfile.objects.filter(user=orphan).exists())

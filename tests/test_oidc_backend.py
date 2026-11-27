@@ -11,7 +11,7 @@ from django.core.exceptions import SuspiciousOperation
 from django.test import TestCase, override_settings
 
 from webcaf.auth import EMAIL_DOMAIN_REJECTED_SESSION_KEY, OIDCBackend
-from webcaf.webcaf.models import AllowedEmailDomain, UserProfile
+from webcaf.webcaf.models import AllowedEmailDomain, Organisation, UserProfile
 
 User = get_user_model()
 
@@ -91,7 +91,9 @@ class OIDCBackendIntegrationTest(TestCase):
     @override_settings(SSO_MODE="internal-access")
     def test_internal_access_links_email_with_different_username_and_preserves_profile(self):
         existing = User.objects.create_user(username="legacy-user", email=CLAIMS["email"].upper())
-        profile = UserProfile.objects.create(user=existing, role="organisation_user")
+        profile = UserProfile.objects.create(
+            user=existing, role="organisation_user", organisation=Organisation.objects.create(name="OIDC organisation")
+        )
         AllowedEmailDomain.objects.all().delete()
 
         with patch.object(self.backend, "get_userinfo", return_value=CLAIMS):

@@ -1,5 +1,6 @@
 import logging
 import typing
+from copy import copy
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -110,6 +111,10 @@ class Organisation(models.Model):
             # an error for a field they do not contain.
             raise ValidationError("Councils must have a GSS code.")
         self._check_official_council_gss_code(self.organisation_type, self.gss_code)
+        if self.pk:
+            from webcaf.webcaf.utils.role_assignments import validate_organisation_role_groups
+
+            validate_organisation_role_groups(self.pk, self.organisation_type)
         super().clean()
 
     @classmethod
@@ -129,14 +134,25 @@ class Organisation(models.Model):
                 }
             )
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
         if self.gss_code == "":
             self.gss_code = None
 
+        validation_instance = self
+        if self.pk and not self._state.adding:
+            stored = type(self).objects.select_for_update().values("organisation_type").get(pk=self.pk)
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None and "organisation_type" not in update_fields:
+                # clean() must use the type being stored, without discarding an
+                # unsaved type change on the caller's instance.
+                validation_instance = copy(self)
+                validation_instance.organisation_type = stored["organisation_type"]
+
         # Validate only the new field here so existing Organisation save behaviour
         # remains unchanged. ModelForms still run normal validation for every field.
         excluded_fields = {field.name for field in self._meta.fields if field.name != "gss_code"}
-        self.full_clean(exclude=excluded_fields)
+        validation_instance.full_clean(exclude=excluded_fields)
 
         update_fields = kwargs.get("update_fields")
         if self.pk is not None and update_fields is not None:
@@ -449,12 +465,25 @@ class UserProfile(models.Model):
     ]
     # Do this rather than add a foreign key to Organisation, in case we need a many-to-many relationship later
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="profiles")
-    organisation = models.ForeignKey(
-        Organisation, on_delete=models.CASCADE, related_name="members", null=True, blank=True
-    )
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name="members")
     role = models.CharField(max_length=255, null=True, blank=True, choices=ROLE_CHOICES)
 
     history = HistoricalRecords()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["id", "organisation"], name="unique_profile_id_organisation"),
+            models.UniqueConstraint(fields=["user", "organisation"], name="unique_user_organisation_profile"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.pk:
+            stored_organisation_id = (
+                type(self).objects.filter(pk=self.pk).values_list("organisation_id", flat=True).first()
+            )
+            if stored_organisation_id != self.organisation_id and self.role_assignments.exists():
+                raise ValidationError("Remove role assignments before changing the profile's organisation.")
 
     @classmethod
     def get_role_id(cls, role_name) -> str | None:
@@ -471,10 +500,63 @@ class UserProfile(models.Model):
         return None
 
     def __str__(self):
-        # organisation is optional on this model, so a profile without one
-        # must still have a string form: the admin list calls str() on every row.
-        organisation_name = self.organisation.name if self.organisation else "No organisation"
+        # Historical and unsaved profiles may still have no organisation.
+        organisation_name = self.organisation.name if self.organisation_id else "No organisation"
         return f"{self.user.email} - {organisation_name} - ({self.get_role_display()})"
+
+
+class UserRole(models.Model):
+    """Role catalogue seeded by stable code; permission reads switch separately."""
+
+    class Group(models.TextChoices):
+        COUNCIL = "council", "Council"
+        MHCLG = "mhclg", "MHCLG"
+        ASSURER = "assurer", "Independent assurer"
+
+    code = models.SlugField(max_length=64, unique=True)
+    role_name = models.CharField(max_length=255)
+    group = models.CharField(max_length=16, choices=Group.choices)
+
+    class Meta:
+        ordering = ["code"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(group__in=["council", "mhclg", "assurer"]), name="valid_user_role_group"
+            ),
+        ]
+
+    def __str__(self):
+        return self.role_name
+
+
+class UserProfileRole(models.Model):
+    """LG role assignments; application permission reads still use UserProfile.role."""
+
+    _history_user: User | None  # Property supplied by django-simple-history.
+
+    user_profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="role_assignments")
+    user_role = models.ForeignKey(UserRole, on_delete=models.PROTECT, related_name="profile_assignments")
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name="role_assignments")
+    # Keep the assignment and original history if its granting user is deleted.
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="profile_role_grants",
+    )
+    granted_at = models.DateTimeField(default=django_utils_timezone.now, editable=False)
+
+    history = HistoricalRecords()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user_profile", "user_role"], name="unique_profile_role"),
+        ]
+        # Migration 0046 adds the database-only composite organisation/profile FK.
+
+    def __str__(self):
+        return f"Profile {self.user_profile_id}: role {self.user_role_id}"
 
 
 class AllowedEmailDomain(models.Model):

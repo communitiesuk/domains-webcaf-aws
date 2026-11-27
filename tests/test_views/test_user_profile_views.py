@@ -31,6 +31,22 @@ class TestUserProfileView(BaseViewTest):
         session["current_profile_id"] = self.org_lead_profile.id
         session.save()
 
+    def test_duplicate_membership_is_a_form_error_not_a_server_error(self):
+        response = self.client.post(
+            reverse("create-new-profile"),
+            data={
+                "email": self.target_user.email.upper(),
+                "role": "organisation_lead",
+                "first_name": "Changed",
+                "last_name": "Name",
+                "action": "confirm",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, UserProfileForm.duplicate_membership_message)
+        self.target_profile.refresh_from_db()
+        self.assertEqual(self.target_profile.role, "organisation_user")
+
     def test_create_user_with_mixed_case_email_is_lowercased(self):
         """
         When creating a user with a mixed-case email address via CreateUserProfileView,
