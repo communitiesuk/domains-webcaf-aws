@@ -406,6 +406,19 @@ class Assessment(ReferenceGeneratorMixin, models.Model):
         return f"reference={self.reference if self.reference else '-'}, status={self.status} org={self.system.organisation.name}"
 
 
+class EntraAdminIdentity(models.Model):
+    """Explicit link between an MHCLG Entra identity and a Django staff user."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    tenant_id = models.UUIDField()
+    object_id = models.UUIDField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["tenant_id", "object_id"], name="unique_entra_admin_identity"),
+        ]
+
+
 class UserProfile(models.Model):
     ROLE_ACTIONS = {
         "organisation_lead": [

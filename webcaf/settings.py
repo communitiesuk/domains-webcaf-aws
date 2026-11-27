@@ -15,6 +15,7 @@ import math
 import os
 from pathlib import Path
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from csp.constants import NONCE, SELF
 from django.core.exceptions import ImproperlyConfigured
@@ -53,10 +54,24 @@ ENVIRONMENT = env.str("ENVIRONMENT", default=None)
 
 X_FRAME_OPTIONS = "SAMEORIGIN"
 
+ENTRA_ADMIN_ENABLED = env.bool("ENTRA_ADMIN_ENABLED", default=False)
+ENTRA_ADMIN_TENANT_ID = env.str("ENTRA_ADMIN_TENANT_ID", default="")
+ENTRA_ADMIN_CLIENT_ID = env.str("ENTRA_ADMIN_CLIENT_ID", default="")
+ENTRA_ADMIN_CLIENT_SECRET = env.str("ENTRA_ADMIN_CLIENT_SECRET", default="")
+ENTRA_ADMIN_REDIRECT_URI = env.str("ENTRA_ADMIN_REDIRECT_URI", default="")
+if ENTRA_ADMIN_ENABLED:
+    try:
+        ENTRA_ADMIN_TENANT_ID = str(UUID(ENTRA_ADMIN_TENANT_ID))
+        ENTRA_ADMIN_CLIENT_ID = str(UUID(ENTRA_ADMIN_CLIENT_ID))
+    except ValueError:
+        raise ImproperlyConfigured("Entra Admin requires a tenant ID and client ID") from None
+    if not ENTRA_ADMIN_CLIENT_SECRET.strip() or not ENTRA_ADMIN_REDIRECT_URI:
+        raise ImproperlyConfigured("Entra Admin requires a client secret and redirect URI")
+
 # Application definition
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "webcaf.admin_config.WebcafAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -445,6 +460,9 @@ NOTIFY_TIP_APPROVED_TEMPLATE_ID = env.str("NOTIFY_TIP_APPROVED_TEMPLATE_ID", "")
 NOTIFY_TIP_REJECTED_TEMPLATE_ID = env.str("NOTIFY_TIP_REJECTED_TEMPLATE_ID", "")
 NOTIFY_TIP_SUBMITTED_TEMPLATE_ID = env.str("NOTIFY_TIP_SUBMITTED_TEMPLATE_ID", "")
 
+if ENTRA_ADMIN_ENABLED:
+    AUTHENTICATION_BACKENDS += ("webcaf.entra_admin.EntraAdminBackend",)
+
 OIDC_RP_SCOPES = env.str("OIDC_RP_SCOPES", "openid email profile")
 OIDC_RP_SIGN_ALGO = env.str("OIDC_RP_SIGN_ALGO", "RS256")
 if DEBUG:
@@ -520,6 +538,7 @@ if SENTRY_DSN:
 
 # sets session timeout at 90 minutes
 USER_IDLE_TIMEOUT = 90 * 60
+ENTRA_ADMIN_IDLE_TIMEOUT = 15 * 60
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 
