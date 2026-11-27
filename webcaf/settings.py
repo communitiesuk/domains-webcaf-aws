@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from csp.constants import NONCE, SELF
+from csp.constants import NONCE, NONE, SELF
 from django.core.exceptions import ImproperlyConfigured
 from environ import Env
 from govuk_onelogin_django.types import AuthenticationLevel, IdentityConfidenceLevel
@@ -80,6 +80,7 @@ AUTHENTICATION_BACKENDS = (
 )
 
 MIDDLEWARE = [
+    "webcaf.middleware.disable_dns_prefetch",
     "csp.middleware.CSPMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -391,6 +392,7 @@ provider_origin = f"{provider_config.scheme}://{provider_config.netloc}"
 # same origin as the HTML.
 CONTENT_SECURITY_POLICY = {
     "DIRECTIVES": {
+        "base-uri": (NONE,),
         "connect-src": (
             SELF,
             "https://*.google-analytics.com",
@@ -410,8 +412,7 @@ CONTENT_SECURITY_POLICY = {
         "script-src": (
             SELF,
             NONCE,
-            "sha256-nBhTljJHpMrd9MOPzdAm2s1BkTJWObIEdVxg/bet7PE=",  # pragma: allowlist secret
-            "https://*.googletagmanager.com",
+            "https://www.googletagmanager.com",
         ),
         "style-src": (
             SELF,
