@@ -198,6 +198,18 @@ class OrganisationOfficialGssCodeTest(TestCase):
 
         self.assertIn("E08000099 is not the GSS code", context.exception.message_dict["gss_code"][0])
 
+    def test_partial_save_cannot_store_an_unassigned_code_on_a_saved_council(self):
+        organisation = Organisation.objects.create(name="Leeds", organisation_type="council", gss_code="E08000035")
+        organisation.organisation_type = "mhclg"
+        organisation.gss_code = "E08000099"
+
+        with self.assertRaises(ValidationError) as context:
+            organisation.save(update_fields=["gss_code"])
+
+        self.assertIn("E08000099 is not the GSS code", context.exception.message_dict["gss_code"][0])
+        stored = Organisation.objects.values_list("organisation_type", "gss_code").get(pk=organisation.pk)
+        self.assertEqual(stored, ("council", "E08000035"))
+
     def test_rejects_a_council_code_from_outside_england(self):
         with self.assertRaises(ValidationError):
             Organisation.objects.create(name="Welsh Council", organisation_type="council", gss_code="W06000015")

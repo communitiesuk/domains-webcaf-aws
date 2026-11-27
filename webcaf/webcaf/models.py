@@ -109,20 +109,25 @@ class Organisation(models.Model):
             # A non-field error lets those forms reject the save without raising
             # an error for a field they do not contain.
             raise ValidationError("Councils must have a GSS code.")
+        self._check_official_council_gss_code(self.organisation_type, self.gss_code)
+        super().clean()
+
+    @classmethod
+    def _check_official_council_gss_code(cls, organisation_type, gss_code):
+        """Refuse a council GSS code that has the right format but is not in the ONS list."""
         if (
-            self.organisation_type in self.GSS_CODE_REQUIRED_ORGANISATION_TYPES
-            and self.GSS_CODE_VALIDATOR.regex.match(self.gss_code or "")
-            and self.gss_code not in official_council_gss_codes()
+            organisation_type in cls.GSS_CODE_REQUIRED_ORGANISATION_TYPES
+            and cls.GSS_CODE_VALIDATOR.regex.match(gss_code or "")
+            and gss_code not in official_council_gss_codes()
         ):
             raise ValidationError(
                 {
                     "gss_code": (
-                        f"{self.gss_code} is not the GSS code of an English council or combined authority "
+                        f"{gss_code} is not the GSS code of an English council or combined authority "
                         "in the ONS list. Check the code."
                     )
                 }
             )
-        super().clean()
 
     def save(self, *args, **kwargs):
         if self.gss_code == "":
@@ -144,6 +149,8 @@ class Organisation(models.Model):
 
             if saved_organisation_type in self.GSS_CODE_REQUIRED_ORGANISATION_TYPES and not saved_gss_code:
                 raise ValidationError("Councils must save their GSS code in the same operation.")
+            # clean() checked the values in memory; check the ones that will be stored together.
+            self._check_official_council_gss_code(saved_organisation_type, saved_gss_code)
 
         super().save(*args, **kwargs)
 
