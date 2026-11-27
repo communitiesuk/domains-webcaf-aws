@@ -8,7 +8,8 @@ from django.urls import reverse
 
 from tests.test_views.base_view_test import BaseViewTest
 from webcaf.webcaf.forms.user_profile import UserProfileForm
-from webcaf.webcaf.models import UserProfile
+from webcaf.webcaf.models import UserProfile, UserRole
+from webcaf.webcaf.utils.role_assignments import grant_role
 
 
 @pytest.mark.django_db
@@ -46,6 +47,31 @@ class TestUserProfileView(BaseViewTest):
         self.assertContains(response, UserProfileForm.duplicate_membership_message)
         self.target_profile.refresh_from_db()
         self.assertEqual(self.target_profile.role, "organisation_user")
+
+    def test_legacy_user_management_cannot_transfer_lg_assignments_by_email(self):
+        self.test_organisation.organisation_type = "mhclg"
+        self.test_organisation.save(update_fields=["organisation_type"])
+        operator = User.objects.create_superuser(username="view-role-operator", password=None)
+        assignment = grant_role(self.target_profile.pk, UserRole.objects.get(code="mhclg_super_user").pk, operator)
+        replacement = User.objects.create_user(username="replacement", email="replacement@example.gov.uk")
+        self.assertFalse(self.org_lead_user.has_perm("webcaf.add_userprofilerole"))
+
+        response = self.client.post(
+            reverse("edit-profile", kwargs={"user_profile_id": self.target_profile.pk}),
+            data={
+                "email": replacement.email,
+                "role": "organisation_user",
+                "first_name": "Changed",
+                "last_name": "Name",
+                "action": "confirm",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Remove role assignments before changing")
+        self.target_profile.refresh_from_db()
+        self.assertEqual(self.target_profile.user_id, self.target_user.pk)
+        self.assertEqual(assignment.history.count(), 1)
 
     def test_create_user_with_mixed_case_email_is_lowercased(self):
         """

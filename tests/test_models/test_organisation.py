@@ -112,6 +112,44 @@ class OrganisationTest(TestCase):
         self.assertEqual(organisation.name, "Renamed Existing Council")
         self.assertEqual(organisation.gss_code, "E06000001")
 
+    def test_name_only_save_ignores_unsaved_type_and_gss_code_changes(self):
+        organisation = Organisation.objects.create(
+            name="Original council", organisation_type="council", gss_code="E06000001"
+        )
+        organisation.name = "Renamed council"
+        organisation.organisation_type = "mhclg"
+        organisation.gss_code = None
+
+        organisation.save(update_fields=["name"])
+
+        self.assertEqual(organisation.organisation_type, "mhclg")
+        self.assertIsNone(organisation.gss_code)
+        organisation.refresh_from_db()
+        self.assertEqual(organisation.name, "Renamed council")
+        self.assertEqual(organisation.organisation_type, "council")
+        self.assertEqual(organisation.gss_code, "E06000001")
+
+    def test_new_organisation_with_explicit_primary_key_can_be_inserted(self):
+        organisation = Organisation(pk=98765, name="Explicit primary key", organisation_type="mhclg")
+
+        organisation.save()
+
+        self.assertEqual(Organisation.objects.get(pk=98765).name, "Explicit primary key")
+
+    def test_reconstructed_organisation_can_update_its_own_unique_gss_code(self):
+        original = Organisation.objects.create(
+            name="Reconstructed council", organisation_type="council", gss_code="E06000001"
+        )
+        organisation = Organisation(pk=original.pk, organisation_type="mhclg")
+        self.assertTrue(organisation._state.adding)
+
+        organisation.save(update_fields=["organisation_type"])
+
+        original.refresh_from_db()
+        self.assertEqual(original.organisation_type, "mhclg")
+        self.assertEqual(original.gss_code, "E06000001")
+        self.assertEqual(original.name, "Reconstructed council")
+
     def test_stores_empty_optional_gss_codes_as_null(self):
         first = Organisation.objects.create(name="First Organisation", gss_code="")
         second = Organisation.objects.create(name="Second Organisation", gss_code="")

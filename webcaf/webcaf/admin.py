@@ -44,7 +44,7 @@ from webcaf.webcaf.utils.excel_importer import (
     excel_framework_id,
     excel_to_assessment_json_with_raw,
 )
-from webcaf.webcaf.utils.role_assignments import grant_role, revoke_role, validate_grant
+from webcaf.webcaf.utils.role_assignments import grant_role, lock_profile, revoke_role, validate_grant
 from webcaf.webcaf.views.system import SystemForm
 
 
@@ -236,6 +236,13 @@ class UserProfileAdmin(SimpleHistoryAdmin):
     list_filter = ["role", SortedOrganisationFilter]
     autocomplete_fields = ["organisation", "user"]
     list_select_related = ["user", "organisation"]
+
+    @transaction.atomic
+    def save_model(self, request, obj, form, change):
+        if obj.pk and UserProfile.objects.filter(pk=obj.pk).exists():
+            lock_profile(obj.pk)
+            obj.validate_identity_change(obj.user_id, obj.organisation_id)
+        super().save_model(request, obj, form, change)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)

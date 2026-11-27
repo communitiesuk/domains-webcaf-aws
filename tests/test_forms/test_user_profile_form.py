@@ -1,15 +1,16 @@
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
+from threading import Barrier, Event
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
 from django.db.models.query import QuerySet
 from django.test import TestCase, TransactionTestCase
 
 from webcaf.webcaf.forms.user_profile import UserProfileForm
-from webcaf.webcaf.models import Organisation, UserProfile
+from webcaf.webcaf.models import Organisation, UserProfile, UserProfileRole, UserRole
+from webcaf.webcaf.utils.role_assignments import grant_role, revoke_role
 
 
 def profile_form(email, instance=None, organisation=None):
@@ -251,6 +252,101 @@ class UserProfileFormTest(TestCase):
         self.assertEqual(UserProfile.objects.count(), 1)
 
 
+class AssignedUserProfileFormTest(TestCase):
+    def setUp(self):
+        self.operator = User.objects.create_superuser(username="identity-operator", password=None)
+        self.owner = User.objects.create_user(username="original-owner", email="Owner@example.gov.uk")
+        self.replacement = User.objects.create_user(
+            username="replacement-owner", email="replacement@example.gov.uk", first_name="Original"
+        )
+        self.organisation = Organisation.objects.create(name="Identity organisation", organisation_type="mhclg")
+        self.profile = UserProfile.objects.create(
+            user=self.owner, organisation=self.organisation, role="organisation_user"
+        )
+        self.role = UserRole.objects.get(code="mhclg_super_user")
+
+    def test_email_cannot_rebind_an_assigned_profile_to_another_account(self):
+        assignment = grant_role(self.profile.pk, self.role.pk, self.operator)
+        before = list(assignment.history.values())
+
+        for email in [self.replacement.email, "new-owner@example.gov.uk"]:
+            with self.subTest(email=email):
+                form = profile_form(email, instance=self.profile)
+                self.assertFalse(form.is_valid())
+                self.assertEqual(form.errors.as_data()["email"][0].code, "assigned_profile_identity")
+
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.user_id, self.owner.pk)
+        self.assertEqual(list(assignment.history.values()), before)
+        self.assertFalse(User.objects.filter(email="new-owner@example.gov.uk").exists())
+
+    def test_case_only_email_and_name_edits_preserve_assigned_membership(self):
+        assignment = grant_role(self.profile.pk, self.role.pk, self.operator)
+        form = profile_form(self.owner.email.upper(), instance=self.profile)
+        self.assertTrue(form.is_valid(), form.errors)
+
+        saved = form.save()
+
+        self.assertEqual(saved.user_id, self.owner.pk)
+        self.owner.refresh_from_db()
+        self.assertEqual(self.owner.first_name, "New")
+        self.assertEqual(self.owner.email, "Owner@example.gov.uk")
+        self.assertEqual(assignment.history.count(), 1)
+
+    def test_save_rechecks_identity_after_a_grant_without_mutating_accounts(self):
+        form = profile_form(self.replacement.email, instance=self.profile)
+        self.assertTrue(form.is_valid(), form.errors)
+        assignment = grant_role(self.profile.pk, self.role.pk, self.operator)
+        profile_history_count = self.profile.history.count()
+
+        with self.assertRaises(ValidationError):
+            form.save()
+
+        self.profile.refresh_from_db()
+        self.replacement.refresh_from_db()
+        self.assertEqual(self.profile.user_id, self.owner.pk)
+        self.assertEqual(self.replacement.first_name, "Original")
+        self.assertEqual(self.profile.history.count(), profile_history_count)
+        self.assertEqual(assignment.history.count(), 1)
+
+    def test_account_change_is_allowed_after_explicit_revocation(self):
+        assignment = grant_role(self.profile.pk, self.role.pk, self.operator)
+        revoke_role(assignment.pk, self.operator)
+        form = profile_form(self.replacement.email, instance=self.profile)
+        self.assertTrue(form.is_valid(), form.errors)
+
+        saved = form.save()
+
+        self.assertEqual(saved.user_id, self.replacement.pk)
+        self.assertEqual(saved.pk, self.profile.pk)
+        self.assertFalse(saved.role_assignments.exists())
+
+    def test_late_grant_rolls_back_replacement_account_creation(self):
+        email = "late-new-owner@example.gov.uk"
+        form = profile_form(email, instance=self.profile)
+        self.assertTrue(form.is_valid(), form.errors)
+        assignment = grant_role(self.profile.pk, self.role.pk, self.operator)
+
+        with self.assertRaises(ValidationError):
+            form.save()
+
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.user_id, self.owner.pk)
+        self.assertFalse(User.objects.filter(email=email).exists())
+        self.assertEqual(assignment.history.count(), 1)
+
+    def test_model_validation_rejects_both_membership_identity_changes(self):
+        grant_role(self.profile.pk, self.role.pk, self.operator)
+        other_organisation = Organisation.objects.create(name="Other identity organisation", organisation_type="mhclg")
+
+        for field, value in [("user", self.replacement), ("organisation", other_organisation)]:
+            with self.subTest(field=field):
+                profile = UserProfile.objects.get(pk=self.profile.pk)
+                setattr(profile, field, value)
+                with self.assertRaises(ValidationError):
+                    profile.full_clean()
+
+
 class ConcurrentUserProfileCreationTest(TransactionTestCase):
     def test_simultaneous_membership_creation_returns_one_validation_error(self):
         organisation = Organisation.objects.create(name="Concurrent membership organisation")
@@ -311,3 +407,67 @@ class ConcurrentUserProfileCreationTest(TransactionTestCase):
 
         self.assertEqual(results[0], results[1])
         self.assertEqual(User.objects.filter(email__iexact="person@example.gov.uk").count(), 1)
+
+
+class ConcurrentAssignedProfileEditTest(TransactionTestCase):
+    def run_grant_and_rebinding(self, grant_first):
+        operator = User.objects.create_superuser(username="concurrent-identity-operator", password=None)
+        owner = User.objects.create_user(username="concurrent-owner", email="owner@example.gov.uk")
+        replacement = User.objects.create_user(username="concurrent-replacement", email="replacement@example.gov.uk")
+        organisation = Organisation.objects.create(name="Concurrent identity organisation", organisation_type="mhclg")
+        profile = UserProfile.objects.create(user=owner, organisation=organisation, role="organisation_user")
+        role, _ = UserRole.objects.get_or_create(
+            code="mhclg_super_user", defaults={"role_name": "MHCLG Super User", "group": "mhclg"}
+        )
+        form = profile_form(replacement.email, instance=profile)
+        self.assertTrue(form.is_valid(), form.errors)
+        first_locked = Event()
+        second_attempting_lock = Event()
+
+        def hold_first_lock(execute, sql, params, many, context):
+            result = execute(sql, params, many, context)
+            if '"webcaf_organisation"' in sql and "FOR UPDATE" in sql:
+                first_locked.set()
+                self.assertTrue(second_attempting_lock.wait(timeout=10), "Second operation did not attempt the lock")
+            return result
+
+        def signal_second_lock(execute, sql, params, many, context):
+            if '"webcaf_organisation"' in sql and "FOR UPDATE" in sql:
+                second_attempting_lock.set()
+            return execute(sql, params, many, context)
+
+        def attempt(first):
+            close_old_connections()
+            try:
+                actor = User.objects.get(pk=operator.pk)
+                if not first:
+                    self.assertTrue(first_locked.wait(timeout=10), "First operation did not acquire the lock")
+                with connection.execute_wrapper(hold_first_lock if first else signal_second_lock):
+                    try:
+                        if first == grant_first:
+                            grant_role(profile.pk, role.pk, actor)
+                        else:
+                            form.save()
+                        return "saved"
+                    except ValidationError:
+                        return "refused"
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(attempt, True)
+            second = executor.submit(attempt, False)
+            self.assertEqual(first.result(timeout=20), "saved")
+            self.assertEqual(second.result(timeout=20), "refused" if grant_first else "saved")
+
+        profile.refresh_from_db()
+        self.assertEqual(profile.user_id, owner.pk if grant_first else replacement.pk)
+        assignment = UserProfileRole.objects.get(user_profile=profile)
+        self.assertEqual(assignment.history.count(), 1)
+        self.assertEqual(assignment.granted_by_id, operator.pk)
+
+    def test_concurrent_grant_prevents_identity_rebinding(self):
+        self.run_grant_and_rebinding(grant_first=True)
+
+    def test_grant_after_unassigned_profile_edit_records_an_explicit_grant(self):
+        self.run_grant_and_rebinding(grant_first=False)

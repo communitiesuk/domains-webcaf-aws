@@ -7,6 +7,7 @@ from django.db import IntegrityError, transaction
 
 from webcaf.webcaf.models import UserProfile
 from webcaf.webcaf.utils import mask_email
+from webcaf.webcaf.utils.role_assignments import lock_profile
 
 
 class UserProfileForm(forms.ModelForm):
@@ -69,6 +70,7 @@ class UserProfileForm(forms.ModelForm):
             raise ValidationError(self.ambiguous_email_message, code="ambiguous_email")
         if not matches and User.objects.filter(username=email).exists():
             raise ValidationError(self.username_conflict_message, code="username_conflict")
+        self.instance.validate_identity_change(matches[0].pk if matches else None, self.instance.organisation_id)
         if len(matches) == 1:
             self._check_membership(matches[0])
         return email
@@ -107,6 +109,11 @@ class UserProfileForm(forms.ModelForm):
         :return: UserProfile object representing the saved user profile.
         """
 
+        if self.instance.pk:
+            # Serialise account rebinding with grants and removals. Revalidate
+            # below after resolving the submitted account, while holding locks.
+            lock_profile(self.instance.pk)
+
         user_email = self.cleaned_data["email"]
         try:
             # Recheck at save time rather than trusting the match from validation.
@@ -123,6 +130,7 @@ class UserProfileForm(forms.ModelForm):
 
         try:
             self._check_membership(user)
+            self.instance.validate_identity_change(user.pk, self.instance.organisation_id)
         except ValidationError as exc:
             raise ValidationError({"email": exc}) from exc
 

@@ -34,7 +34,8 @@ def _require_permission(actor: User, permission: str) -> None:
         raise PermissionDenied("You do not have permission to manage these role assignments.")
 
 
-def _locked_profile(profile_id: int) -> UserProfile:
+def lock_profile(profile_id: int) -> UserProfile:
+    """Lock a membership in the common organisation/profile order within a transaction."""
     try:
         organisation_id = UserProfile.objects.values_list("organisation_id", flat=True).get(pk=profile_id)
         # Organisation then profile is the common locking order, including type edits.
@@ -50,7 +51,7 @@ def _locked_profile(profile_id: int) -> UserProfile:
 def validate_grant(user_profile_id: int, user_role_id: int, actor: User) -> tuple[UserProfile, UserRole]:
     """Validate under locks; grant_role keeps these locks through persistence."""
     _require_permission(actor, "webcaf.add_userprofilerole")
-    profile = _locked_profile(user_profile_id)
+    profile = lock_profile(user_profile_id)
     try:
         role = UserRole.objects.get(pk=user_role_id)
     except UserRole.DoesNotExist as exc:
@@ -81,7 +82,7 @@ def revoke_role(assignment_id: int, actor: User) -> None:
     _require_permission(actor, "webcaf.delete_userprofilerole")
     try:
         profile_id = UserProfileRole.objects.values_list("user_profile_id", flat=True).get(pk=assignment_id)
-        profile = _locked_profile(profile_id)
+        profile = lock_profile(profile_id)
         assignment = UserProfileRole.objects.get(pk=assignment_id, user_profile=profile)
     except UserProfileRole.DoesNotExist as exc:
         raise ValidationError("This role assignment no longer exists.") from exc

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.models import User
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
@@ -115,3 +115,39 @@ class UserProfileRoleAdminTest(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(UserProfile.objects.count(), 1)
+
+    def test_admin_cannot_reassign_an_assigned_membership_to_another_account(self):
+        assignment = grant_role(self.profile.pk, UserRole.objects.get(code="caf_lead").pk, self.operator)
+        replacement = User.objects.create_user(username="admin-replacement-member")
+
+        response = self.client.post(
+            reverse("admin:webcaf_userprofile_change", args=[self.profile.pk]),
+            {
+                "user": replacement.pk,
+                "organisation": self.organisation.pk,
+                "role": "organisation_user",
+                "_save": "Save",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Remove role assignments before changing")
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.user_id, self.member.pk)
+        self.assertEqual(assignment.history.count(), 1)
+
+    def test_admin_save_rechecks_identity_after_form_validation(self):
+        replacement = User.objects.create_user(username="late-admin-replacement")
+        edited = UserProfile.objects.get(pk=self.profile.pk)
+        edited.user = replacement
+        edited.full_clean()
+        assignment = grant_role(self.profile.pk, UserRole.objects.get(code="caf_lead").pk, self.operator)
+        request = RequestFactory().post("/")
+        request.user = self.operator
+
+        with self.assertRaises(ValidationError):
+            admin.site._registry[UserProfile].save_model(request, edited, None, change=True)
+
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.user_id, self.member.pk)
+        self.assertEqual(assignment.history.count(), 1)

@@ -38,7 +38,9 @@ Programmatic writes use `grant_role` and `revoke_role` in
 assignment add/delete permission, lock the organisation then profile, and validate
 eligibility and combinations in the write transaction. History records grants,
 removals and their operators. Organisation-type edits reject incompatible existing
-assignments; remove assignments before moving a profile to another organisation.
+assignments. Revoke assignments before changing a profile's user or organisation;
+legacy form and Admin saves recheck membership identity under the same locks as grants.
+Case-only email edits resolving to the same account remain allowed.
 
 Eligibility uses the existing CS-680 organisation types, with combined authorities
 stored as councils. The approved combination policy is implemented in

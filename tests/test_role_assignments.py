@@ -263,6 +263,21 @@ class RoleAssignmentTest(TestCase):
         with self.assertRaisesMessage(ValidationError, "Remove incompatible role assignments"):
             organisation.full_clean()
 
+    def test_partial_save_preserves_council_assignments_with_unsaved_type_and_gss_changes(self):
+        assignment = self.grant("caf_lead")
+        organisation = self.profile.organisation
+        organisation.name = "Renamed assigned council"
+        organisation.organisation_type = "mhclg"
+        organisation.gss_code = None
+
+        organisation.save(update_fields=["name"])
+
+        organisation.refresh_from_db()
+        self.assertEqual(organisation.name, "Renamed assigned council")
+        self.assertEqual(organisation.organisation_type, "council")
+        self.assertEqual(organisation.gss_code, "E06000001")
+        self.assertTrue(self.profile.role_assignments.filter(pk=assignment.pk).exists())
+
     def test_partial_save_cannot_hide_incompatible_stored_type(self):
         self.grant("caf_lead")
         organisation = self.profile.organisation
@@ -354,7 +369,7 @@ class ConcurrentRoleGrantTest(TransactionTestCase):
         self.assertEqual([row.history_type for row in history], ["+", "-"])
         self.assertTrue(all(row.history_user_id == actor.pk for row in history))
 
-    def run_reclassification_race(self, grant_first):
+    def run_reclassification_race(self, grant_first, reconstructed=False):
         actor = User.objects.create_superuser(username="reclassification-operator", password=None)
         organisation = Organisation.objects.create(
             name="Reclassification council", organisation_type="council", gss_code="E06000001"
@@ -383,6 +398,14 @@ class ConcurrentRoleGrantTest(TransactionTestCase):
             try:
                 operator = User.objects.get(pk=actor.pk)
                 current = Organisation.objects.get(pk=organisation.pk)
+                if reconstructed:
+                    current = Organisation(
+                        pk=current.pk,
+                        name=current.name,
+                        organisation_type=current.organisation_type,
+                        gss_code=None,
+                    )
+                    self.assertTrue(current._state.adding)
                 if not first:
                     self.assertTrue(first_locked.wait(timeout=10), "First operation did not acquire the lock")
                 with connection.execute_wrapper(hold_first_lock if first else signal_second_lock):
@@ -391,7 +414,10 @@ class ConcurrentRoleGrantTest(TransactionTestCase):
                             grant_role(profile.pk, role.pk, operator)
                         else:
                             current.organisation_type = "mhclg"
-                            current.save(update_fields=["organisation_type"])
+                            if reconstructed:
+                                current.save()
+                            else:
+                                current.save(update_fields=["organisation_type"])
                         return "saved"
                     except ValidationError:
                         return "refused"
@@ -414,3 +440,9 @@ class ConcurrentRoleGrantTest(TransactionTestCase):
 
     def test_reclassification_blocks_concurrent_ineligible_grant(self):
         self.run_reclassification_race(grant_first=False)
+
+    def test_grant_blocks_reclassification_using_a_reconstructed_organisation(self):
+        self.run_reclassification_race(grant_first=True, reconstructed=True)
+
+    def test_reconstructed_reclassification_blocks_concurrent_ineligible_grant(self):
+        self.run_reclassification_race(grant_first=False, reconstructed=True)

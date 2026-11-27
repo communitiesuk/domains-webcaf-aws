@@ -139,34 +139,43 @@ class Organisation(models.Model):
         if self.gss_code == "":
             self.gss_code = None
 
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            update_fields = frozenset(update_fields)
+            kwargs["update_fields"] = update_fields
+
         validation_instance = self
-        if self.pk and not self._state.adding:
-            stored = type(self).objects.select_for_update().values("organisation_type").get(pk=self.pk)
-            update_fields = kwargs.get("update_fields")
-            if update_fields is not None and "organisation_type" not in update_fields:
-                # clean() must use the type being stored, without discarding an
-                # unsaved type change on the caller's instance.
+        if self.pk is not None:
+            # A reconstructed instance may update an existing row even when
+            # _state.adding is True. A missing row is a genuine insert.
+            stored = (
+                type(self)
+                .objects.select_for_update()
+                .filter(pk=self.pk)
+                .values("organisation_type", "gss_code")
+                .first()
+            )
+            if stored is not None and (update_fields is not None or self._state.adding):
+                # Validate a consistent snapshot of the fields being persisted,
+                # without discarding unsaved changes on the caller's instance.
                 validation_instance = copy(self)
-                validation_instance.organisation_type = stored["organisation_type"]
+                # Unique-field validation must exclude the row being updated,
+                # including when the caller reconstructed the instance by PK.
+                validation_instance._state.adding = False
+                if update_fields is not None:
+                    for field in ["organisation_type", "gss_code"]:
+                        if field not in update_fields:
+                            setattr(validation_instance, field, stored[field])
+                    if (
+                        validation_instance.organisation_type in self.GSS_CODE_REQUIRED_ORGANISATION_TYPES
+                        and not validation_instance.gss_code
+                    ):
+                        raise ValidationError("Councils must save their GSS code in the same operation.")
 
         # Validate only the new field here so existing Organisation save behaviour
         # remains unchanged. ModelForms still run normal validation for every field.
         excluded_fields = {field.name for field in self._meta.fields if field.name != "gss_code"}
         validation_instance.full_clean(exclude=excluded_fields)
-
-        update_fields = kwargs.get("update_fields")
-        if self.pk is not None and update_fields is not None:
-            update_fields = set(update_fields)
-            stored_values = type(self).objects.values("organisation_type", "gss_code").get(pk=self.pk)
-            saved_organisation_type = (
-                self.organisation_type if "organisation_type" in update_fields else stored_values["organisation_type"]
-            )
-            saved_gss_code = self.gss_code if "gss_code" in update_fields else stored_values["gss_code"]
-
-            if saved_organisation_type in self.GSS_CODE_REQUIRED_ORGANISATION_TYPES and not saved_gss_code:
-                raise ValidationError("Councils must save their GSS code in the same operation.")
-            # clean() checked the values in memory; check the ones that will be stored together.
-            self._check_official_council_gss_code(saved_organisation_type, saved_gss_code)
 
         super().save(*args, **kwargs)
 
@@ -478,12 +487,25 @@ class UserProfile(models.Model):
 
     def clean(self):
         super().clean()
+        self.validate_identity_change(self.user_id, self.organisation_id)
+
+    def validate_identity_change(self, user_id, organisation_id):
+        """Require explicit revocation before transferring an assigned membership.
+
+        Callers that persist changes must hold the organisation/profile locks
+        through validation and saving; form validation alone is only a precheck.
+        """
         if self.pk:
-            stored_organisation_id = (
-                type(self).objects.filter(pk=self.pk).values_list("organisation_id", flat=True).first()
-            )
-            if stored_organisation_id != self.organisation_id and self.role_assignments.exists():
-                raise ValidationError("Remove role assignments before changing the profile's organisation.")
+            stored_identity = type(self).objects.filter(pk=self.pk).values_list("user_id", "organisation_id").first()
+            if (
+                stored_identity is not None
+                and stored_identity != (user_id, organisation_id)
+                and self.role_assignments.exists()
+            ):
+                raise ValidationError(
+                    "Remove role assignments before changing the profile's user or organisation.",
+                    code="assigned_profile_identity",
+                )
 
     @classmethod
     def get_role_id(cls, role_name) -> str | None:
