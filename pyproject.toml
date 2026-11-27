@@ -115,4 +115,10 @@ package = false
 # Never resolve these versions, even transitively. litellm 1.82.7 and 1.82.8
 # have a known vulnerability; this carries over the block that was in
 # [tool.poetry.dependencies].
-constraint-dependencies = ["litellm!=1.82.7,!=1.82.8"]
+#
+# ddtrace (pulled in by govuk-onelogin-django via django-log-formatter-asim)
+# is held below 4.17: from 4.17.0, `import ddtrace` raises "ValueError:
+# Builder Invalid builder input: Invalid URI: invalid format" inside a build
+# step of a buildx docker-container builder, which is what CI uses, so
+# `collectstatic` fails and the image does not build. 4.16.5 imports there.
+constraint-dependencies = ["litellm!=1.82.7,!=1.82.8", "ddtrace<4.17"]
