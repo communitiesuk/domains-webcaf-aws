@@ -477,6 +477,25 @@ class OrganisationAdminImportCSVTest(TestCase):
 
         self.assertEqual(found_organisation, organisation)
 
+    def test_import_csv_rejects_an_out_of_range_organisation_id_with_the_row_message(self):
+        for organisation_id in ["9" * 30, "9" * 5000]:
+            with self.subTest(digits=len(organisation_id)):
+                _response, admin_messages = self.import_rows([self.row(organisation_id=organisation_id)])
+
+                message = " ".join(admin_messages)
+                self.assertIn("Organisation ID must be the ID of an existing organisation", message)
+                self.assertIn(f"row 2 ({organisation_id[:20]})", message)
+                self.assertEqual(Organisation.objects.count(), 0)
+
+    def test_find_organisation_ignores_an_out_of_range_organisation_id(self):
+        organisation = Organisation.objects.create(name="Test Org")
+
+        for organisation_id in ["9" * 30, "9" * 5000]:
+            with self.subTest(digits=len(organisation_id)):
+                found = self.admin.find_organisation({"Organisation ID": organisation_id, "Organisation": "Test Org"})
+
+                self.assertEqual(found, organisation)
+
     def test_find_organisation_by_name_when_no_organisation_id(self):
         organisation = Organisation.objects.create(name="Test Org")
 

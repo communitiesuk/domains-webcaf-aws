@@ -116,6 +116,10 @@ class JsonDataAdminForm(forms.ModelForm):
         return cleaned_data if cleaned_data else {}
 
 
+# Largest value of the organisation id column (a PostgreSQL bigint).
+ORGANISATION_PK_MAX = 2**63 - 1
+
+
 class OptionalFieldsAdminMixin:
     """Mixin to make specified fields optional in the admin form."""
 
@@ -524,13 +528,11 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
         admin_managed_types = Organisation.GSS_CODE_REQUIRED_ORGANISATION_TYPES
         for row_number, row in enumerate(rows, start=2):
             organisation_id = (row.get("Organisation ID") or "").strip()
-            if organisation_id and not (
-                organisation_id.isascii()
-                and organisation_id.isdigit()
-                and Organisation.objects.filter(pk=int(organisation_id)).exists()
-            ):
-                invalid_id_rows.append(f"row {row_number} ({organisation_id})")
-                continue
+            if organisation_id:
+                organisation_pk = self._organisation_pk(organisation_id)
+                if organisation_pk is None or not Organisation.objects.filter(pk=organisation_pk).exists():
+                    invalid_id_rows.append(f"row {row_number} ({organisation_id[:20]})")
+                    continue
 
             organisation_type = (row.get("Type") or "").strip()
             organisation_type_id = Organisation.get_type_id(organisation_type)
@@ -566,6 +568,20 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
 
         return rows, None
 
+    @staticmethod
+    def _organisation_pk(value: str) -> int | None:
+        """
+        Return the organisation id in an import cell, or None if it cannot be one.
+
+        isdigit() alone accepts characters such as "²" that int() cannot parse, and a very long
+        all-digit value can make int() raise ValueError or exceed the database's id range.
+        """
+        if value.isascii() and value.isdigit() and len(value) <= len(str(ORGANISATION_PK_MAX)):
+            organisation_pk = int(value)
+            if organisation_pk <= ORGANISATION_PK_MAX:
+                return organisation_pk
+        return None
+
     def find_organisation(self, row: dict[str | Any, str | Any]) -> Organisation | None:
         """
         Finds and returns an Organisation instance based on the provided row data.
@@ -580,10 +596,9 @@ class OrganisationAdmin(OptionalFieldsAdminMixin, SimpleHistoryAdmin):  # type: 
         """
         organisation: Organisation | None = None
         # first try to get the organisation by id
-        organisation_id = (row.get("Organisation ID") or "").strip()
-        # isdigit() alone accepts characters such as "²" that int() cannot parse.
-        if organisation_id.isascii() and organisation_id.isdigit():
-            organisation = Organisation.objects.filter(pk=int(organisation_id)).first()
+        organisation_pk = self._organisation_pk((row.get("Organisation ID") or "").strip())
+        if organisation_pk is not None:
+            organisation = Organisation.objects.filter(pk=organisation_pk).first()
 
         # If fails try to get the organisation by name
         if not organisation and row["Organisation"]:
