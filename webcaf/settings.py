@@ -88,7 +88,7 @@ INSTALLED_APPS = [
     "axes",
 ]
 
-AUTHENTICATION_BACKENDS = (
+AUTHENTICATION_BACKENDS: tuple[str, ...] = (
     "webcaf.auth.OIDCBackend",
     "axes.backends.AxesStandaloneBackend",
     "django.contrib.auth.backends.ModelBackend",
