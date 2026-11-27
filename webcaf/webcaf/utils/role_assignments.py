@@ -94,6 +94,6 @@ def revoke_role(assignment_id: int, actor: User) -> None:
         profile = lock_profile(profile_id)
         assignment = UserProfileRole.objects.get(pk=assignment_id, user_profile=profile)
     except UserProfileRole.DoesNotExist as exc:
-        raise ValidationError("This role assignment no longer exists.") from exc
+        raise ValidationError("This role assignment no longer exists.", code="assignment_not_found") from exc
     assignment._history_user = actor
     assignment.delete()

@@ -338,6 +338,20 @@ class UserProfileRoleAdmin(SimpleHistoryAdmin):
     def delete_model(self, request, obj):
         revoke_role(obj.pk, request.user)
 
+    def delete_view(self, request, object_id, extra_context=None):
+        try:
+            return super().delete_view(request, object_id, extra_context)
+        except ValidationError as exc:
+            if request.method != "POST" or getattr(exc, "code", None) != "assignment_not_found":
+                raise
+            # The superclass's deletion transaction has rolled back, including
+            # its Admin log entry. Do not log a second removal or mask other errors.
+            self.message_user(request, "This role assignment has already been removed.", messages.INFO)
+            destination = (
+                "admin:webcaf_userprofilerole_changelist" if self.has_view_permission(request) else "admin:index"
+            )
+            return redirect(reverse(destination, current_app=self.admin_site.name))
+
     def history_form_view(self, request, object_id, version_id, extra_context=None):
         raise PermissionDenied("Historical grants cannot be restored without current policy validation.")
 

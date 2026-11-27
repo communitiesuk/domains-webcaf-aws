@@ -10,6 +10,7 @@ from tests.test_views.base_view_test import BaseViewTest
 from webcaf.webcaf.forms.user_profile import UserProfileForm
 from webcaf.webcaf.models import UserProfile, UserProfileRole, UserRole
 from webcaf.webcaf.utils.role_assignments import grant_role, revoke_role
+from webcaf.webcaf.views.user_profiles import UserProfileView
 
 
 @pytest.mark.django_db
@@ -78,6 +79,40 @@ class TestUserProfileView(BaseViewTest):
                     self.assertEqual(list(User.objects.order_by("pk").values()), users_before)
                     self.assertEqual(list(UserProfile.objects.order_by("pk").values()), profiles_before)
                     self.assertEqual(UserProfile.history.count(), history_count)
+
+    def test_edit_rechecks_organisation_access_after_an_admin_moves_the_profile(self):
+        destination = self.org_map["Medium organisation"]["organisation"]
+        get_form_kwargs = UserProfileView.get_form_kwargs
+        users_before = list(User.objects.order_by("pk").values())
+        move_history_counts = []
+
+        def move_after_lookup(view):
+            kwargs = get_form_kwargs(view)
+            moved = UserProfile.objects.get(pk=self.target_profile.pk)
+            moved.organisation = destination
+            moved.save(update_fields=["organisation"])
+            move_history_counts.append(UserProfile.history.count())
+            return kwargs
+
+        with patch.object(UserProfileView, "get_form_kwargs", new=move_after_lookup):
+            response = self.client.post(
+                reverse("edit-profile", kwargs={"user_profile_id": self.target_profile.pk}),
+                {
+                    "email": "must-not-be-created-after-move@example.gov.uk",
+                    "first_name": "Unexpected",
+                    "last_name": "Change",
+                    "role": "organisation_lead",
+                    "action": "confirm",
+                },
+            )
+
+        self.assertEqual(response.status_code, 403)
+        self.target_profile.refresh_from_db()
+        self.assertEqual(self.target_profile.organisation_id, destination.pk)
+        self.assertEqual(self.target_profile.user_id, self.target_user.pk)
+        self.assertEqual(self.target_profile.role, "organisation_user")
+        self.assertEqual(list(User.objects.order_by("pk").values()), users_before)
+        self.assertEqual(UserProfile.history.count(), move_history_counts[0])
 
     def test_legacy_user_management_cannot_transfer_lg_assignments_by_email(self):
         self.test_organisation.organisation_type = "mhclg"

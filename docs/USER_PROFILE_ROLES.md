@@ -44,12 +44,16 @@ and reconstructed-instance saves. Forms retain early validation for friendly err
 Case-only email edits resolving to the same account remain allowed.
 Loaded organisations and memberships cannot recreate deleted rows through a stale
 save. Missing or cross-organisation edit targets return 404 rather than creating a membership.
+Legacy edits recheck the locked membership against the active organisation before
+writing account details, so a stale edit cannot reclaim a moved membership.
 
 Direct membership deletion and the legacy/Admin removal paths require assignments
 to be explicitly revoked first. Deletion checks are locked against concurrent grants;
 Admin bulk removal also uses the guarded model path. Organisation/account cascades
 remain unchanged. Cascaded assignment deletions retain history, with the request actor
 supplied by `HistoryRequestMiddleware` for authenticated web requests.
+If concurrent Admin revocations target the same assignment, the second request
+reports an already-completed removal without adding another removal history or Admin log entry.
 
 Eligibility uses the existing CS-680 organisation types, with combined authorities
 stored as councils. The approved combination policy is implemented in

@@ -56,6 +56,8 @@ class UserProfileForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if organisation is not None:
             self.instance.organisation = organisation
+        # Keep the server-supplied scope separate from the mutable form instance.
+        self.organisation_id = self.instance.organisation_id
 
     def clean_role(self):
         role = self.cleaned_data["role"]
@@ -112,7 +114,10 @@ class UserProfileForm(forms.ModelForm):
         if self.instance.pk:
             # Serialise account rebinding with grants and removals. Revalidate
             # below after resolving the submitted account, while holding locks.
-            lock_profile(self.instance.pk, target_organisation_id=self.instance.organisation_id)
+            profile = lock_profile(self.instance.pk)
+            if profile.organisation_id != self.organisation_id:
+                raise PermissionDenied("This user profile is no longer in your active organisation.")
+            self.instance.organisation = profile.organisation
 
         user_email = self.cleaned_data["email"]
         try:

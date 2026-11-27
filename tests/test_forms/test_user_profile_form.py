@@ -3,7 +3,7 @@ from threading import Barrier, Event
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import close_old_connections, connection
 from django.db.models.query import QuerySet
 from django.test import TestCase, TransactionTestCase
@@ -345,6 +345,28 @@ class AssignedUserProfileFormTest(TestCase):
                 setattr(profile, field, value)
                 with self.assertRaises(ValidationError):
                     profile.full_clean()
+
+    def test_stale_edit_cannot_reclaim_a_moved_membership_or_modify_accounts(self):
+        emails = [self.owner.email, self.replacement.email, "scope-new-owner@example.gov.uk"]
+        forms = [profile_form(email, instance=self.profile, organisation=self.organisation) for email in emails]
+        for form in forms:
+            self.assertTrue(form.is_valid(), form.errors)
+        destination = Organisation.objects.create(name="Moved membership organisation", organisation_type="mhclg")
+        moved = UserProfile.objects.get(pk=self.profile.pk)
+        moved.organisation = destination
+        moved.save(update_fields=["organisation"])
+        users_before = list(User.objects.order_by("pk").values())
+        profiles_before = list(UserProfile.objects.order_by("pk").values())
+        history_count = UserProfile.history.count()
+
+        for email, form in zip(emails, forms, strict=True):
+            with self.subTest(email=email):
+                with self.assertRaisesMessage(PermissionDenied, "no longer in your active organisation"):
+                    form.save()
+
+                self.assertEqual(list(User.objects.order_by("pk").values()), users_before)
+                self.assertEqual(list(UserProfile.objects.order_by("pk").values()), profiles_before)
+                self.assertEqual(UserProfile.history.count(), history_count)
 
 
 class ConcurrentUserProfileCreationTest(TransactionTestCase):

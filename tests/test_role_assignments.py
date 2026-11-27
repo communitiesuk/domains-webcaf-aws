@@ -177,8 +177,9 @@ class RoleAssignmentTest(TestCase):
 
         for missing_id in [assignment_id, 999999]:
             with self.subTest(assignment_id=missing_id):
-                with self.assertRaisesMessage(ValidationError, "This role assignment no longer exists."):
+                with self.assertRaisesMessage(ValidationError, "This role assignment no longer exists.") as raised:
                     revoke_role(missing_id, self.actor)
+                self.assertEqual(raised.exception.code, "assignment_not_found")
                 self.assertEqual(UserProfileRole.history.count(), before)
 
     def test_existing_ineligible_assignment_blocks_further_grants(self):

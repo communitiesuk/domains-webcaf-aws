@@ -1,10 +1,15 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from unittest.mock import patch
 
 from django.contrib import admin
+from django.contrib.admin.models import DELETION, LogEntry
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.messages import get_messages
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import connection
-from django.test import RequestFactory, TestCase, TransactionTestCase
+from django.db import close_old_connections, connection
+from django.test import Client, RequestFactory, TestCase, TransactionTestCase
 from django.urls import reverse
 
 from webcaf.webcaf.models import Organisation, UserProfile, UserProfileRole, UserRole
@@ -80,6 +85,30 @@ class UserProfileRoleAdminTest(TestCase):
         history = UserProfileRole.history.filter(id=assignment.pk)
         self.assertEqual(history.latest().history_type, "-")
         self.assertEqual(history.latest().history_user, self.operator)
+
+    def test_admin_removal_does_not_suppress_unrelated_validation_errors(self):
+        assignment = grant_role(self.profile.pk, UserRole.objects.get(code="caf_lead").pk, self.operator)
+        error = ValidationError("Unexpected validation failure.", code="other_failure")
+
+        with patch("webcaf.webcaf.admin.revoke_role", side_effect=error):
+            with self.assertRaises(ValidationError):
+                self.client.post(reverse("admin:webcaf_userprofilerole_delete", args=[assignment.pk]), {"post": "yes"})
+
+        self.assertTrue(UserProfileRole.objects.filter(pk=assignment.pk).exists())
+        self.assertEqual(assignment.history.count(), 1)
+
+    def test_staff_without_removal_permission_cannot_revoke(self):
+        assignment = grant_role(self.profile.pk, UserRole.objects.get(code="caf_lead").pk, self.operator)
+        staff = User.objects.create_user(username="unprivileged-role-remover", is_staff=True)
+        self.client.force_login(staff)
+
+        response = self.client.post(
+            reverse("admin:webcaf_userprofilerole_delete", args=[assignment.pk]), {"post": "yes"}
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(UserProfileRole.objects.filter(pk=assignment.pk).exists())
+        self.assertEqual(assignment.history.count(), 1)
 
     def test_staff_without_role_management_permissions_cannot_grant(self):
         staff = User.objects.create_user(username="unprivileged-role-staff", is_staff=True)
@@ -215,6 +244,69 @@ class UserProfileRoleAdminTest(TestCase):
 
 
 class UserProfileRoleAdminTransactionTest(TransactionTestCase):
+    def test_concurrent_admin_removals_report_already_removed_without_duplicate_audit(self):
+        first_operator = User.objects.create_superuser(username="first-admin-remover", password=None)
+        second_operator = User.objects.create_superuser(username="second-admin-remover", password=None)
+        organisation = Organisation.objects.create(name="Concurrent admin removal", organisation_type="mhclg")
+        profile = UserProfile.objects.create(user=first_operator, organisation=organisation)
+        role, _ = UserRole.objects.get_or_create(
+            code="mhclg_super_user", defaults={"role_name": "MHCLG Super User", "group": "mhclg"}
+        )
+        assignment = grant_role(profile.pk, role.pk, first_operator)
+        assignment_id = assignment.pk
+        url = reverse("admin:webcaf_userprofilerole_delete", args=[assignment_id])
+        clients = [Client(), Client()]
+        for client, operator in zip(clients, [first_operator, second_operator], strict=True):
+            client.force_login(operator)
+        second_loaded = Event()
+        first_committed = Event()
+        model_admin = admin.site._registry[UserProfileRole]
+        delete_model = model_admin.delete_model
+
+        def coordinate_removal(request, obj):
+            # Both requests have loaded the assignment and reached deletion.
+            # Let the first commit before the second calls the strict service.
+            if request.user.pk == first_operator.pk:
+                self.assertTrue(second_loaded.wait(timeout=10), "Second request did not load the assignment")
+            else:
+                second_loaded.set()
+                self.assertTrue(first_committed.wait(timeout=10), "First removal did not commit")
+            return delete_model(request, obj)
+
+        def remove(index):
+            close_old_connections()
+            try:
+                return clients[index].post(url, {"post": "yes"})
+            finally:
+                if index == 0:
+                    first_committed.set()
+                close_old_connections()
+
+        with patch.object(model_admin, "delete_model", new=coordinate_removal):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(remove, 0)
+                second = executor.submit(remove, 1)
+                first_response = first.result(timeout=20)
+                second_response = second.result(timeout=20)
+
+        self.assertEqual(first_response.status_code, 302)
+        self.assertEqual(second_response.status_code, 302)
+        self.assertIn(
+            "This role assignment has already been removed.",
+            [str(message) for message in get_messages(second_response.wsgi_request)],
+        )
+        self.assertFalse(UserProfileRole.objects.filter(pk=assignment_id).exists())
+        history = list(UserProfileRole.history.filter(id=assignment_id).order_by("history_id"))
+        self.assertEqual([record.history_type for record in history], ["+", "-"])
+        self.assertEqual(history[-1].history_user_id, first_operator.pk)
+        deletions = LogEntry.objects.filter(
+            content_type=ContentType.objects.get_for_model(UserProfileRole),
+            object_id=str(assignment_id),
+            action_flag=DELETION,
+        )
+        self.assertEqual(deletions.count(), 1)
+        self.assertEqual(deletions.get().user_id, first_operator.pk)
+
     def test_admin_validation_and_grant_share_the_request_transaction(self):
         operator = User.objects.create_superuser(username="admin-transaction-operator", password=None)
         organisation = Organisation.objects.create(name="Admin transaction organisation", organisation_type="mhclg")
