@@ -112,7 +112,7 @@ class UserProfileForm(forms.ModelForm):
         if self.instance.pk:
             # Serialise account rebinding with grants and removals. Revalidate
             # below after resolving the submitted account, while holding locks.
-            lock_profile(self.instance.pk)
+            lock_profile(self.instance.pk, target_organisation_id=self.instance.organisation_id)
 
         user_email = self.cleaned_data["email"]
         try:

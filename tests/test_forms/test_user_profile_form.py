@@ -410,12 +410,13 @@ class ConcurrentUserProfileCreationTest(TransactionTestCase):
 
 
 class ConcurrentAssignedProfileEditTest(TransactionTestCase):
-    def run_grant_and_rebinding(self, grant_first):
+    def run_grant_and_rebinding(self, grant_first, operation="form"):
         operator = User.objects.create_superuser(username="concurrent-identity-operator", password=None)
         owner = User.objects.create_user(username="concurrent-owner", email="owner@example.gov.uk")
         replacement = User.objects.create_user(username="concurrent-replacement", email="replacement@example.gov.uk")
         organisation = Organisation.objects.create(name="Concurrent identity organisation", organisation_type="mhclg")
         profile = UserProfile.objects.create(user=owner, organisation=organisation, role="organisation_user")
+        profile_id = profile.pk
         role, _ = UserRole.objects.get_or_create(
             code="mhclg_super_user", defaults={"role_name": "MHCLG Super User", "group": "mhclg"}
         )
@@ -445,9 +446,15 @@ class ConcurrentAssignedProfileEditTest(TransactionTestCase):
                 with connection.execute_wrapper(hold_first_lock if first else signal_second_lock):
                     try:
                         if first == grant_first:
-                            grant_role(profile.pk, role.pk, actor)
+                            grant_role(profile_id, role.pk, actor)
                         else:
-                            form.save()
+                            if operation == "save":
+                                profile.user = replacement
+                                profile.save(update_fields=["user"])
+                            elif operation == "delete":
+                                profile.delete()
+                            else:
+                                form.save()
                         return "saved"
                     except ValidationError:
                         return "refused"
@@ -458,8 +465,13 @@ class ConcurrentAssignedProfileEditTest(TransactionTestCase):
             first = executor.submit(attempt, True)
             second = executor.submit(attempt, False)
             self.assertEqual(first.result(timeout=20), "saved")
-            self.assertEqual(second.result(timeout=20), "refused" if grant_first else "saved")
+            self.assertEqual(second.result(timeout=20), "refused" if grant_first or operation == "delete" else "saved")
 
+        if operation == "delete" and not grant_first:
+            self.assertFalse(UserProfile.objects.filter(pk=profile_id).exists())
+            self.assertFalse(UserProfileRole.objects.filter(user_profile_id=profile_id).exists())
+            self.assertFalse(UserProfileRole.history.filter(user_profile_id=profile_id).exists())
+            return
         profile.refresh_from_db()
         self.assertEqual(profile.user_id, owner.pk if grant_first else replacement.pk)
         assignment = UserProfileRole.objects.get(user_profile=profile)
@@ -471,3 +483,45 @@ class ConcurrentAssignedProfileEditTest(TransactionTestCase):
 
     def test_grant_after_unassigned_profile_edit_records_an_explicit_grant(self):
         self.run_grant_and_rebinding(grant_first=False)
+
+    def test_concurrent_grant_prevents_direct_identity_save(self):
+        self.run_grant_and_rebinding(grant_first=True, operation="save")
+
+    def test_grant_after_direct_identity_save_uses_the_saved_membership(self):
+        self.run_grant_and_rebinding(grant_first=False, operation="save")
+
+    def test_concurrent_grant_prevents_membership_deletion(self):
+        self.run_grant_and_rebinding(grant_first=True, operation="delete")
+
+    def test_membership_deletion_prevents_concurrent_grant(self):
+        self.run_grant_and_rebinding(grant_first=False, operation="delete")
+
+    def test_opposite_unassigned_membership_moves_use_a_stable_lock_order(self):
+        organisations = [
+            Organisation.objects.create(name=f"Move organisation {index}", organisation_type="mhclg")
+            for index in range(2)
+        ]
+        profiles = [
+            UserProfile.objects.create(
+                user=User.objects.create_user(username=f"moving-member-{index}"), organisation=organisation
+            )
+            for index, organisation in enumerate(organisations)
+        ]
+        barrier = Barrier(2)
+
+        def move(index):
+            close_old_connections()
+            try:
+                profile = UserProfile.objects.get(pk=profiles[index].pk)
+                profile.organisation = organisations[1 - index]
+                barrier.wait(timeout=10)
+                profile.save(update_fields=["organisation"])
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            list(executor.map(move, range(2)))
+
+        for index, profile in enumerate(profiles):
+            profile.refresh_from_db()
+            self.assertEqual(profile.organisation_id, organisations[1 - index].pk)

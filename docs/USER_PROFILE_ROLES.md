@@ -39,14 +39,22 @@ assignment add/delete permission, lock the organisation then profile, and valida
 eligibility and combinations in the write transaction. History records grants,
 removals and their operators. Organisation-type edits reject incompatible existing
 assignments. Revoke assignments before changing a profile's user or organisation;
-legacy form and Admin saves recheck membership identity under the same locks as grants.
+normal model saves enforce this under the same locks as grants, including partial
+and reconstructed-instance saves. Forms retain early validation for friendly errors.
 Case-only email edits resolving to the same account remain allowed.
+
+Direct membership deletion and the legacy/Admin removal paths require assignments
+to be explicitly revoked first. Deletion checks are locked against concurrent grants;
+Admin bulk removal also uses the guarded model path. Organisation/account cascades
+remain unchanged. Cascaded assignment deletions retain history, with the request actor
+supplied by `HistoryRequestMiddleware` for authenticated web requests.
 
 Eligibility uses the existing CS-680 organisation types, with combined authorities
 stored as councils. The approved combination policy is implemented in
 `webcaf.webcaf.utils.role_combinations`; unknown and unapproved combinations fail closed.
-Direct bulk ORM/raw SQL writes bypass policy validation and normal history and are
-not supported grant or reclassification paths. Database constraints still apply.
+Direct bulk ORM/raw SQL writes bypass model save/delete guards and policy validation,
+and bulk updates/inserts skip normal history. They are not supported grant, membership
+management or reclassification paths. Database constraints still apply.
 
 Existing user-facing forms continue editing the legacy role and report duplicate
 memberships as form errors, including concurrent creation. LG grants do not change

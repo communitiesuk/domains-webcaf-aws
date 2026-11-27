@@ -489,6 +489,51 @@ class UserProfile(models.Model):
         super().clean()
         self.validate_identity_change(self.user_id, self.organisation_id)
 
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            update_fields = frozenset(update_fields)
+            kwargs["update_fields"] = update_fields
+            if not update_fields:
+                return
+
+        if self.pk is not None and type(self).objects.filter(pk=self.pk).exists():
+            from webcaf.webcaf.utils.role_assignments import lock_profile
+
+            # Respect both relation names and *_id names in update_fields, and
+            # Django's implicit partial saves of deferred model instances.
+            deferred_fields = self.get_deferred_fields()
+            save_user = (
+                "user_id" not in deferred_fields if update_fields is None else bool({"user", "user_id"} & update_fields)
+            )
+            save_organisation = (
+                "organisation_id" not in deferred_fields
+                if update_fields is None
+                else bool({"organisation", "organisation_id"} & update_fields)
+            )
+            stored = lock_profile(self.pk, target_organisation_id=self.organisation_id if save_organisation else None)
+            self.validate_identity_change(
+                self.user_id if save_user else stored.user_id,
+                self.organisation_id if save_organisation else stored.organisation_id,
+            )
+        return super().save(*args, **kwargs)
+
+    def validate_deletion(self):
+        if self.role_assignments.exists():
+            raise ValidationError(
+                "Revoke role assignments before deleting this membership.", code="assigned_profile_deletion"
+            )
+
+    @transaction.atomic
+    def delete(self, *args, **kwargs):
+        if self.pk is not None:
+            from webcaf.webcaf.utils.role_assignments import lock_profile
+
+            lock_profile(self.pk)
+            self.validate_deletion()
+        return super().delete(*args, **kwargs)
+
     def validate_identity_change(self, user_id, organisation_id):
         """Require explicit revocation before transferring an assigned membership.
 

@@ -5,7 +5,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
 from webcaf.webcaf.models import Organisation, UserProfile, UserProfileRole, UserRole
-from webcaf.webcaf.utils.role_assignments import grant_role
+from webcaf.webcaf.utils.role_assignments import grant_role, revoke_role
 
 
 class UserProfileRoleAdminTest(TestCase):
@@ -151,3 +151,61 @@ class UserProfileRoleAdminTest(TestCase):
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.user_id, self.member.pk)
         self.assertEqual(assignment.history.count(), 1)
+
+    def test_admin_membership_deletion_is_blocked_until_roles_are_revoked(self):
+        assignment = grant_role(self.profile.pk, UserRole.objects.get(code="caf_lead").pk, self.operator)
+        profile_id = self.profile.pk
+        url = reverse("admin:webcaf_userprofile_delete", args=[profile_id])
+
+        for response in [self.client.get(url), self.client.post(url, {"post": "yes"})]:
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "Revoke role assignments before deleting these memberships.")
+        self.assertTrue(UserProfile.objects.filter(pk=profile_id).exists())
+        self.assertEqual(assignment.history.count(), 1)
+
+        revoke_role(assignment.pk, self.operator)
+        response = self.client.post(url, {"post": "yes"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(UserProfile.objects.filter(pk=profile_id).exists())
+
+    def test_bulk_admin_membership_deletion_does_not_bypass_the_guard(self):
+        assignment = grant_role(self.profile.pk, UserRole.objects.get(code="caf_lead").pk, self.operator)
+
+        response = self.client.post(
+            reverse("admin:webcaf_userprofile_changelist"),
+            {"action": "delete_selected", "_selected_action": [self.profile.pk], "post": "yes"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Revoke role assignments before deleting these memberships.")
+        self.assertTrue(UserProfile.objects.filter(pk=self.profile.pk).exists())
+        self.assertEqual(assignment.history.count(), 1)
+
+    def test_late_grant_rolls_back_bulk_membership_deletion(self):
+        member = User.objects.create_user(username="bulk-assigned-member")
+        assigned_profile = UserProfile.objects.create(user=member, organisation=self.organisation)
+        assignment = grant_role(assigned_profile.pk, UserRole.objects.get(code="caf_lead").pk, self.operator)
+        profile_ids = [self.profile.pk, assigned_profile.pk]
+        request = RequestFactory().post("/")
+        request.user = self.operator
+
+        with self.assertRaises(PermissionDenied):
+            admin.site._registry[UserProfile].delete_queryset(request, UserProfile.objects.filter(pk__in=profile_ids))
+
+        self.assertEqual(UserProfile.objects.filter(pk__in=profile_ids).count(), 2)
+        self.assertEqual(assignment.history.count(), 1)
+
+    def test_organisation_cascade_history_still_records_the_request_actor(self):
+        assignment = grant_role(self.profile.pk, UserRole.objects.get(code="caf_lead").pk, self.operator)
+        assignment_id = assignment.pk
+
+        response = self.client.post(
+            reverse("admin:webcaf_organisation_delete", args=[self.organisation.pk]), {"post": "yes"}
+        )
+
+        self.assertEqual(response.status_code, 302)
+        history = UserProfileRole.history.filter(id=assignment_id)
+        self.assertEqual(history.count(), 2)
+        self.assertEqual(history.latest().history_type, "-")
+        self.assertEqual(history.latest().history_user_id, self.operator.pk)

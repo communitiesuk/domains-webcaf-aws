@@ -44,7 +44,7 @@ from webcaf.webcaf.utils.excel_importer import (
     excel_framework_id,
     excel_to_assessment_json_with_raw,
 )
-from webcaf.webcaf.utils.role_assignments import grant_role, lock_profile, revoke_role, validate_grant
+from webcaf.webcaf.utils.role_assignments import grant_role, revoke_role, validate_grant
 from webcaf.webcaf.views.system import SystemForm
 
 
@@ -237,12 +237,25 @@ class UserProfileAdmin(SimpleHistoryAdmin):
     autocomplete_fields = ["organisation", "user"]
     list_select_related = ["user", "organisation"]
 
+    def get_deleted_objects(self, objs, request):
+        deleted, counts, permissions, protected = super().get_deleted_objects(objs, request)
+        if UserProfileRole.objects.filter(user_profile__in=objs).exists():
+            protected.append("Revoke role assignments before deleting these memberships.")
+        return deleted, counts, permissions, protected
+
+    def delete_model(self, request, obj):
+        try:
+            obj.delete()
+        except ValidationError as exc:
+            # A grant may have arrived after the deletion confirmation page.
+            raise PermissionDenied(" ".join(exc.messages)) from exc
+
     @transaction.atomic
-    def save_model(self, request, obj, form, change):
-        if obj.pk and UserProfile.objects.filter(pk=obj.pk).exists():
-            lock_profile(obj.pk)
-            obj.validate_identity_change(obj.user_id, obj.organisation_id)
-        super().save_model(request, obj, form, change)
+    def delete_queryset(self, request, queryset):
+        # QuerySet.delete() bypasses model delete(), so use the guarded path.
+        # The outer transaction prevents partial deletion if any member is blocked.
+        for profile in queryset.order_by("organisation_id", "pk"):
+            self.delete_model(request, profile)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)

@@ -8,8 +8,8 @@ from django.urls import reverse
 
 from tests.test_views.base_view_test import BaseViewTest
 from webcaf.webcaf.forms.user_profile import UserProfileForm
-from webcaf.webcaf.models import UserProfile, UserRole
-from webcaf.webcaf.utils.role_assignments import grant_role
+from webcaf.webcaf.models import UserProfile, UserProfileRole, UserRole
+from webcaf.webcaf.utils.role_assignments import grant_role, revoke_role
 
 
 @pytest.mark.django_db
@@ -566,6 +566,41 @@ class TestUserProfileView(BaseViewTest):
         self.assertEqual(response.status_code, 200)
         self.assertIn("This user no longer exists", response.context["error_message"]["paragraphs"][0])
         self.assertTrue(response.context["user_doesnt_exist"])
+
+    def test_membership_removal_requires_explicit_role_revocation(self):
+        self.test_organisation.organisation_type = "mhclg"
+        self.test_organisation.save(update_fields=["organisation_type"])
+        operator = User.objects.create_superuser(username="deletion-role-operator", password=None)
+        assignment = grant_role(self.target_profile.pk, UserRole.objects.get(code="mhclg_super_user").pk, operator)
+        profile_id = self.target_profile.pk
+        assignment_id = assignment.pk
+        url = reverse("remove-profile", kwargs={"user_profile_id": profile_id})
+        self.assertFalse(self.org_lead_user.has_perm("webcaf.delete_userprofilerole"))
+
+        response = self.client.post(url, {"action": "confirm"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Revoke role assignments before deleting this membership.")
+        self.assertTrue(UserProfile.objects.filter(pk=profile_id).exists())
+        self.assertTrue(UserProfileRole.objects.filter(pk=assignment_id).exists())
+        self.assertEqual(assignment.history.count(), 1)
+
+        revoke_role(assignment_id, operator)
+        response = self.client.post(url, {"action": "confirm"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(UserProfile.objects.filter(pk=profile_id).exists())
+        history = UserProfileRole.history.filter(id=assignment_id)
+        self.assertEqual(history.count(), 2)
+        self.assertEqual(history.latest().history_user_id, operator.pk)
+
+    def test_removing_a_missing_membership_returns_a_clear_error(self):
+        response = self.client.post(
+            reverse("remove-profile", kwargs={"user_profile_id": 999999}), {"action": "confirm"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "The profile changed. Reload it before granting or removing roles.")
 
     def test_update_profile_with_existing_email_associates_existing_user_and_orphans_old(self):
         """

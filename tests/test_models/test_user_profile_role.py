@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib import admin
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
@@ -9,6 +10,7 @@ from django.utils import timezone
 
 from webcaf.webcaf.models import Organisation, UserProfile, UserProfileRole, UserRole
 from webcaf.webcaf.utils.permission import PermissionUtil
+from webcaf.webcaf.utils.role_assignments import revoke_role
 
 
 class UserRoleTest(TestCase):
@@ -234,11 +236,18 @@ class UserProfileRoleTest(TestCase):
 
         self.assertTrue(UserProfileRole.objects.filter(pk=assignment.pk).exists())
 
-    def test_deleting_profile_removes_assignment_and_preserves_history(self):
+    def test_deleting_profile_requires_revocation_and_preserves_history(self):
         assignment = self.create_assignment()
         assignment_id = assignment.pk
         profile_id = self.profile.pk
 
+        with self.assertRaisesMessage(ValidationError, "Revoke role assignments before deleting"):
+            self.profile.delete()
+
+        self.assertTrue(UserProfile.objects.filter(pk=profile_id).exists())
+        self.assertEqual(assignment.history.count(), 1)
+        operator = User.objects.create_superuser(username="membership-remover", password=None)
+        revoke_role(assignment_id, operator)
         self.profile.delete()
 
         self.assertFalse(UserProfileRole.objects.filter(pk=assignment_id).exists())
@@ -246,6 +255,7 @@ class UserProfileRoleTest(TestCase):
         self.assertEqual(history.count(), 2)
         self.assertEqual(history.latest().history_type, "-")
         self.assertEqual(history.latest().user_profile_id, profile_id)
+        self.assertEqual(history.latest().history_user_id, operator.pk)
         self.assertEqual(str(history.latest().instance), f"Profile {profile_id}: role {self.role.pk}")
         self.assertTrue(UserRole.objects.filter(pk=self.role.pk).exists())
 
@@ -320,6 +330,81 @@ class UserProfileRoleTest(TestCase):
         self.profile.save(update_fields=["role"])
 
         self.assertFalse(UserProfileRole.objects.exists())
+
+    def test_normal_saves_cannot_transfer_an_assigned_membership(self):
+        assignment = self.create_assignment()
+        before = self.profile.history.count()
+        for field, value in [("user", self.granter), ("organisation", self.other_organisation)]:
+            for update_fields in [None, [field], [f"{field}_id"]]:
+                with self.subTest(field=field, update_fields=update_fields):
+                    profile = UserProfile.objects.get(pk=self.profile.pk)
+                    setattr(profile, field, value)
+                    with self.assertRaises(ValidationError) as raised:
+                        with transaction.atomic():
+                            profile.save(update_fields=update_fields)
+                    self.assertEqual(raised.exception.code, "assigned_profile_identity")
+
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.user_id, self.user.pk)
+        self.assertEqual(self.profile.organisation_id, self.organisation.pk)
+        self.assertEqual(self.profile.history.count(), before)
+        self.assertEqual(assignment.history.count(), 1)
+
+    def test_reconstructed_profile_cannot_transfer_existing_assignments(self):
+        self.create_assignment()
+        profile = UserProfile(pk=self.profile.pk, user=self.granter, organisation=self.organisation)
+        self.assertTrue(profile._state.adding)
+
+        with self.assertRaises(ValidationError):
+            profile.save(update_fields=["user"])
+
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.user_id, self.user.pk)
+
+    def test_unrelated_partial_save_ignores_unsaved_membership_identity(self):
+        assignment = self.create_assignment()
+        self.profile.user = self.granter
+        self.profile.organisation = self.other_organisation
+        self.profile.role = "organisation_lead"
+
+        self.profile.save(update_fields=iter(["role"]))
+
+        self.assertEqual(self.profile.user_id, self.granter.pk)
+        stored = UserProfile.objects.get(pk=self.profile.pk)
+        self.assertEqual(stored.user_id, self.user.pk)
+        self.assertEqual(stored.organisation_id, self.organisation.pk)
+        self.assertEqual(stored.role, "organisation_lead")
+        self.assertEqual(assignment.history.count(), 1)
+
+    def test_deferred_profile_can_save_an_unrelated_field(self):
+        self.create_assignment()
+        profile = UserProfile.objects.only("role").get(pk=self.profile.pk)
+        profile.role = "organisation_lead"
+
+        profile.save()
+
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.user_id, self.user.pk)
+        self.assertEqual(self.profile.organisation_id, self.organisation.pk)
+        self.assertEqual(self.profile.role, "organisation_lead")
+
+    def test_direct_identity_save_is_allowed_after_revocation(self):
+        assignment = self.create_assignment()
+        operator = User.objects.create_superuser(username="identity-revoker", password=None)
+        revoke_role(assignment.pk, operator)
+        self.profile.user = self.granter
+
+        self.profile.save(update_fields=["user"])
+
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.user_id, self.granter.pk)
+
+    def test_new_profile_with_explicit_primary_key_can_be_inserted(self):
+        profile = UserProfile(pk=98765, user=self.granter, organisation=self.organisation)
+
+        profile.save()
+
+        self.assertTrue(UserProfile.objects.filter(pk=98765, user=self.granter).exists())
 
     def test_database_rejects_duplicate_memberships_even_for_a_different_legacy_role(self):
         with self.assertRaises(IntegrityError), transaction.atomic():

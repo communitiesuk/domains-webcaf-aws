@@ -34,16 +34,25 @@ def _require_permission(actor: User, permission: str) -> None:
         raise PermissionDenied("You do not have permission to manage these role assignments.")
 
 
-def lock_profile(profile_id: int) -> UserProfile:
+def lock_profile(profile_id: int, *, target_organisation_id: int | None = None) -> UserProfile:
     """Lock a membership in the common organisation/profile order within a transaction."""
     try:
         organisation_id = UserProfile.objects.values_list("organisation_id", flat=True).get(pk=profile_id)
-        # Organisation then profile is the common locking order, including type edits.
-        organisation = Organisation.objects.select_for_update().get(pk=organisation_id)
+        # Lock both ends of a membership move in a stable order before the
+        # profile, so opposite moves cannot deadlock on organisation FK checks.
+        organisation_ids = {organisation_id}
+        if target_organisation_id is not None:
+            organisation_ids.add(target_organisation_id)
+        organisations = {
+            organisation.pk: organisation
+            for organisation in Organisation.objects.select_for_update().filter(pk__in=organisation_ids).order_by("pk")
+        }
+        if organisation_id not in organisations:
+            raise Organisation.DoesNotExist
         profile = UserProfile.objects.select_for_update().get(pk=profile_id, organisation_id=organisation_id)
     except (UserProfile.DoesNotExist, Organisation.DoesNotExist) as exc:
         raise ValidationError("The profile changed. Reload it before granting or removing roles.") from exc
-    profile.organisation = organisation
+    profile.organisation = organisations[organisation_id]
     return profile
 
 

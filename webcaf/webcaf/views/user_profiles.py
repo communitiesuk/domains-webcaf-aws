@@ -13,6 +13,7 @@ from webcaf.webcaf.forms.general import NextActionForm
 from webcaf.webcaf.forms.user_profile import UserProfileForm
 from webcaf.webcaf.models import UserProfile
 from webcaf.webcaf.utils.permission import PermissionUtil, UserRoleCheckMixin
+from webcaf.webcaf.utils.role_assignments import lock_profile
 from webcaf.webcaf.utils.session import SessionUtil
 
 
@@ -230,29 +231,29 @@ class RemoveUserProfileView(UserRoleCheckMixin, DeleteView):
         ]
         return data
 
+    @atomic
     def form_valid(self, form):
         if form.cleaned_data["action"] != "confirm":
             return redirect(reverse("view-profiles"))
 
         current_user_profile = SessionUtil.get_current_user_profile(self.request)
 
-        if current_user_profile and not PermissionUtil.current_user_can_delete_user(current_user_profile):
+        if not current_user_profile or not PermissionUtil.current_user_can_delete_user(current_user_profile):
             self.logger.error(
                 f"User {self.request.user.pk} is not allowed to delete user profile {self.kwargs['user_profile_id']}"
             )
             raise PermissionDenied("You are not allowed to delete this user profile")
 
-        profile_to_delete = UserProfile.objects.get(id=self.kwargs["user_profile_id"])
+        try:
+            profile_to_delete = lock_profile(self.kwargs["user_profile_id"])
+            if profile_to_delete.organisation_id != current_user_profile.organisation_id:
+                raise PermissionDenied("You are not allowed to delete this user profile in a different organisation")
+            profile_to_delete.delete()
+        except ValidationError as exc:
+            form.add_error(None, exc)
+            return self.render_to_response(self.get_context_data(form=form))
 
-        if profile_to_delete.organisation != current_user_profile.organisation:
-            self.logger.error(
-                f"User {self.request.user.pk} attempted to delete user profile {self.kwargs['user_profile_id']} "
-                f"from different organisation {profile_to_delete.organisation}"
-            )
-            raise PermissionDenied("You are not allowed to delete this user profile in a different organisation")
-
-        self.logger.info(f"Deleting user profile {self.kwargs['user_profile_id']} by user {self.request.user.pk}")
-        profile_to_delete.delete()
+        self.logger.info(f"Deleted user profile {self.kwargs['user_profile_id']} by user {self.request.user.pk}")
 
         return redirect(reverse("view-profiles"))
 
