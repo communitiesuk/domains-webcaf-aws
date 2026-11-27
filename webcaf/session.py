@@ -20,8 +20,11 @@ import logging
 import time
 
 from django.conf import settings
+from django.contrib.auth import BACKEND_SESSION_KEY
 from django.shortcuts import redirect
 from django.urls import reverse
+
+from webcaf.entra_admin import BACKEND as ENTRA_ADMIN_BACKEND
 
 # Get an instance of the logger
 logger = logging.getLogger(__name__)
@@ -62,9 +65,13 @@ class CafSessionTimeoutMiddleware:
             # Avoid processing timeout logic on the expiry/logout pages
             if request.path not in [session_expired_url]:
                 last_activity = request.session.get("last_activity")
-                timeout_seconds = settings.USER_IDLE_TIMEOUT
+                timeout_seconds = (
+                    settings.ENTRA_ADMIN_IDLE_TIMEOUT
+                    if request.session.get(BACKEND_SESSION_KEY) == ENTRA_ADMIN_BACKEND
+                    else settings.USER_IDLE_TIMEOUT
+                )
 
-                if last_activity and (time.time() - last_activity) > timeout_seconds:
+                if last_activity and (time.time() - last_activity) >= timeout_seconds:
                     user_id = request.user.pk
                     # Special case: If the user times out on the root path,
                     # likely from a closed tab, just flush the session

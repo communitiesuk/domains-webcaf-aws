@@ -20,6 +20,7 @@ from django.urls import include, path
 from django.views.generic import TemplateView
 from govuk_onelogin_django.views import AuthView
 
+from webcaf.entra_admin import entra_admin_callback
 from webcaf.webcaf.tip.views import (
     TipDetailView,
     TipIndexView,
@@ -139,6 +140,7 @@ urlpatterns = [
     path("my-organisation/<int:id>/", MyOrganisationView.as_view(), name="my-organisation"),
     path("view-organisations/", ChangeActiveProfileView.as_view(), name="view-organisations"),
     path("change-organisation/", ChangeActiveProfileView.as_view(), name="change-organisation"),
+    path("admin/entra/callback/", entra_admin_callback, name="entra-admin-callback"),
     path("admin/", admin.site.urls),
     path("oidc/", include("mozilla_django_oidc.urls")),
     path("one-login/", include(one_login_paths)),
