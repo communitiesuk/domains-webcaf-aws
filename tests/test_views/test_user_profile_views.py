@@ -8,7 +8,9 @@ from django.urls import reverse
 
 from tests.test_views.base_view_test import BaseViewTest
 from webcaf.webcaf.forms.user_profile import UserProfileForm
-from webcaf.webcaf.models import UserProfile
+from webcaf.webcaf.models import UserProfile, UserProfileRole, UserRole
+from webcaf.webcaf.utils.role_assignments import grant_role, revoke_role
+from webcaf.webcaf.views.user_profiles import UserProfileView
 
 
 @pytest.mark.django_db
@@ -30,6 +32,112 @@ class TestUserProfileView(BaseViewTest):
         session = self.client.session
         session["current_profile_id"] = self.org_lead_profile.id
         session.save()
+
+    def test_duplicate_membership_is_a_form_error_not_a_server_error(self):
+        response = self.client.post(
+            reverse("create-new-profile"),
+            data={
+                "email": self.target_user.email.upper(),
+                "role": "organisation_lead",
+                "first_name": "Changed",
+                "last_name": "Name",
+                "action": "confirm",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, UserProfileForm.duplicate_membership_message)
+        self.target_profile.refresh_from_db()
+        self.assertEqual(self.target_profile.role, "organisation_user")
+
+    def test_missing_and_cross_organisation_edit_targets_cannot_create_memberships(self):
+        other_profile = UserProfile.objects.get(
+            organisation=self.org_map["Medium organisation"]["organisation"], role="organisation_user"
+        )
+        users_before = list(User.objects.order_by("pk").values())
+        profiles_before = list(UserProfile.objects.order_by("pk").values())
+        history_count = UserProfile.history.count()
+
+        for profile_id in [999999, other_profile.pk]:
+            for method in ["get", "post"]:
+                with self.subTest(profile_id=profile_id, method=method):
+                    url = reverse("edit-profile", kwargs={"user_profile_id": profile_id})
+                    if method == "get":
+                        response = self.client.get(url)
+                    else:
+                        response = self.client.post(
+                            url,
+                            {
+                                "email": "must-not-be-created@example.gov.uk",
+                                "first_name": "Unexpected",
+                                "last_name": "Member",
+                                "role": "organisation_user",
+                                "action": "confirm",
+                            },
+                        )
+
+                    self.assertEqual(response.status_code, 404)
+                    self.assertEqual(list(User.objects.order_by("pk").values()), users_before)
+                    self.assertEqual(list(UserProfile.objects.order_by("pk").values()), profiles_before)
+                    self.assertEqual(UserProfile.history.count(), history_count)
+
+    def test_edit_rechecks_organisation_access_after_an_admin_moves_the_profile(self):
+        destination = self.org_map["Medium organisation"]["organisation"]
+        get_form_kwargs = UserProfileView.get_form_kwargs
+        users_before = list(User.objects.order_by("pk").values())
+        move_history_counts = []
+
+        def move_after_lookup(view):
+            kwargs = get_form_kwargs(view)
+            moved = UserProfile.objects.get(pk=self.target_profile.pk)
+            moved.organisation = destination
+            moved.save(update_fields=["organisation"])
+            move_history_counts.append(UserProfile.history.count())
+            return kwargs
+
+        with patch.object(UserProfileView, "get_form_kwargs", new=move_after_lookup):
+            response = self.client.post(
+                reverse("edit-profile", kwargs={"user_profile_id": self.target_profile.pk}),
+                {
+                    "email": "must-not-be-created-after-move@example.gov.uk",
+                    "first_name": "Unexpected",
+                    "last_name": "Change",
+                    "role": "organisation_lead",
+                    "action": "confirm",
+                },
+            )
+
+        self.assertEqual(response.status_code, 403)
+        self.target_profile.refresh_from_db()
+        self.assertEqual(self.target_profile.organisation_id, destination.pk)
+        self.assertEqual(self.target_profile.user_id, self.target_user.pk)
+        self.assertEqual(self.target_profile.role, "organisation_user")
+        self.assertEqual(list(User.objects.order_by("pk").values()), users_before)
+        self.assertEqual(UserProfile.history.count(), move_history_counts[0])
+
+    def test_legacy_user_management_cannot_transfer_lg_assignments_by_email(self):
+        self.test_organisation.organisation_type = "mhclg"
+        self.test_organisation.save(update_fields=["organisation_type"])
+        operator = User.objects.create_superuser(username="view-role-operator", password=None)
+        assignment = grant_role(self.target_profile.pk, UserRole.objects.get(code="mhclg_super_user").pk, operator)
+        replacement = User.objects.create_user(username="replacement", email="replacement@example.gov.uk")
+        self.assertFalse(self.org_lead_user.has_perm("webcaf.add_userprofilerole"))
+
+        response = self.client.post(
+            reverse("edit-profile", kwargs={"user_profile_id": self.target_profile.pk}),
+            data={
+                "email": replacement.email,
+                "role": "organisation_user",
+                "first_name": "Changed",
+                "last_name": "Name",
+                "action": "confirm",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Remove role assignments before changing")
+        self.target_profile.refresh_from_db()
+        self.assertEqual(self.target_profile.user_id, self.target_user.pk)
+        self.assertEqual(assignment.history.count(), 1)
 
     def test_create_user_with_mixed_case_email_is_lowercased(self):
         """
@@ -524,6 +632,41 @@ class TestUserProfileView(BaseViewTest):
         self.assertEqual(response.status_code, 200)
         self.assertIn("This user no longer exists", response.context["error_message"]["paragraphs"][0])
         self.assertTrue(response.context["user_doesnt_exist"])
+
+    def test_membership_removal_requires_explicit_role_revocation(self):
+        self.test_organisation.organisation_type = "mhclg"
+        self.test_organisation.save(update_fields=["organisation_type"])
+        operator = User.objects.create_superuser(username="deletion-role-operator", password=None)
+        assignment = grant_role(self.target_profile.pk, UserRole.objects.get(code="mhclg_super_user").pk, operator)
+        profile_id = self.target_profile.pk
+        assignment_id = assignment.pk
+        url = reverse("remove-profile", kwargs={"user_profile_id": profile_id})
+        self.assertFalse(self.org_lead_user.has_perm("webcaf.delete_userprofilerole"))
+
+        response = self.client.post(url, {"action": "confirm"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Revoke role assignments before deleting this membership.")
+        self.assertTrue(UserProfile.objects.filter(pk=profile_id).exists())
+        self.assertTrue(UserProfileRole.objects.filter(pk=assignment_id).exists())
+        self.assertEqual(assignment.history.count(), 1)
+
+        revoke_role(assignment_id, operator)
+        response = self.client.post(url, {"action": "confirm"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(UserProfile.objects.filter(pk=profile_id).exists())
+        history = UserProfileRole.history.filter(id=assignment_id)
+        self.assertEqual(history.count(), 2)
+        self.assertEqual(history.latest().history_user_id, operator.pk)
+
+    def test_removing_a_missing_membership_returns_a_clear_error(self):
+        response = self.client.post(
+            reverse("remove-profile", kwargs={"user_profile_id": 999999}), {"action": "confirm"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "The profile changed. Reload it before granting or removing roles.")
 
     def test_update_profile_with_existing_email_associates_existing_user_and_orphans_old(self):
         """

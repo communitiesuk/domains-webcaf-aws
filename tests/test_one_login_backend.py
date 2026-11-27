@@ -33,7 +33,11 @@ class OneLoginBackendTest(TestCase):
 
     def test_links_existing_user_and_preserves_profile(self):
         existing_user = User.objects.create_user(username=PROFILE["email"], email=PROFILE["email"])
-        user_profile = UserProfile.objects.create(user=existing_user, role="organisation_user")
+        user_profile = UserProfile.objects.create(
+            user=existing_user,
+            role="organisation_user",
+            organisation=Organisation.objects.create(name="Login organisation"),
+        )
 
         user = self.authenticate()
 
@@ -51,7 +55,11 @@ class OneLoginBackendTest(TestCase):
 
     def test_email_case_variants_resolve_to_the_same_existing_account(self):
         existing_user = User.objects.create_user(username="legacy-user", email=PROFILE["email"].upper())
-        profile = UserProfile.objects.create(user=existing_user, role="organisation_user")
+        profile = UserProfile.objects.create(
+            user=existing_user,
+            role="organisation_user",
+            organisation=Organisation.objects.create(name="Login organisation"),
+        )
 
         for email in (PROFILE["email"], PROFILE["email"].upper()):
             with self.subTest(email=email):

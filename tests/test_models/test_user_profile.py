@@ -15,7 +15,7 @@ class UserProfileStrTest(TestCase):
         self.assertEqual(str(profile), "someone@example.gov.uk - Test Council - (Cyber advisor)")
 
     def test_str_without_an_organisation_does_not_raise(self):
-        # organisation is nullable on the model; the admin list calls str() on every row
-        profile = UserProfile.objects.create(user=self.user, role="cyber_advisor")
+        # Unsaved and historical instances can still represent missing organisations.
+        profile = UserProfile(user=self.user, role="cyber_advisor")
 
         self.assertEqual(str(profile), "someone@example.gov.uk - No organisation - (Cyber advisor)")

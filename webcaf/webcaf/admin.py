@@ -34,6 +34,8 @@ from webcaf.webcaf.models import (
     System,
     Tip,
     UserProfile,
+    UserProfileRole,
+    UserRole,
 )
 from webcaf.webcaf.tip.util import RecommendationService
 from webcaf.webcaf.utils.excel_importer import (
@@ -42,6 +44,7 @@ from webcaf.webcaf.utils.excel_importer import (
     excel_framework_id,
     excel_to_assessment_json_with_raw,
 )
+from webcaf.webcaf.utils.role_assignments import grant_role, revoke_role, validate_grant
 from webcaf.webcaf.views.system import SystemForm
 
 
@@ -234,6 +237,26 @@ class UserProfileAdmin(SimpleHistoryAdmin):
     autocomplete_fields = ["organisation", "user"]
     list_select_related = ["user", "organisation"]
 
+    def get_deleted_objects(self, objs, request):
+        deleted, counts, permissions, protected = super().get_deleted_objects(objs, request)
+        if UserProfileRole.objects.filter(user_profile__in=objs).exists():
+            protected.append("Revoke role assignments before deleting these memberships.")
+        return deleted, counts, permissions, protected
+
+    def delete_model(self, request, obj):
+        try:
+            obj.delete()
+        except ValidationError as exc:
+            # A grant may have arrived after the deletion confirmation page.
+            raise PermissionDenied(" ".join(exc.messages)) from exc
+
+    @transaction.atomic
+    def delete_queryset(self, request, queryset):
+        # QuerySet.delete() bypasses model delete(), so use the guarded path.
+        # The outer transaction prevents partial deletion if any member is blocked.
+        for profile in queryset.order_by("organisation_id", "pk"):
+            self.delete_model(request, profile)
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.annotate(
@@ -248,6 +271,89 @@ class UserProfileAdmin(SimpleHistoryAdmin):
     @admin.display(ordering="organisation_name", description="Organisation")
     def organisation_name(self, obj):
         return obj.organisation_name
+
+
+@admin.register(UserRole)
+class UserRoleAdmin(admin.ModelAdmin):
+    list_display = ["code", "role_name", "group"]
+    search_fields = ["code", "role_name"]
+    readonly_fields = ["code", "group"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+class UserProfileRoleAdminForm(forms.ModelForm):
+    actor = None
+
+    class Meta:
+        model = UserProfileRole
+        fields = ["user_profile", "user_role"]
+
+    def clean(self):
+        data = super().clean()
+        profile = data.get("user_profile")
+        role = data.get("user_role")
+        if profile and role:
+            validate_grant(profile.pk, role.pk, self.actor)
+            self.instance.organisation = profile.organisation
+        return data
+
+
+@admin.register(UserProfileRole)
+class UserProfileRoleAdmin(SimpleHistoryAdmin):
+    form = UserProfileRoleAdminForm
+    list_display = ["user_profile", "user_role", "organisation", "granted_by", "granted_at"]
+    list_select_related = [
+        "user_profile__user",
+        "user_profile__organisation",
+        "user_role",
+        "organisation",
+        "granted_by",
+    ]
+    autocomplete_fields = ["user_profile", "user_role"]
+    readonly_fields = ["organisation", "granted_by", "granted_at"]
+    actions = None
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        form.actor = request.user
+        return form
+
+    def has_change_permission(self, request, obj=None):
+        # Revoke and grant instead of changing the identity of an existing grant.
+        return False
+
+    def save_model(self, request, obj, form, change):
+        saved = grant_role(obj.user_profile_id, obj.user_role_id, request.user)
+        obj.pk = saved.pk
+        obj.organisation = saved.organisation
+        obj.granted_by = saved.granted_by
+        obj.granted_at = saved.granted_at
+        obj._state = saved._state
+
+    def delete_model(self, request, obj):
+        revoke_role(obj.pk, request.user)
+
+    def delete_view(self, request, object_id, extra_context=None):
+        try:
+            return super().delete_view(request, object_id, extra_context)
+        except ValidationError as exc:
+            if request.method != "POST" or getattr(exc, "code", None) != "assignment_not_found":
+                raise
+            # The superclass's deletion transaction has rolled back, including
+            # its Admin log entry. Do not log a second removal or mask other errors.
+            self.message_user(request, "This role assignment has already been removed.", messages.INFO)
+            destination = (
+                "admin:webcaf_userprofilerole_changelist" if self.has_view_permission(request) else "admin:index"
+            )
+            return redirect(reverse(destination, current_app=self.admin_site.name))
+
+    def history_form_view(self, request, object_id, version_id, extra_context=None):
+        raise PermissionDenied("Historical grants cannot be restored without current policy validation.")
 
 
 class OrganisationEmailDomainAdminForm(forms.ModelForm):

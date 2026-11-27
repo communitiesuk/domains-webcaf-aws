@@ -1,5 +1,6 @@
 import logging
 import typing
+from copy import copy
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -110,6 +111,10 @@ class Organisation(models.Model):
             # an error for a field they do not contain.
             raise ValidationError("Councils must have a GSS code.")
         self._check_official_council_gss_code(self.organisation_type, self.gss_code)
+        if self.pk:
+            from webcaf.webcaf.utils.role_assignments import validate_organisation_role_groups
+
+            validate_organisation_role_groups(self.pk, self.organisation_type)
         super().clean()
 
     @classmethod
@@ -129,28 +134,52 @@ class Organisation(models.Model):
                 }
             )
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
         if self.gss_code == "":
             self.gss_code = None
 
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            update_fields = frozenset(update_fields)
+            kwargs["update_fields"] = update_fields
+
+        validation_instance = self
+        if self.pk is not None:
+            # A reconstructed instance may update an existing row even when
+            # _state.adding is True. Only a new instance may insert a missing row.
+            stored = (
+                type(self)
+                .objects.select_for_update()
+                .filter(pk=self.pk)
+                .values("organisation_type", "gss_code")
+                .first()
+            )
+            if stored is None and not self._state.adding:
+                raise ValidationError(
+                    "This organisation no longer exists. Reload it before saving.", code="stale_organisation"
+                )
+            if stored is not None and (update_fields is not None or self._state.adding):
+                # Validate a consistent snapshot of the fields being persisted,
+                # without discarding unsaved changes on the caller's instance.
+                validation_instance = copy(self)
+                # Unique-field validation must exclude the row being updated,
+                # including when the caller reconstructed the instance by PK.
+                validation_instance._state.adding = False
+                if update_fields is not None:
+                    for field in ["organisation_type", "gss_code"]:
+                        if field not in update_fields:
+                            setattr(validation_instance, field, stored[field])
+                    if (
+                        validation_instance.organisation_type in self.GSS_CODE_REQUIRED_ORGANISATION_TYPES
+                        and not validation_instance.gss_code
+                    ):
+                        raise ValidationError("Councils must save their GSS code in the same operation.")
+
         # Validate only the new field here so existing Organisation save behaviour
         # remains unchanged. ModelForms still run normal validation for every field.
         excluded_fields = {field.name for field in self._meta.fields if field.name != "gss_code"}
-        self.full_clean(exclude=excluded_fields)
-
-        update_fields = kwargs.get("update_fields")
-        if self.pk is not None and update_fields is not None:
-            update_fields = set(update_fields)
-            stored_values = type(self).objects.values("organisation_type", "gss_code").get(pk=self.pk)
-            saved_organisation_type = (
-                self.organisation_type if "organisation_type" in update_fields else stored_values["organisation_type"]
-            )
-            saved_gss_code = self.gss_code if "gss_code" in update_fields else stored_values["gss_code"]
-
-            if saved_organisation_type in self.GSS_CODE_REQUIRED_ORGANISATION_TYPES and not saved_gss_code:
-                raise ValidationError("Councils must save their GSS code in the same operation.")
-            # clean() checked the values in memory; check the ones that will be stored together.
-            self._check_official_council_gss_code(saved_organisation_type, saved_gss_code)
+        validation_instance.full_clean(exclude=excluded_fields)
 
         super().save(*args, **kwargs)
 
@@ -449,12 +478,85 @@ class UserProfile(models.Model):
     ]
     # Do this rather than add a foreign key to Organisation, in case we need a many-to-many relationship later
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="profiles")
-    organisation = models.ForeignKey(
-        Organisation, on_delete=models.CASCADE, related_name="members", null=True, blank=True
-    )
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name="members")
     role = models.CharField(max_length=255, null=True, blank=True, choices=ROLE_CHOICES)
 
     history = HistoricalRecords()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["id", "organisation"], name="unique_profile_id_organisation"),
+            models.UniqueConstraint(fields=["user", "organisation"], name="unique_user_organisation_profile"),
+        ]
+
+    def clean(self):
+        super().clean()
+        self.validate_identity_change(self.user_id, self.organisation_id)
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            update_fields = frozenset(update_fields)
+            kwargs["update_fields"] = update_fields
+            if not update_fields:
+                return
+
+        # Loaded instances must take the locking path even if deleted, so a
+        # stale save cannot fall back to inserting the membership again.
+        if self.pk is not None and (not self._state.adding or type(self).objects.filter(pk=self.pk).exists()):
+            from webcaf.webcaf.utils.role_assignments import lock_profile
+
+            # Respect both relation names and *_id names in update_fields, and
+            # Django's implicit partial saves of deferred model instances.
+            deferred_fields = self.get_deferred_fields()
+            save_user = (
+                "user_id" not in deferred_fields if update_fields is None else bool({"user", "user_id"} & update_fields)
+            )
+            save_organisation = (
+                "organisation_id" not in deferred_fields
+                if update_fields is None
+                else bool({"organisation", "organisation_id"} & update_fields)
+            )
+            stored = lock_profile(self.pk, target_organisation_id=self.organisation_id if save_organisation else None)
+            self.validate_identity_change(
+                self.user_id if save_user else stored.user_id,
+                self.organisation_id if save_organisation else stored.organisation_id,
+            )
+        return super().save(*args, **kwargs)
+
+    def validate_deletion(self):
+        if self.role_assignments.exists():
+            raise ValidationError(
+                "Revoke role assignments before deleting this membership.", code="assigned_profile_deletion"
+            )
+
+    @transaction.atomic
+    def delete(self, *args, **kwargs):
+        if self.pk is not None:
+            from webcaf.webcaf.utils.role_assignments import lock_profile
+
+            lock_profile(self.pk)
+            self.validate_deletion()
+        return super().delete(*args, **kwargs)
+
+    def validate_identity_change(self, user_id, organisation_id):
+        """Require explicit revocation before transferring an assigned membership.
+
+        Callers that persist changes must hold the organisation/profile locks
+        through validation and saving; form validation alone is only a precheck.
+        """
+        if self.pk:
+            stored_identity = type(self).objects.filter(pk=self.pk).values_list("user_id", "organisation_id").first()
+            if (
+                stored_identity is not None
+                and stored_identity != (user_id, organisation_id)
+                and self.role_assignments.exists()
+            ):
+                raise ValidationError(
+                    "Remove role assignments before changing the profile's user or organisation.",
+                    code="assigned_profile_identity",
+                )
 
     @classmethod
     def get_role_id(cls, role_name) -> str | None:
@@ -471,10 +573,63 @@ class UserProfile(models.Model):
         return None
 
     def __str__(self):
-        # organisation is optional on this model, so a profile without one
-        # must still have a string form: the admin list calls str() on every row.
-        organisation_name = self.organisation.name if self.organisation else "No organisation"
+        # Historical and unsaved profiles may still have no organisation.
+        organisation_name = self.organisation.name if self.organisation_id else "No organisation"
         return f"{self.user.email} - {organisation_name} - ({self.get_role_display()})"
+
+
+class UserRole(models.Model):
+    """Role catalogue seeded by stable code; permission reads switch separately."""
+
+    class Group(models.TextChoices):
+        COUNCIL = "council", "Council"
+        MHCLG = "mhclg", "MHCLG"
+        ASSURER = "assurer", "Independent assurer"
+
+    code = models.SlugField(max_length=64, unique=True)
+    role_name = models.CharField(max_length=255)
+    group = models.CharField(max_length=16, choices=Group.choices)
+
+    class Meta:
+        ordering = ["code"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(group__in=["council", "mhclg", "assurer"]), name="valid_user_role_group"
+            ),
+        ]
+
+    def __str__(self):
+        return self.role_name
+
+
+class UserProfileRole(models.Model):
+    """LG role assignments; application permission reads still use UserProfile.role."""
+
+    _history_user: User | None  # Property supplied by django-simple-history.
+
+    user_profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="role_assignments")
+    user_role = models.ForeignKey(UserRole, on_delete=models.PROTECT, related_name="profile_assignments")
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name="role_assignments")
+    # Keep the assignment and original history if its granting user is deleted.
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="profile_role_grants",
+    )
+    granted_at = models.DateTimeField(default=django_utils_timezone.now, editable=False)
+
+    history = HistoricalRecords()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user_profile", "user_role"], name="unique_profile_role"),
+        ]
+        # Migration 0046 adds the database-only composite organisation/profile FK.
+
+    def __str__(self):
+        return f"Profile {self.user_profile_id}: role {self.user_role_id}"
 
 
 class AllowedEmailDomain(models.Model):

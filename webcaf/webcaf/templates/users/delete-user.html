@@ -2,6 +2,7 @@
 {% load govuk_frontend_django %}
 {% block title %}Manage user - {{ user.first_name }} {{ block.super }}{% endblock %}
 {% block content %}
+    {% include "partials/error_message.html" %}
     {% if user_doesnt_exist %}
         <div class="govuk-grid-row">
             <div class="govuk-grid-column-two-thirds">

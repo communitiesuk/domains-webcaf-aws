@@ -7,6 +7,7 @@ from django.db import IntegrityError, transaction
 
 from webcaf.webcaf.models import UserProfile
 from webcaf.webcaf.utils import mask_email
+from webcaf.webcaf.utils.role_assignments import lock_profile
 
 
 class UserProfileForm(forms.ModelForm):
@@ -26,6 +27,7 @@ class UserProfileForm(forms.ModelForm):
     action = forms.ChoiceField(choices=[("change", "Change"), ("confirm", "Confirm")], required=True)
 
     logger = logging.getLogger("UserProfileForm")
+    duplicate_membership_message = "This user already has a profile in this organisation. Edit the existing profile."
     ambiguous_email_message = "More than one account uses this email address. Contact support before continuing."
     username_conflict_message = (
         "This email address conflicts with an existing account. Contact support before continuing."
@@ -43,6 +45,7 @@ class UserProfileForm(forms.ModelForm):
         :param initial: Initial data dictionary to be used for initialization.
         :type initial: dict
         """
+        organisation = kwargs.pop("organisation", None)
         instance = kwargs.get("instance")
         if instance:
             # Set the initial values for the form fields
@@ -51,6 +54,10 @@ class UserProfileForm(forms.ModelForm):
             initial["last_name"] = instance.user.last_name
             initial["email"] = instance.user.email
         super().__init__(*args, **kwargs)
+        if organisation is not None:
+            self.instance.organisation = organisation
+        # Keep the server-supplied scope separate from the mutable form instance.
+        self.organisation_id = self.instance.organisation_id
 
     def clean_role(self):
         role = self.cleaned_data["role"]
@@ -65,7 +72,24 @@ class UserProfileForm(forms.ModelForm):
             raise ValidationError(self.ambiguous_email_message, code="ambiguous_email")
         if not matches and User.objects.filter(username=email).exists():
             raise ValidationError(self.username_conflict_message, code="username_conflict")
+        self.instance.validate_identity_change(matches[0].pk if matches else None, self.instance.organisation_id)
+        if len(matches) == 1:
+            self._check_membership(matches[0])
         return email
+
+    def clean(self):
+        data = super().clean()
+        if not self.instance.organisation_id:
+            raise ValidationError("An organisation is required for a user profile.")
+        return data
+
+    def _check_membership(self, user):
+        if (
+            UserProfile.objects.filter(user=user, organisation_id=self.instance.organisation_id)
+            .exclude(pk=self.instance.pk)
+            .exists()
+        ):
+            raise ValidationError(self.duplicate_membership_message, code="duplicate_membership")
 
     @transaction.atomic
     def save(self, commit=True):
@@ -87,6 +111,14 @@ class UserProfileForm(forms.ModelForm):
         :return: UserProfile object representing the saved user profile.
         """
 
+        if self.instance.pk:
+            # Serialise account rebinding with grants and removals. Revalidate
+            # below after resolving the submitted account, while holding locks.
+            profile = lock_profile(self.instance.pk)
+            if profile.organisation_id != self.organisation_id:
+                raise PermissionDenied("This user profile is no longer in your active organisation.")
+            self.instance.organisation = profile.organisation
+
         user_email = self.cleaned_data["email"]
         try:
             # Recheck at save time rather than trusting the match from validation.
@@ -101,6 +133,12 @@ class UserProfileForm(forms.ModelForm):
         except IntegrityError as exc:
             raise ValidationError({"email": self.username_conflict_message}) from exc
 
+        try:
+            self._check_membership(user)
+            self.instance.validate_identity_change(user.pk, self.instance.organisation_id)
+        except ValidationError as exc:
+            raise ValidationError({"email": exc}) from exc
+
         # Names belong to the shared account, not its organisation membership.
         if created or self.instance.pk is not None:
             user.first_name = self.cleaned_data["first_name"]
@@ -114,4 +152,13 @@ class UserProfileForm(forms.ModelForm):
             else f"User {user_email} {user.id} already exists, associating with the profile {self.instance.id if self.instance.id else 'new profile'}"
         )
         self.logger.info(mask_email(log_message))
-        return super().save(commit)
+        try:
+            with transaction.atomic():
+                return super().save(commit)
+        except IntegrityError as exc:
+            if (
+                getattr(getattr(exc.__cause__, "diag", None), "constraint_name", None)
+                == "unique_user_organisation_profile"
+            ):
+                raise ValidationError({"email": self.duplicate_membership_message}) from exc
+            raise

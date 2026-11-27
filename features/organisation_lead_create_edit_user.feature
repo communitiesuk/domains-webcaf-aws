@@ -59,6 +59,18 @@ Feature: Create and edit a new user for the organisation
     And click button with text "Save and continue"
     Then should see an error message with text "You must add a valid email address"
 
+  Scenario: An existing organisation membership cannot be duplicated with another role
+    When click link with text "Manage users"
+    And select radio with value "yes"
+    And click button with text "Continue"
+    And enter text "Other" for id "first_name"
+    And enter text "Member" for id "last_name"
+    And enter text "OTHER@EXAMPLE.GOV.UK" for id "email"
+    And select radio with value "organisation_user"
+    And click button with text "Save and continue"
+    Then should see an error message with text "This user already has a profile in this organisation. Edit the existing profile."
+    And User model with email "other@example.gov.uk" should exist with "organisation_lead" user role
+
   Scenario: GovAssure lead can edit user profile role
     Given the user "alice@example.gov.uk" exists
     And User "alice@example.gov.uk" has the profile "Organisation user" assigned in "Ministry of Agriculture"
